@@ -1,0 +1,56 @@
+name: Chart release
+
+# Packages chart/ and pushes it to the ECR OCI chart registry on every
+# release tag, with the chart version matching the release (EN-183).
+#
+# This is a separate workflow from container_builds.yml on purpose: a
+# failure here must never block or delay the image build/deploy pipeline.
+#
+# KNOWN GAP (as of EN-183): the oci://<ecr>/charts repo this pushes to does
+# not exist yet. This workflow's push step will fail until it's created.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish-chart:
+    if: github.repository == 'UnlockedLabs/unlocked-core' || github.repository == 'PThorpe92/UnlockEdv2'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set chart version from tag
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::tag '$TAG' is not a vMAJOR.MINOR.PATCH release tag — refusing to package a chart"
+            exit 1
+          fi
+          echo "CHART_VERSION=${TAG#v}" >> $GITHUB_ENV
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4.2.0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
+          aws-region: us-west-2
+          mask-aws-account-id: true
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Package and push chart
+        run: |
+          REGISTRY="${{ steps.login-ecr.outputs.registry }}"
+          mkdir -p dist
+          helm package chart/ --version "$CHART_VERSION" --app-version "$CHART_VERSION" -d dist/
+          helm push "dist/unlocked-core-${CHART_VERSION}.tgz" "oci://$REGISTRY/charts"
