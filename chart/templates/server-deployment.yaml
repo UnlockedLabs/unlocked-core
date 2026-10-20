@@ -21,33 +21,34 @@ spec:
       initContainers:
       - name: wait-for-nats
         image: {{ .Values.waitForNats.image }}
-        command: ["sh", "-c", "until nc -z -w 2 nats 4222; do echo waiting for nats; sleep 2; done"]
+        command: ["sh", "-c", "until nc -z -w 2 {{ .Values.nats.host }} {{ .Values.nats.port }}; do echo waiting for nats; sleep 2; done"]
       containers:
       - args:
         - ./backend
         env:
         - name: APP_ENV
-          value: {{ .Values.appEnv }}
+          value: {{ .Values.appEnv | quote }}
         {{- /*
-        APP_KEY is optional: prod has none on purpose (its LMS keys are stored
-        encrypted with an empty key).
+        APP_KEY is required here: a site that genuinely wants the legacy
+        empty-key behavior (today's prod, whose existing LMS keys are stored
+        encrypted with an empty key) sets APP_KEY to an explicit empty string
+        in the Secret, rather than relying on it being silently absent.
         */}}
         - name: APP_KEY
           valueFrom:
             secretKeyRef:
               name: {{ .Values.secretName }}
               key: APP_KEY
-              optional: true
         - name: APP_URL
           value: https://{{ $host }}
         - name: DB_HOST
-          value: {{ .Values.database.host }}
+          value: {{ .Values.database.host | quote }}
         - name: DB_PORT
           value: {{ .Values.database.port | quote }}
         - name: DB_USER
-          value: {{ .Values.database.user }}
+          value: {{ .Values.database.user | quote }}
         - name: DB_NAME
-          value: {{ .Values.database.name }}
+          value: {{ .Values.database.name | quote }}
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
@@ -55,48 +56,48 @@ spec:
               key: DB_PASSWORD
         {{- if .Values.hydra.enabled }}
         - name: HYDRA_ADMIN_URL
-          value: {{ .Values.hydra.adminUrl }}
+          value: {{ .Values.hydra.adminUrl | quote }}
         - name: HYDRA_PUBLIC_URL
-          value: {{ .Values.hydra.publicUrl }}
+          value: {{ .Values.hydra.publicUrl | quote }}
         {{- end }}
         - name: KRATOS_ADMIN_URL
-          value: {{ .Values.kratos.adminUrl }}
+          value: {{ .Values.kratos.adminUrl | quote }}
         - name: KRATOS_PUBLIC_URL
-          value: {{ .Values.kratos.publicUrl }}
+          value: {{ .Values.kratos.publicUrl | quote }}
         - name: MIDDLEWARE_CRON_SCHEDULE
-          value: {{ .Values.middlewareCron }}
+          value: {{ .Values.middlewareCron | quote }}
         - name: IMG_FILEPATH
           value: /thumbnails
         - name: NATS_URL
-          value: {{ .Values.nats.url }}
+          value: nats://{{ .Values.nats.host }}:{{ .Values.nats.port }}
         - name: NATS_USER
-          value: {{ .Values.nats.user }}
+          value: {{ .Values.nats.user | quote }}
         - name: NATS_PASSWORD
           valueFrom:
             secretKeyRef:
               name: {{ .Values.secretName }}
               key: NATS_PASSWORD
         - name: LOG_LEVEL
-          value: {{ .Values.server.logLevel }}
+          value: {{ .Values.server.logLevel | quote }}
         - name: ORY_TOKEN
           valueFrom:
             secretKeyRef:
               name: {{ .Values.secretName }}
               key: ORY_TOKEN
         - name: PROVIDER_SERVICE_URL
-          value: {{ .Values.providerServiceUrl }}
+          value: {{ .Values.providerServiceUrl | quote }}
         - name: MIGRATION_DIR
           value: "./migrations"
         - name: S3_BUCKET_NAME
-          value: {{ required "s3.bucket must be set" .Values.s3.bucket }}
+          value: {{ required "s3.bucket must be set" .Values.s3.bucket | quote }}
         - name: AWS_REGION
-          value: {{ required "s3.region must be set" .Values.s3.region }}
+          value: {{ required "s3.region must be set" .Values.s3.region | quote }}
         - name: KIWIX_SERVER_URL
-          value: {{ required "kiwixServerUrl must be set" .Values.kiwixServerUrl }}
+          value: {{ required "kiwixServerUrl must be set" .Values.kiwixServerUrl | quote }}
         - name: TO_EMAIL
-          value: {{ .Values.supportEmails.to }}
+          value: {{ .Values.supportEmails.to | quote }}
         - name: FROM_EMAIL
-          value: {{ .Values.supportEmails.from }}
+          value: {{ .Values.supportEmails.from | quote }}
         - name: CORS_ALLOWED_ORIGINS
           value: https://{{ $host }}
         - name: JASPER_TEMP_DIR

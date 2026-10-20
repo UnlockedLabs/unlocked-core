@@ -59,7 +59,7 @@ hostPath: {{ required (printf "volumes.%s.hostPath must be set" $name) $v.hostPa
 size: {{ required (printf "volumes.%s.size must be set" $name) $v.size }}
 claimSize: {{ $v.claimSize | default $v.size }}
 podVolume: {{ $v.podVolume | default $v.pvcName }}
-accessMode: {{ $v.accessMode | default "ReadWriteMany" }}
+accessMode: {{ $v.accessMode | default $root.Values.volumeDefaults.accessMode }}
 storageClassName: {{ $v.storageClassName | default $root.Values.volumeDefaults.storageClassName }}
 reclaimPolicy: {{ $v.reclaimPolicy | default $root.Values.volumeDefaults.reclaimPolicy }}
 {{- end }}

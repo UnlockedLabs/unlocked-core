@@ -44,7 +44,8 @@ kratos:
   publicUrl: http://kratos:4433
 
 nats:
-  url: nats://nats:4222
+  host: nats
+  port: 4222
   user: unlocked
 
 hydra:
@@ -88,20 +89,20 @@ strategy:
 
 # Image used by the wait-for-nats initContainer. Platform's chart reuses its
 # NATS subchart's own image; this standalone chart has no NATS subchart to
-# reach into, so it uses a plain busybox instead (needs only `nc`).
+# reach into, so it uses a plain busybox instead (needs only `nc`). Pinned by
+# digest, not the mutable `stable` tag, since it's pulled anonymously from
+# Docker Hub rather than through the ECR pull secret every other image uses.
 waitForNats:
-  image: busybox:stable
+  image: busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
 
 volumeDefaults:
+  accessMode: ReadWriteMany
   storageClassName: local-path
   reclaimPolicy: Retain
 
 # Required per-volume: pvName/pvcName/hostPath/size. accessMode/claimSize/
-# storageClassName/reclaimPolicy fall back to the defaults above.
+# storageClassName/reclaimPolicy fall back to volumeDefaults above.
 volumes:
-  logs:
-    accessMode: ReadWriteMany
-  thumbnails:
-    accessMode: ReadWriteMany
-  jaspertmp:
-    accessMode: ReadWriteMany
+  logs: {}
+  thumbnails: {}
+  jaspertmp: {}
