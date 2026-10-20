@@ -1,0 +1,107 @@
+# Defaults for the standalone unlocked-core chart (server + frontend only).
+#
+# This chart is deliberately self-contained — see README.md for what's not
+# here yet (migration-hook Job, scheduler) and why. It does not share a
+# values schema with unlocked-platform; see docs/plans for the integration
+# gap that still needs solving when platform depends on this chart.
+
+# Required: app hostname, used for the frontend's nginx server_name and the
+# server's CORS/APP_URL.
+host: ""
+
+appEnv: production
+
+# In-cluster URL for provider-service (deployed by unlocked-platform, not
+# this chart).
+providerServiceUrl: http://provider-service:8081
+
+images:
+  # Applied to server/frontend unless the image sets its own pullPolicy.
+  pullPolicy: IfNotPresent
+  server:
+    repository: ""
+    tag: ""
+  frontend:
+    repository: ""
+    tag: ""
+
+database:
+  host: postgres
+  port: "5432"
+  user: unlocked
+  name: unlocked
+
+# Name of the Secret (not created by this chart) holding APP_KEY, DB_PASSWORD,
+# ORY_TOKEN and NATS_PASSWORD.
+secretName: core-secrets
+
+# Name of the imagePullSecret (not created by this chart) used to pull
+# server/frontend images.
+imagePullSecretName: ecr-secret
+
+kratos:
+  adminUrl: http://kratos:4434
+  publicUrl: http://kratos:4433
+
+nats:
+  url: nats://nats:4222
+  user: unlocked
+
+hydra:
+  enabled: true
+  adminUrl: http://hydra:4445
+  publicUrl: http://hydra:4444
+
+# Required: S3 bucket/region for uploaded content.
+s3:
+  bucket: ""
+  region: ""
+
+# Required: Kiwix server URL.
+kiwixServerUrl: ""
+
+supportEmails:
+  to: ""
+  from: ""
+
+# Served to the browser as /config.js (window.__CONFIG__). Public, not secrets.
+frontendConfig:
+  state: ""
+  deployment: ""
+  posthogKey: ""
+  posthogHost: ""
+
+middlewareCron: "0 22 * * *"
+
+server:
+  logLevel: info
+
+# Set only on sites that need to override the scheme a proxy terminates TLS
+# at (e.g. a load balancer that always sends http:// to the pod).
+proxySchemeOverride: ""
+
+# Deployment strategy per component (Recreate avoids two replicas writing to
+# the same ReadWriteMany volume at once).
+strategy:
+  server: Recreate
+  frontend: Recreate
+
+# Image used by the wait-for-nats initContainer. Platform's chart reuses its
+# NATS subchart's own image; this standalone chart has no NATS subchart to
+# reach into, so it uses a plain busybox instead (needs only `nc`).
+waitForNats:
+  image: busybox:stable
+
+volumeDefaults:
+  storageClassName: local-path
+  reclaimPolicy: Retain
+
+# Required per-volume: pvName/pvcName/hostPath/size. accessMode/claimSize/
+# storageClassName/reclaimPolicy fall back to the defaults above.
+volumes:
+  logs:
+    accessMode: ReadWriteMany
+  thumbnails:
+    accessMode: ReadWriteMany
+  jaspertmp:
+    accessMode: ReadWriteMany

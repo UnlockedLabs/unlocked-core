@@ -1,0 +1,65 @@
+{{/*
+Helpers for the unlocked-core chart. Prefixed `unlocked-core.*` (not
+`unlocked.*`) so these never collide with unlocked-platform's own
+_helpers.tpl if this chart is later pulled in as a dependency there — Helm
+merges named templates from a chart and all its dependencies into one global
+namespace, and a duplicate name anywhere in the tree is a silent last-wins
+collision.
+*/}}
+
+{{/* App hostname. Required. */}}
+{{- define "unlocked-core.host" -}}
+{{- required "host must be set" .Values.host -}}
+{{- end }}
+
+{{/*
+Image reference for a component: repository:tag. The tag is required.
+Usage: {{ include "unlocked-core.image" (list . "server") }}
+*/}}
+{{- define "unlocked-core.image" -}}
+{{- $root := index . 0 -}}
+{{- $name := index . 1 -}}
+{{- $img := index $root.Values.images $name -}}
+{{- $repo := required (printf "images.%s.repository must be set" $name) $img.repository -}}
+{{- $tag := required (printf "images.%s.tag must be set" $name) $img.tag -}}
+{{- printf "%s:%s" $repo (toString $tag) -}}
+{{- end }}
+
+{{/*
+imagePullPolicy line for a component: images.<name>.pullPolicy, else
+images.pullPolicy. Emits a full "imagePullPolicy: X" line, or nothing.
+Usage: {{- include "unlocked-core.pullPolicy" (list . "server") | nindent 8 }}
+*/}}
+{{- define "unlocked-core.pullPolicy" -}}
+{{- $root := index . 0 -}}
+{{- $name := index . 1 -}}
+{{- $img := index $root.Values.images $name -}}
+{{- $policy := $img.pullPolicy | default $root.Values.images.pullPolicy -}}
+{{- if $policy }}imagePullPolicy: {{ $policy }}{{ end -}}
+{{- end }}
+
+{{/* Deployment strategy for a component (default Recreate). */}}
+{{- define "unlocked-core.strategy" -}}
+{{- $root := index . 0 -}}
+{{- $name := index . 1 -}}
+{{- index $root.Values.strategy $name | default "Recreate" -}}
+{{- end }}
+
+{{/*
+Volume settings for one volume key, with required values checked.
+Usage: {{ $v := include "unlocked-core.volume" (list . "logs") | fromYaml }}
+*/}}
+{{- define "unlocked-core.volume" -}}
+{{- $root := index . 0 -}}
+{{- $name := index . 1 -}}
+{{- $v := index $root.Values.volumes $name -}}
+pvName: {{ required (printf "volumes.%s.pvName must be set" $name) $v.pvName }}
+pvcName: {{ required (printf "volumes.%s.pvcName must be set" $name) $v.pvcName }}
+hostPath: {{ required (printf "volumes.%s.hostPath must be set" $name) $v.hostPath | quote }}
+size: {{ required (printf "volumes.%s.size must be set" $name) $v.size }}
+claimSize: {{ $v.claimSize | default $v.size }}
+podVolume: {{ $v.podVolume | default $v.pvcName }}
+accessMode: {{ $v.accessMode | default "ReadWriteMany" }}
+storageClassName: {{ $v.storageClassName | default $root.Values.volumeDefaults.storageClassName }}
+reclaimPolicy: {{ $v.reclaimPolicy | default $root.Values.volumeDefaults.reclaimPolicy }}
+{{- end }}

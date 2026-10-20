@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+data:
+  nginx.conf: |
+    server {
+        listen       80;
+        server_name  {{ include "unlocked-core.host" . }};
+        gzip on;
+
+        # Runtime frontend config. Never cached, so a value change reaches
+        # browsers on the next load.
+        location = /config.js {
+            root   /usr/share/nginx/html;
+            add_header Cache-Control "no-store";
+        }
+
+        location / {
+            root   /usr/share/nginx/html;
+            index  index.html index.htm;
+            try_files $uri $uri/ /index.html;
+        }
+    }

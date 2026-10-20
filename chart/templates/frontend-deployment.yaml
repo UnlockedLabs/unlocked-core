@@ -1,0 +1,50 @@
+{{- $logs := include "unlocked-core.volume" (list . "logs") | fromYaml }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  strategy:
+    type: {{ include "unlocked-core.strategy" (list . "frontend") }}
+  template:
+    metadata:
+      labels:
+        app: frontend
+      annotations:
+        # config.js is subPath-mounted, which never updates on a running pod;
+        # a changed value has to roll the pod.
+        checksum/frontend-config: {{ include (print $.Template.BasePath "/frontend-config.yaml") . | sha256sum }}
+    spec:
+      containers:
+        - args: ["-g daemon off;"]
+          image: {{ include "unlocked-core.image" (list . "frontend") }}
+          {{- include "unlocked-core.pullPolicy" (list . "frontend") | nindent 10 }}
+          name: frontend
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - mountPath: /etc/nginx/conf.d/default.conf
+              name: config
+              subPath: nginx.conf
+            - mountPath: /usr/share/nginx/html/config.js
+              name: frontend-config
+              subPath: config.js
+            - mountPath: /var/log/nginx/
+              name: {{ $logs.podVolume }}
+      restartPolicy: Always
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecretName }}
+      volumes:
+        - name: {{ $logs.podVolume }}
+          persistentVolumeClaim:
+            claimName: {{ $logs.pvcName }}
+        - name: config
+          configMap:
+            name: nginx-config
+        - name: frontend-config
+          configMap:
+            name: frontend-config

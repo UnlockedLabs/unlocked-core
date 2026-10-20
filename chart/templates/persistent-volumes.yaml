@@ -1,0 +1,34 @@
+{{- /*
+PersistentVolumes (cluster-scoped) and their claims for this chart's three
+volumes. Names and hostPaths come from values.yaml.
+*/}}
+{{- range list "logs" "thumbnails" "jaspertmp" }}
+{{- $v := include "unlocked-core.volume" (list $ .) | fromYaml }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ $v.pvName }}
+spec:
+  capacity:
+    storage: {{ $v.size }}
+  accessModes:
+    - {{ $v.accessMode }}
+  persistentVolumeReclaimPolicy: {{ $v.reclaimPolicy }}
+  storageClassName: {{ $v.storageClassName }}
+  hostPath:
+    path: {{ $v.hostPath }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $v.pvcName }}
+spec:
+  accessModes:
+    - {{ $v.accessMode }}
+  resources:
+    requests:
+      storage: {{ $v.claimSize }}
+  storageClassName: {{ $v.storageClassName }}
+  volumeName: {{ $v.pvName }}
+{{- end }}

@@ -1,0 +1,132 @@
+{{- $host := include "unlocked-core.host" . }}
+{{- $logs := include "unlocked-core.volume" (list . "logs") | fromYaml }}
+{{- $thumbs := include "unlocked-core.volume" (list . "thumbnails") | fromYaml }}
+{{- $jasper := include "unlocked-core.volume" (list . "jaspertmp") | fromYaml }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: server
+  strategy:
+    type: {{ include "unlocked-core.strategy" (list . "server") }}
+  template:
+    metadata:
+      labels:
+        app: server
+    spec:
+      initContainers:
+      - name: wait-for-nats
+        image: {{ .Values.waitForNats.image }}
+        command: ["sh", "-c", "until nc -z -w 2 nats 4222; do echo waiting for nats; sleep 2; done"]
+      containers:
+      - args:
+        - ./backend
+        env:
+        - name: APP_ENV
+          value: {{ .Values.appEnv }}
+        {{- /*
+        APP_KEY is optional: prod has none on purpose (its LMS keys are stored
+        encrypted with an empty key).
+        */}}
+        - name: APP_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secretName }}
+              key: APP_KEY
+              optional: true
+        - name: APP_URL
+          value: https://{{ $host }}
+        - name: DB_HOST
+          value: {{ .Values.database.host }}
+        - name: DB_PORT
+          value: {{ .Values.database.port | quote }}
+        - name: DB_USER
+          value: {{ .Values.database.user }}
+        - name: DB_NAME
+          value: {{ .Values.database.name }}
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secretName }}
+              key: DB_PASSWORD
+        {{- if .Values.hydra.enabled }}
+        - name: HYDRA_ADMIN_URL
+          value: {{ .Values.hydra.adminUrl }}
+        - name: HYDRA_PUBLIC_URL
+          value: {{ .Values.hydra.publicUrl }}
+        {{- end }}
+        - name: KRATOS_ADMIN_URL
+          value: {{ .Values.kratos.adminUrl }}
+        - name: KRATOS_PUBLIC_URL
+          value: {{ .Values.kratos.publicUrl }}
+        - name: MIDDLEWARE_CRON_SCHEDULE
+          value: {{ .Values.middlewareCron }}
+        - name: IMG_FILEPATH
+          value: /thumbnails
+        - name: NATS_URL
+          value: {{ .Values.nats.url }}
+        - name: NATS_USER
+          value: {{ .Values.nats.user }}
+        - name: NATS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secretName }}
+              key: NATS_PASSWORD
+        - name: LOG_LEVEL
+          value: {{ .Values.server.logLevel }}
+        - name: ORY_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secretName }}
+              key: ORY_TOKEN
+        - name: PROVIDER_SERVICE_URL
+          value: {{ .Values.providerServiceUrl }}
+        - name: MIGRATION_DIR
+          value: "./migrations"
+        - name: S3_BUCKET_NAME
+          value: {{ required "s3.bucket must be set" .Values.s3.bucket }}
+        - name: AWS_REGION
+          value: {{ required "s3.region must be set" .Values.s3.region }}
+        - name: KIWIX_SERVER_URL
+          value: {{ required "kiwixServerUrl must be set" .Values.kiwixServerUrl }}
+        - name: TO_EMAIL
+          value: {{ .Values.supportEmails.to }}
+        - name: FROM_EMAIL
+          value: {{ .Values.supportEmails.from }}
+        - name: CORS_ALLOWED_ORIGINS
+          value: https://{{ $host }}
+        - name: JASPER_TEMP_DIR
+          value: /jaspertmp
+        {{- with .Values.proxySchemeOverride }}
+        - name: PROXY_SCHEME_OVERRIDE
+          value: {{ . | quote }}
+        {{- end }}
+        image: {{ include "unlocked-core.image" (list . "server") }}
+        {{- include "unlocked-core.pullPolicy" (list . "server") | nindent 8 }}
+        name: unlockedv2
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - mountPath: /thumbnails
+          name: {{ $thumbs.podVolume }}
+        - mountPath: /logs
+          name: {{ $logs.podVolume }}
+        - mountPath: /jaspertmp
+          name: {{ $jasper.podVolume }}
+      imagePullSecrets:
+      - name: {{ .Values.imagePullSecretName }}
+      restartPolicy: Always
+      volumes:
+      - name: {{ $thumbs.podVolume }}
+        persistentVolumeClaim:
+          claimName: {{ $thumbs.pvcName }}
+      - name: {{ $logs.podVolume }}
+        persistentVolumeClaim:
+          claimName: {{ $logs.pvcName }}
+      - name: {{ $jasper.podVolume }}
+        persistentVolumeClaim:
+          claimName: {{ $jasper.pvcName }}
