@@ -26,6 +26,11 @@ images:
     tag: ""
 
 database:
+  # external (useAppDsn: true): server reads a single APP_DSN connection
+  # string from secretName's Secret instead of the DB_HOST/PORT/USER/NAME
+  # fields below (which are then unused). Real prod sites with an external
+  # RDS instance (not an in-cluster postgres) need this on.
+  useAppDsn: false
   host: postgres
   port: "5432"
   user: unlocked

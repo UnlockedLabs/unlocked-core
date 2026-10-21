@@ -41,6 +41,13 @@ spec:
               key: APP_KEY
         - name: APP_URL
           value: https://{{ $host }}
+        {{- if .Values.database.useAppDsn }}
+        - name: APP_DSN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secretName }}
+              key: APP_DSN
+        {{- else }}
         - name: DB_HOST
           value: {{ .Values.database.host | quote }}
         - name: DB_PORT
@@ -54,6 +61,7 @@ spec:
             secretKeyRef:
               name: {{ .Values.secretName }}
               key: DB_PASSWORD
+        {{- end }}
         {{- if .Values.hydra.enabled }}
         - name: HYDRA_ADMIN_URL
           value: {{ .Values.hydra.adminUrl | quote }}
