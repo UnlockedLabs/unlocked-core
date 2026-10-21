@@ -74,6 +74,13 @@ spec:
           value: {{ .Values.kratos.publicUrl | quote }}
         - name: MIDDLEWARE_CRON_SCHEDULE
           value: {{ .Values.middlewareCron | quote }}
+        {{- /*
+        Not a values knob: this chart always deploys the scheduler below, so
+        the server must never also run background jobs internally, or every
+        job gets published twice. Matches EN-191's own docker-compose.
+        */}}
+        - name: RUN_SCHEDULER
+          value: "false"
         - name: IMG_FILEPATH
           value: /thumbnails
         - name: NATS_URL

@@ -9,11 +9,18 @@ Core's own Helm chart (EN-183). Standalone and self-contained: it has its own
 
 - `server-deployment.yaml` / `frontend-deployment.yaml` — the two Deployments,
   ported from `unlocked-platform`'s `charts/unlocked/templates/{server,frontend}-deployment.yaml`.
+- `scheduler-deployment.yaml` — runs background jobs (EN-191: same backend
+  image, `args: ["scheduler"]`). Always `replicas: 1` and `strategy: Recreate`,
+  not a values knob — `tasks.Start()` has no leader election, so two
+  scheduler pods running at once would double-publish every job to NATS.
+  `server-deployment.yaml` always sets `RUN_SCHEDULER=false` to match: this
+  chart never runs jobs in both places.
 - `frontend-config.yaml` / `nginx-config.yaml` — the frontend's runtime config
   ConfigMap and nginx config.
 - `persistent-volumes.yaml` — PV/PVC for the three volumes server+frontend
-  use (`logs`, `thumbnails`, `jaspertmp`).
-- `services.yaml` — ClusterIP Services for `frontend` and `server`.
+  use (`logs`, `thumbnails`, `jaspertmp`). The scheduler needs none of these.
+- `services.yaml` — ClusterIP Services for `frontend` and `server`. The
+  scheduler has no Service — it's a worker, not something else calls into.
 
 This chart assumes it's deployed into a namespace that already has: a
 `core-secrets` Secret (APP_KEY, DB_PASSWORD, ORY_TOKEN, NATS_PASSWORD), an
@@ -32,13 +39,6 @@ installed in the same namespace for the in-cluster services it talks to.
   Once it does, port the `core-migrate-<revision>` Job, the
   `core-migrate-waiter` RBAC, and the `wait-for-core-migrate` initContainer
   pattern from PR #8 into this chart.
-- **Scheduler.** EN-191 ([unlocked-core#1257](https://github.com/UnlockedLabs/unlocked-core/pull/1257))
-  runs background jobs as the same backend image invoked with
-  `args: ["scheduler"]` instead of the server command, gated by a
-  `RUN_SCHEDULER` env var (server keeps running jobs until that's `false`).
-  Its own description scopes the actual chart Deployment for this as a
-  separate follow-on PR after EN-179 lands — not bundled with EN-191 itself.
-  Add a `scheduler-deployment.yaml` here once that's ready.
 
 ## Known gap: wiring this into unlocked-platform
 

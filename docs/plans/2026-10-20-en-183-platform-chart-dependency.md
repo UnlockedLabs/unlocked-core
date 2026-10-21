@@ -66,6 +66,13 @@ EN-183, the same split `unlocked-core`'s EN-177 plan used with
    kolibri/tutor/postgres needs care, since it's one combined loop, not
    one file per component.
 
+   `unlocked-core`'s chart now also ships `scheduler-deployment.yaml` and
+   sets `RUN_SCHEDULER=false` unconditionally on `server`. Platform never
+   needs its own scheduler Deployment — it comes along free with the
+   dependency. Platform's own chart currently has no scheduler template at
+   all (there's no PR for one), so there's nothing to remove here, just
+   something to not separately build.
+
 3. **Add the dependency to `Chart.yaml`**, same pattern as the existing
    `nats`/`kratos` dependencies (EN-211/EN-212):
    ```yaml

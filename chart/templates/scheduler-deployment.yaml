@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scheduler
+spec:
+  replicas: 1
+  strategy:
+    # Always Recreate, not a values knob: tasks.Start() has no leader
+    # election or locking (backend/src/tasks/scheduler.go), so two scheduler
+    # pods running at once would publish every background job to NATS
+    # twice. A RollingUpdate's overlap window would do exactly that.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: scheduler
+  template:
+    metadata:
+      labels:
+        app: scheduler
+    spec:
+      initContainers:
+      - name: wait-for-nats
+        image: {{ .Values.waitForNats.image }}
+        command: ["sh", "-c", "until nc -z -w 2 {{ .Values.nats.host }} {{ .Values.nats.port }}; do echo waiting for nats; sleep 2; done"]
+      containers:
+      - name: scheduler
+        image: {{ include "unlocked-core.image" (list . "server") }}
+        {{- include "unlocked-core.pullPolicy" (list . "server") | nindent 8 }}
+        args: ["scheduler"]
+        env:
+        - name: APP_ENV
+          value: {{ .Values.appEnv | quote }}
+        {{- if .Values.database.useAppDsn }}
+        - name: APP_DSN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secretName }}
+              key: APP_DSN
+        {{- else }}
+        - name: DB_HOST
+          value: {{ .Values.database.host | quote }}
+        - name: DB_PORT
+          value: {{ .Values.database.port | quote }}
+        - name: DB_USER
+          value: {{ .Values.database.user | quote }}
+        - name: DB_NAME
+          value: {{ .Values.database.name | quote }}
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secretName }}
+              key: DB_PASSWORD
+        {{- end }}
+        - name: LOG_LEVEL
+          value: {{ .Values.server.logLevel | quote }}
+        - name: MIDDLEWARE_CRON_SCHEDULE
+          value: {{ .Values.middlewareCron | quote }}
+        - name: MIGRATION_DIR
+          value: "./migrations"
+        - name: NATS_URL
+          value: nats://{{ .Values.nats.host }}:{{ .Values.nats.port }}
+        - name: NATS_USER
+          value: {{ .Values.nats.user | quote }}
+        - name: NATS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secretName }}
+              key: NATS_PASSWORD
+      imagePullSecrets:
+      - name: {{ .Values.imagePullSecretName }}
+      restartPolicy: Always
