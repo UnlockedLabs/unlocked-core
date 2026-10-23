@@ -1,0 +1,11 @@
+{
+  "data": {
+    "facilities": [
+      "North",
+      "South"
+    ],
+    "message": "Unable to archive program with active or scheduled classes",
+    "updated": false
+  },
+  "message": "Data fetched successfully"
+}

@@ -1,0 +1,23 @@
+{
+  "data": [
+    {
+      "create_user_id": null,
+      "created_at": "<time>",
+      "facility_id": 2,
+      "id": 1,
+      "name": "Room A",
+      "update_user_id": null,
+      "updated_at": "<time>"
+    },
+    {
+      "create_user_id": null,
+      "created_at": "<time>",
+      "facility_id": 2,
+      "id": 2,
+      "name": "Room B",
+      "update_user_id": null,
+      "updated_at": "<time>"
+    }
+  ],
+  "message": "Data fetched successfully"
+}

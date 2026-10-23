@@ -1,0 +1,28 @@
+{
+  "data": {
+    "credit_types": [
+      "Completion",
+      "Participation",
+      "Earned-time",
+      "Education"
+    ],
+    "funding_types": [
+      "Federal_Grants",
+      "State_Grants",
+      "Nonprofit_Organizations",
+      "Educational_Grants",
+      "Inmate_Welfare_Funds",
+      "Other"
+    ],
+    "program_types": [
+      "Educational",
+      "Vocational",
+      "Mental_Health_Behavioral",
+      "Religious_Faith-Based",
+      "Re-Entry",
+      "Therapeutic",
+      "Life_Skills"
+    ]
+  },
+  "message": "Data fetched successfully"
+}

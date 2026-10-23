@@ -1,0 +1,21 @@
+{
+  "data": [
+    {
+      "class_name": "Welding I",
+      "conflict_type": "room",
+      "conflicting_class_id": 4,
+      "conflicting_event_id": 4,
+      "end_time": "2099-02-07T10:00:00-06:00",
+      "start_time": "2099-02-07T09:00:00-06:00"
+    },
+    {
+      "class_name": "Welding I",
+      "conflict_type": "instructor",
+      "conflicting_class_id": 4,
+      "conflicting_event_id": 4,
+      "end_time": "2099-02-07T10:00:00-06:00",
+      "start_time": "2099-02-07T09:00:00-06:00"
+    }
+  ],
+  "message": "the room and instructor are already booked during this time"
+}

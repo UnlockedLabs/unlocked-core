@@ -1,0 +1,49 @@
+{
+  "data": {
+    "by_facility": [
+      {
+        "facility_id": 2,
+        "facility_name": "North",
+        "four_plus": 0,
+        "one": 2,
+        "three": 0,
+        "total": 5,
+        "two": 1,
+        "zero": 2
+      },
+      {
+        "facility_id": 3,
+        "facility_name": "South",
+        "four_plus": 0,
+        "one": 1,
+        "three": 0,
+        "total": 1,
+        "two": 0,
+        "zero": 0
+      }
+    ],
+    "statewide": [
+      {
+        "bucket": "0",
+        "count": 2
+      },
+      {
+        "bucket": "1",
+        "count": 3
+      },
+      {
+        "bucket": "2",
+        "count": 1
+      },
+      {
+        "bucket": "3",
+        "count": 0
+      },
+      {
+        "bucket": "4+",
+        "count": 0
+      }
+    ]
+  },
+  "message": "Data fetched successfully"
+}

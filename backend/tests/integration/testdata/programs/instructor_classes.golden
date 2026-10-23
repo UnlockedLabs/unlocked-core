@@ -1,0 +1,45 @@
+{
+  "data": [
+    {
+      "cancelledSessions": 1,
+      "duration": "1h",
+      "enrolledCount": 3,
+      "id": 1,
+      "name": "Reading 101",
+      "room": "Room A",
+      "sessionCount": 4,
+      "sessionDates": [
+        "2026-01-05",
+        "2026-01-19",
+        "2026-01-26"
+      ],
+      "startTime": "09:00",
+      "upcomingSessions": 3
+    },
+    {
+      "cancelledSessions": 0,
+      "duration": "1h",
+      "enrolledCount": 0,
+      "id": 2,
+      "name": "Welding I",
+      "room": "Room B",
+      "sessionCount": 0,
+      "sessionDates": null,
+      "startTime": "09:00",
+      "upcomingSessions": 0
+    },
+    {
+      "cancelledSessions": 0,
+      "duration": "1h",
+      "enrolledCount": 0,
+      "id": 4,
+      "name": "Welding I",
+      "room": "Room B",
+      "sessionCount": 0,
+      "sessionDates": null,
+      "startTime": "09:00",
+      "upcomingSessions": 0
+    }
+  ],
+  "message": "Data fetched successfully"
+}

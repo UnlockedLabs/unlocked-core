@@ -1,0 +1,47 @@
+{
+  "data": [
+    {
+      "admin_email": "facadmin@example.com",
+      "class_name": "Reading 101",
+      "class_start_dt": "2026-01-05T00:00:00Z",
+      "cohort": null,
+      "cohort_id": 1,
+      "create_user_id": null,
+      "created_at": "<time>",
+      "credit_type": "Completion",
+      "enrolled_on_dt": "2026-01-05T00:00:00Z",
+      "facility_name": "North",
+      "id": 1,
+      "program_class": null,
+      "program_class_id": 1,
+      "program_id": 1,
+      "program_name": "Adult Literacy",
+      "program_owner": "",
+      "update_user_id": null,
+      "updated_at": "<time>",
+      "user": {
+        "create_user_id": null,
+        "created_at": "<time>",
+        "doc_id": "1002",
+        "email": "mmajor@example.com",
+        "facility_id": 2,
+        "id": 3,
+        "kratos_id": null,
+        "name_first": "Mary",
+        "name_last": "Major",
+        "role": "student",
+        "update_user_id": null,
+        "updated_at": "<time>",
+        "username": "mmajor"
+      },
+      "user_id": 3
+    }
+  ],
+  "message": "",
+  "meta": {
+    "current_page": 1,
+    "last_page": 1,
+    "per_page": 20,
+    "total": 1
+  }
+}

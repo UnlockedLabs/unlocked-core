@@ -1,0 +1,12 @@
+{
+  "data": [
+    {
+      "completed_first": 1,
+      "enrolled_second": 0,
+      "facility_name": "North",
+      "program_type": "Educational",
+      "rate": 0
+    }
+  ],
+  "message": "Data fetched successfully"
+}

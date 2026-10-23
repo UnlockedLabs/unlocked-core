@@ -1,0 +1,10 @@
+{
+  "data": {
+    "attendance_rate": 66.66666666666667,
+    "avg_active_programs_per_facility": 1,
+    "completion_rate": 20,
+    "total_enrollments": 4,
+    "total_programs": 1
+  },
+  "message": "Data fetched successfully"
+}

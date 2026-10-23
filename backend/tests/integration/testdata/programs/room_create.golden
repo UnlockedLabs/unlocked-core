@@ -1,0 +1,12 @@
+{
+  "data": {
+    "create_user_id": null,
+    "created_at": "<time>",
+    "facility_id": 2,
+    "id": 4,
+    "name": "Room C",
+    "update_user_id": null,
+    "updated_at": "<time>"
+  },
+  "message": "Data fetched successfully"
+}

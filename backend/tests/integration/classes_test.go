@@ -572,6 +572,9 @@ func runUpdateActiveClassToCompletedTest(t *testing.T, env *TestEnv, facility *m
 
 func TestMain(m *testing.M) {
 	logrus.SetOutput(io.Discard)
+	// Run in UTC, as CI does, so results that depend on the server's local
+	// time zone are the same on every machine.
+	time.Local = time.UTC
 	code := m.Run()
 	os.Exit(code)
 }

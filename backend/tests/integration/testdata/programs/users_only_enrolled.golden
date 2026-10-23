@@ -1,0 +1,56 @@
+{
+  "data": [
+    {
+      "create_user_id": null,
+      "created_at": "<time>",
+      "doc_id": "1001",
+      "email": "jdoe@example.com",
+      "facility_id": 2,
+      "id": 2,
+      "kratos_id": null,
+      "name_first": "John",
+      "name_last": "Doe",
+      "role": "student",
+      "update_user_id": null,
+      "updated_at": "<time>",
+      "username": "jdoe"
+    },
+    {
+      "create_user_id": null,
+      "created_at": "<time>",
+      "doc_id": "1004",
+      "email": "leaver@example.com",
+      "facility_id": 2,
+      "id": 5,
+      "kratos_id": null,
+      "name_first": "Test",
+      "name_last": "User",
+      "role": "student",
+      "update_user_id": null,
+      "updated_at": "<time>",
+      "username": "leaver"
+    },
+    {
+      "create_user_id": null,
+      "created_at": "<time>",
+      "doc_id": "1005",
+      "email": "bulkleaver@example.com",
+      "facility_id": 2,
+      "id": 6,
+      "kratos_id": null,
+      "name_first": "Test",
+      "name_last": "User",
+      "role": "student",
+      "update_user_id": null,
+      "updated_at": "<time>",
+      "username": "bulkleaver"
+    }
+  ],
+  "message": "",
+  "meta": {
+    "current_page": 1,
+    "last_page": 1,
+    "per_page": 20,
+    "total": 3
+  }
+}

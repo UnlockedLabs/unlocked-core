@@ -1,0 +1,61 @@
+{
+  "data": {
+    "active_cohorts": 1,
+    "archived_at": null,
+    "capacity": 10,
+    "cohort_count": 1,
+    "cohorts": [
+      {
+        "archived_at": null,
+        "capacity": 10,
+        "class_name": "",
+        "completed": 0,
+        "create_user_id": 8,
+        "created_at": "<time>",
+        "credit_hours": 2,
+        "description": "Morning cohort",
+        "end_dt": "2099-12-31T00:00:00Z",
+        "enrolled": 0,
+        "enrollments": null,
+        "events": null,
+        "facility": null,
+        "facility_id": 2,
+        "facility_program": null,
+        "id": 1,
+        "instructor_id": null,
+        "is_canvas": false,
+        "program": null,
+        "program_class": null,
+        "program_class_id": 1,
+        "program_id": 1,
+        "start_dt": "2026-01-05T00:00:00Z",
+        "status": "Active",
+        "update_user_id": null,
+        "updated_at": "<time>"
+      }
+    ],
+    "completed": 1,
+    "completed_cohorts": 0,
+    "create_user_id": null,
+    "created_at": "<time>",
+    "credit_hours": 2,
+    "credit_types": [
+      {
+        "credit_type": "Completion",
+        "program_class_id": 1
+      }
+    ],
+    "description": "Morning reading",
+    "enrolled": 3,
+    "facility": null,
+    "facility_id": 2,
+    "id": 1,
+    "name": "Reading 101",
+    "program": null,
+    "program_id": 1,
+    "scheduled_cohorts": 0,
+    "update_user_id": null,
+    "updated_at": "<time>"
+  },
+  "message": "Data fetched successfully"
+}

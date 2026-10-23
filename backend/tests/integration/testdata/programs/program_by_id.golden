@@ -1,0 +1,65 @@
+{
+  "data": {
+    "active_class_facility_ids": [
+      2,
+      3
+    ],
+    "active_enrollments": 3,
+    "active_residents": 3,
+    "archived_at": null,
+    "attendance_rate": 66.66666666666667,
+    "completion_rate": 100,
+    "completions": 1,
+    "create_user_id": 10,
+    "created_at": "<time>",
+    "credit_types": [
+      {
+        "credit_type": "Completion",
+        "program": null,
+        "program_id": 1
+      }
+    ],
+    "description": "Reading and writing",
+    "facilities": [
+      {
+        "create_user_id": null,
+        "created_at": "<time>",
+        "id": 2,
+        "login_activity": null,
+        "name": "North",
+        "programs": null,
+        "timezone": "America/Chicago",
+        "update_user_id": null,
+        "updated_at": "<time>"
+      },
+      {
+        "create_user_id": null,
+        "created_at": "<time>",
+        "id": 3,
+        "login_activity": null,
+        "name": "South",
+        "programs": null,
+        "timezone": "America/Chicago",
+        "update_user_id": null,
+        "updated_at": "<time>"
+      }
+    ],
+    "funding_type": "Federal_Grants",
+    "has_program_completion": true,
+    "id": 1,
+    "is_active": true,
+    "is_favorited": false,
+    "name": "Adult Literacy",
+    "program_types": [
+      {
+        "program": null,
+        "program_id": 1,
+        "program_type": "Educational"
+      }
+    ],
+    "total_enrollments": 4,
+    "update_user_id": null,
+    "updated_at": "<time>"
+  },
+  "message": "Data fetched successfully"
+}

@@ -1,0 +1,174 @@
+{
+  "data": [
+    {
+      "archived_at": null,
+      "create_user_id": 10,
+      "created_at": "<time>",
+      "credit_types": [
+        {
+          "credit_type": "Completion",
+          "program": null,
+          "program_id": 1
+        }
+      ],
+      "description": "Reading and writing",
+      "facilities": [
+        {
+          "create_user_id": null,
+          "created_at": "<time>",
+          "id": 2,
+          "login_activity": null,
+          "name": "North",
+          "programs": null,
+          "timezone": "America/Chicago",
+          "update_user_id": null,
+          "updated_at": "<time>"
+        },
+        {
+          "create_user_id": null,
+          "created_at": "<time>",
+          "id": 3,
+          "login_activity": null,
+          "name": "South",
+          "programs": null,
+          "timezone": "America/Chicago",
+          "update_user_id": null,
+          "updated_at": "<time>"
+        }
+      ],
+      "funding_type": "Federal_Grants",
+      "has_program_completion": true,
+      "id": 1,
+      "is_active": true,
+      "is_favorited": false,
+      "name": "Adult Literacy",
+      "program_types": [
+        {
+          "program": null,
+          "program_id": 1,
+          "program_type": "Educational"
+        }
+      ],
+      "update_user_id": null,
+      "updated_at": "<time>"
+    },
+    {
+      "archived_at": null,
+      "create_user_id": 10,
+      "created_at": "<time>",
+      "credit_types": [
+        {
+          "credit_type": "Earned-time",
+          "program": null,
+          "program_id": 2
+        }
+      ],
+      "description": "Shop safety and welding",
+      "facilities": [
+        {
+          "create_user_id": null,
+          "created_at": "<time>",
+          "id": 2,
+          "login_activity": null,
+          "name": "North",
+          "programs": null,
+          "timezone": "America/Chicago",
+          "update_user_id": null,
+          "updated_at": "<time>"
+        }
+      ],
+      "funding_type": "State_Grants",
+      "has_program_completion": false,
+      "id": 2,
+      "is_active": true,
+      "is_favorited": false,
+      "name": "Welding",
+      "program_types": [
+        {
+          "program": null,
+          "program_id": 2,
+          "program_type": "Vocational"
+        }
+      ],
+      "update_user_id": null,
+      "updated_at": "<time>"
+    },
+    {
+      "archived_at": "<time>",
+      "create_user_id": null,
+      "created_at": "<time>",
+      "credit_types": [],
+      "description": "Retired",
+      "facilities": [
+        {
+          "create_user_id": null,
+          "created_at": "<time>",
+          "id": 2,
+          "login_activity": null,
+          "name": "North",
+          "programs": null,
+          "timezone": "America/Chicago",
+          "update_user_id": null,
+          "updated_at": "<time>"
+        }
+      ],
+      "funding_type": "Other",
+      "has_program_completion": false,
+      "id": 3,
+      "is_active": false,
+      "is_favorited": false,
+      "name": "Old Program",
+      "program_types": [],
+      "update_user_id": null,
+      "updated_at": "<time>"
+    },
+    {
+      "archived_at": null,
+      "create_user_id": null,
+      "created_at": "<time>",
+      "credit_types": [
+        {
+          "credit_type": "Participation",
+          "program": null,
+          "program_id": 4
+        }
+      ],
+      "description": "Offered at South",
+      "facilities": [
+        {
+          "create_user_id": null,
+          "created_at": "<time>",
+          "id": 3,
+          "login_activity": null,
+          "name": "South",
+          "programs": null,
+          "timezone": "America/Chicago",
+          "update_user_id": null,
+          "updated_at": "<time>"
+        }
+      ],
+      "funding_type": "Other",
+      "has_program_completion": false,
+      "id": 4,
+      "is_active": true,
+      "is_favorited": false,
+      "name": "South Only",
+      "program_types": [
+        {
+          "program": null,
+          "program_id": 4,
+          "program_type": "Life_Skills"
+        }
+      ],
+      "update_user_id": null,
+      "updated_at": "<time>"
+    }
+  ],
+  "message": "",
+  "meta": {
+    "current_page": 1,
+    "last_page": 1,
+    "per_page": 20,
+    "total": 4
+  }
+}

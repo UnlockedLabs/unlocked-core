@@ -1,0 +1,44 @@
+{
+  "data": [
+    {
+      "attendance_records": null,
+      "class_time": "09:00-10:00",
+      "date": "2026-02-23",
+      "event_id": 7,
+      "is_cancelled": false,
+      "is_rescheduled": false
+    },
+    {
+      "attendance_records": null,
+      "class_time": "09:00-10:00",
+      "date": "2026-02-16",
+      "event_id": 7,
+      "is_cancelled": false,
+      "is_rescheduled": false
+    },
+    {
+      "attendance_records": null,
+      "class_time": "09:00-10:00",
+      "date": "2026-02-09",
+      "event_id": 1,
+      "is_cancelled": false,
+      "is_rescheduled": false,
+      "override_id": 3
+    },
+    {
+      "attendance_records": null,
+      "class_time": "09:00-10:00",
+      "date": "2026-02-02",
+      "event_id": 1,
+      "is_cancelled": false,
+      "is_rescheduled": false
+    }
+  ],
+  "message": "",
+  "meta": {
+    "current_page": 1,
+    "last_page": 1,
+    "per_page": 20,
+    "total": 4
+  }
+}

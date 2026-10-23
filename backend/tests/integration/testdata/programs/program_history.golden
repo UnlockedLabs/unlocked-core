@@ -1,0 +1,86 @@
+{
+  "data": [
+    {
+      "action": "progclass_history",
+      "admin_username": "facadmin",
+      "attendance_status": null,
+      "class_name": null,
+      "created_at": "<time>",
+      "facility_name": null,
+      "field_name": "is_active",
+      "new_value": "false",
+      "old_value": "true",
+      "program_classes_history_id": null,
+      "session_date": null,
+      "user_id": 8,
+      "user_username": null
+    },
+    {
+      "action": "progclass_history",
+      "admin_username": "facadmin",
+      "attendance_status": null,
+      "class_name": null,
+      "created_at": "<time>",
+      "facility_name": null,
+      "field_name": "program_type",
+      "new_value": null,
+      "old_value": "Life_Skills",
+      "program_classes_history_id": null,
+      "session_date": null,
+      "user_id": 8,
+      "user_username": null
+    },
+    {
+      "action": "progclass_history",
+      "admin_username": "facadmin",
+      "attendance_status": null,
+      "class_name": null,
+      "created_at": "<time>",
+      "facility_name": null,
+      "field_name": "program_type",
+      "new_value": "Re-Entry",
+      "old_value": null,
+      "program_classes_history_id": null,
+      "session_date": null,
+      "user_id": 8,
+      "user_username": null
+    },
+    {
+      "action": "progclass_history",
+      "admin_username": "facadmin",
+      "attendance_status": null,
+      "class_name": null,
+      "created_at": "<time>",
+      "facility_name": null,
+      "field_name": "description",
+      "new_value": "Everyday skills for re-entry",
+      "old_value": "Everyday skills",
+      "program_classes_history_id": null,
+      "session_date": null,
+      "user_id": 8,
+      "user_username": null
+    },
+    {
+      "action": "progclass_history",
+      "admin_username": "facadmin",
+      "attendance_status": null,
+      "class_name": null,
+      "created_at": "<time>",
+      "facility_name": null,
+      "field_name": "program",
+      "new_value": null,
+      "old_value": null,
+      "program_classes_history_id": null,
+      "session_date": null,
+      "user_id": null,
+      "user_username": null
+    }
+  ],
+  "message": "",
+  "meta": {
+    "current_page": 1,
+    "last_page": 1,
+    "per_page": 20,
+    "total": 5
+  }
+}

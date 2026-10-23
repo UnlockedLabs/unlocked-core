@@ -1,0 +1,8 @@
+{
+  "data": {
+    "failed_count": 0,
+    "failures": null,
+    "success_count": 1
+  },
+  "message": "Data fetched successfully"
+}

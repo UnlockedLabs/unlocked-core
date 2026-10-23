@@ -1,0 +1,103 @@
+{
+  "data": [
+    {
+      "attendance_records": null,
+      "class_time": "09:00-10:00",
+      "date": "2026-01-26",
+      "event_id": 1,
+      "is_cancelled": false,
+      "is_rescheduled": false
+    },
+    {
+      "attendance_records": [
+        {
+          "attendance_status": "absent_unexcused",
+          "check_in_at": null,
+          "check_out_at": null,
+          "create_user_id": 8,
+          "created_at": "<time>",
+          "date": "2026-01-19",
+          "event": null,
+          "event_id": 1,
+          "id": 3,
+          "minutes_attended": null,
+          "note": "Sick",
+          "reason_category": null,
+          "scheduled_minutes": null,
+          "update_user_id": null,
+          "updated_at": "<time>",
+          "user": null,
+          "user_id": 2
+        }
+      ],
+      "class_time": "09:00-10:00",
+      "date": "2026-01-19",
+      "event_id": 1,
+      "is_cancelled": false,
+      "is_rescheduled": false
+    },
+    {
+      "attendance_records": null,
+      "class_time": "09:00-10:00",
+      "date": "2026-01-12",
+      "event_id": 1,
+      "is_cancelled": true,
+      "is_rescheduled": false,
+      "override_id": 1
+    },
+    {
+      "attendance_records": [
+        {
+          "attendance_status": "present",
+          "check_in_at": null,
+          "check_out_at": null,
+          "create_user_id": 8,
+          "created_at": "<time>",
+          "date": "2026-01-05",
+          "event": null,
+          "event_id": 1,
+          "id": 1,
+          "minutes_attended": null,
+          "note": null,
+          "reason_category": null,
+          "scheduled_minutes": null,
+          "update_user_id": null,
+          "updated_at": "<time>",
+          "user": null,
+          "user_id": 2
+        },
+        {
+          "attendance_status": "present",
+          "check_in_at": null,
+          "check_out_at": null,
+          "create_user_id": 8,
+          "created_at": "<time>",
+          "date": "2026-01-05",
+          "event": null,
+          "event_id": 1,
+          "id": 2,
+          "minutes_attended": null,
+          "note": null,
+          "reason_category": null,
+          "scheduled_minutes": null,
+          "update_user_id": null,
+          "updated_at": "<time>",
+          "user": null,
+          "user_id": 3
+        }
+      ],
+      "class_time": "09:00-10:00",
+      "date": "2026-01-05",
+      "event_id": 1,
+      "is_cancelled": false,
+      "is_rescheduled": false
+    }
+  ],
+  "message": "",
+  "meta": {
+    "current_page": 1,
+    "last_page": 1,
+    "per_page": 20,
+    "total": 4
+  }
+}

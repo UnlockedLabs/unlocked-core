@@ -1,0 +1,55 @@
+{
+  "data": [
+    {
+      "change_reason": null,
+      "class_name": "Welding I",
+      "cohort": null,
+      "cohort_id": 2,
+      "completion_dt": "",
+      "create_user_id": 8,
+      "created_at": "<time>",
+      "doc_id": "1001",
+      "enrolled_at": null,
+      "enrollment_ended_at": null,
+      "enrollment_status": "Enrolled",
+      "id": 6,
+      "name_full": "John Doe",
+      "program_class": null,
+      "program_class_id": 2,
+      "start_dt": "2099-01-04T00:00:00Z",
+      "update_user_id": null,
+      "updated_at": "<time>",
+      "user": null,
+      "user_id": 2
+    },
+    {
+      "change_reason": "Schedule clash",
+      "class_name": "Welding I",
+      "cohort": null,
+      "cohort_id": 2,
+      "completion_dt": "",
+      "create_user_id": 8,
+      "created_at": "<time>",
+      "doc_id": "1003",
+      "enrolled_at": null,
+      "enrollment_ended_at": "<time>",
+      "enrollment_status": "Cancelled",
+      "id": 7,
+      "name_full": "Test User",
+      "program_class": null,
+      "program_class_id": 2,
+      "start_dt": "2099-01-04T00:00:00Z",
+      "update_user_id": 8,
+      "updated_at": "<time>",
+      "user": null,
+      "user_id": 4
+    }
+  ],
+  "message": "",
+  "meta": {
+    "current_page": 1,
+    "last_page": 1,
+    "per_page": 20,
+    "total": 2
+  }
+}
