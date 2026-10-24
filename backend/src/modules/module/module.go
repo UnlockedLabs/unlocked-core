@@ -15,6 +15,7 @@ import (
 	"slices"
 
 	"github.com/UnlockedLabs/unlocked-contracts/features"
+	"github.com/UnlockedLabs/unlocked-contracts/identity"
 	"github.com/UnlockedLabs/unlocked-contracts/users"
 
 	"github.com/nats-io/nats.go"
@@ -49,6 +50,11 @@ type Route struct {
 	// everyone, facility admins their own facility's users. With AnyUser, the
 	// user themself may too. It works only with AnyUser and Admin.
 	UserParam string
+	// Allow is the module's own access check, for checks Access and UserParam
+	// can't express, such as a class in the caller's facility. It runs after
+	// them, and the caller needs to pass every check. A caller it denies gets
+	// the same 401 as core's own checks give.
+	Allow func(r *http.Request, c *identity.Claims) bool
 	// Features turns the route off unless every listed feature is enabled.
 	Features []features.Access
 }

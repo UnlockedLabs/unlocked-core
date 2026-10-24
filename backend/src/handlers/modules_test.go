@@ -131,6 +131,68 @@ func TestModuleRouterUserParamPanics(t *testing.T) {
 	}
 }
 
+// A route's Allow sees the request and the caller, and the caller must pass it
+// as well as the route's access level, UserParam and features.
+func TestModuleRouterAllow(t *testing.T) {
+	srv := newTestingServer()
+	ok := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	north, south := createTestFacility(t, srv, "North"), createTestFacility(t, srv, "South")
+	allow := func(r *http.Request, c *identity.Claims) bool {
+		return r.PathValue("class") == "open" && c.FacilityID == north
+	}
+	router := moduleRouter{srv}
+	router.Handle(module.Route{Pattern: "GET /api/test-module/classes/{class}", Handler: ok, Allow: allow})
+	router.Handle(module.Route{Pattern: "GET /api/test-module/users/{id}/classes/{class}", Handler: ok, UserParam: "id", Allow: allow})
+	router.Handle(module.Route{Pattern: "GET /api/test-module/dept-admin/classes/{class}", Handler: ok, Access: module.DeptAdmin, Allow: allow})
+	router.Handle(module.Route{Pattern: "GET /api/test-module/feature/classes/{class}", Handler: ok, Allow: allow, Features: []models.FeatureAccess{models.OpenContentAccess}})
+
+	resident := createTestUser(t, srv, "resident", models.Student, north)
+	neighbor := createTestUser(t, srv, "neighbor", models.Student, north)
+	southResident := createTestUser(t, srv, "southres", models.Student, south)
+	as := func(u *models.User) Claims { return Claims{UserID: u.ID, Role: u.Role, FacilityID: u.FacilityID} }
+	facAdmin := as(createTestUser(t, srv, "facadmin", models.FacilityAdmin, north))
+	deptAdmin := as(createTestUser(t, srv, "deptadmin", models.DepartmentAdmin, north))
+	// The testing server reads nil FeatureAccess as every feature.
+	withFeatures := func(c Claims, fs ...models.FeatureAccess) Claims {
+		c.FeatureAccess = append([]models.FeatureAccess{}, fs...)
+		return c
+	}
+
+	allowed, denied := http.StatusOK, http.StatusUnauthorized
+	tests := []struct {
+		name   string
+		path   string
+		caller Claims
+		want   int
+	}{
+		{"allowed", "/api/test-module/classes/open", as(resident), allowed},
+		{"denied by the path", "/api/test-module/classes/closed", as(resident), denied},
+		{"denied by the caller", "/api/test-module/classes/open", as(southResident), denied},
+		{"user param and allow pass", fmt.Sprintf("/api/test-module/users/%d/classes/open", resident.ID), as(resident), allowed},
+		{"user param fails", fmt.Sprintf("/api/test-module/users/%d/classes/open", neighbor.ID), as(resident), denied},
+		{"user param passes, allow fails", fmt.Sprintf("/api/test-module/users/%d/classes/closed", resident.ID), as(resident), denied},
+		{"department admin and allow pass", "/api/test-module/dept-admin/classes/open", deptAdmin, allowed},
+		{"access level fails", "/api/test-module/dept-admin/classes/open", facAdmin, denied},
+		{"access level passes, allow fails", "/api/test-module/dept-admin/classes/closed", deptAdmin, denied},
+		{"feature and allow pass", "/api/test-module/feature/classes/open", withFeatures(as(resident), models.OpenContentAccess), allowed},
+		{"feature off", "/api/test-module/feature/classes/open", withFeatures(as(resident)), denied},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			srv.Mux.ServeHTTP(w, requestAs(t, tt.path, tt.caller))
+			assert.Equal(t, tt.want, w.Code, w.Body.String())
+		})
+	}
+
+	t.Run("denied with core's response", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		srv.Mux.ServeHTTP(w, requestAs(t, "/api/test-module/classes/closed", as(resident)))
+		assert.Equal(t, denied, w.Code)
+		assert.Equal(t, "User is not allowed to view this resource\n", w.Body.String())
+	})
+}
+
 // An access level core doesn't know stops startup rather than leaving the
 // route open.
 func TestModuleRouterUnknownAccessPanics(t *testing.T) {

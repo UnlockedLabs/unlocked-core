@@ -29,23 +29,30 @@ func (mr moduleRouter) Handle(rt module.Route) {
 		return nil
 	}
 	def := routeDef{routeMethod: rt.Pattern, handler: h, features: rt.Features}
+	var checks []RouteResolver
 	switch rt.Access {
 	case module.AnyUser:
 	case module.Admin:
 		def.admin = true
 	case module.DeptAdmin:
 		def.admin = true
-		def.resolver = DeptAdminResolver
+		checks = append(checks, DeptAdminResolver)
 	case module.SystemAdmin:
 		def.admin = true
-		def.resolver = SystemAdminResolver
+		checks = append(checks, SystemAdminResolver)
 	default:
 		// Registration runs once at startup, so an unknown level stops the
 		// server instead of leaving a route open.
 		panic(fmt.Sprintf("module route %q: unknown access level %d", rt.Pattern, rt.Access))
 	}
 	if rt.UserParam != "" {
-		def.resolver = userResolver(rt)
+		checks = append(checks, userResolver(rt))
+	}
+	if rt.Allow != nil {
+		checks = append(checks, allowResolver(rt.Allow))
+	}
+	if len(checks) > 0 {
+		def.resolver = AllResolvers(checks...)
 	}
 	mr.srv.register(func() []routeDef { return []routeDef{def} })
 }
@@ -64,6 +71,14 @@ func userResolver(rt module.Route) RouteResolver {
 		return FacilityAdminResolver("users", rt.UserParam)
 	default:
 		panic(fmt.Sprintf("module route %q: UserParam works only with AnyUser and Admin", rt.Pattern))
+	}
+}
+
+// allowResolver runs a module's own access check with the caller's
+// identity.Claims.
+func allowResolver(allow func(*http.Request, *identity.Claims) bool) RouteResolver {
+	return func(_ *database.DB, r *http.Request) bool {
+		return allow(r, r.Context().Value(ClaimsKey).(*Claims).identityClaims())
 	}
 }
 
