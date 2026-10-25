@@ -1,0 +1,84 @@
+# Programs module
+
+Programs, their classes and cohorts, enrollments, class events and
+attendance, rooms, instructors, the Programs reports, and the Canvas and
+Essential Education classes shown alongside them. It moved here from core in
+EN-194.
+
+## Boundaries
+
+- **It imports nothing from core.** It talks to core only through
+  `modules/module` (the seam), `unlocked-contracts` and Provider Platforms'
+  `api/`. depguard in `backend/.golangci.yml` enforces this.
+- **Core asks it questions through `api/`** (interfaces and plain types only),
+  and gets the implementation from `registry.Programs`: the users list's
+  `include=only_enrolled|only_unenrolled` filters, resident transfer and
+  deactivation (on core's transaction, with `registry.Programs(tx)`), the
+  usage report and the dashboard's Programs numbers. Core never imports this
+  package's insides.
+- **It reaches core through `Deps`:**
+  - `Deps.HTTP` for its Canvas and Essential Education calls;
+  - `Deps.Features` to hide Canvas classes at facilities with Provider
+    Platforms turned off;
+  - `Deps.Reports` to render report PDFs with core's Jasper templates.
+- **It answers Provider Platforms' `Deps.LiveProviders`**, through
+  `registry.LiveProviders`: an Essential Education provider's users, and
+  clearing the cached Canvas programs when a mapping changes. That goes away
+  when Provider Platforms fetches and caches those providers' data itself.
+- **It reads and writes some of core's tables:** it reads `users` and
+  `facilities` (the `User` and `Facility` types in `models.go`), and adds a
+  `user_account_history` row when attendance is recorded, in the same
+  transaction.
+- **Its routes keep core's access checks.** 35 of the 65 routes have a check
+  of their own (`Route.Allow`), which `handlers.go` copies from core's
+  resolvers.
+- **Some code outside the module imports its insides:**
+  - provider-middleware and `backend/seeder`, until EN-197;
+  - the integration tests, which build their data with its types and call its
+    queries through `env.Programs` (the exported `Store`). depguard exempts
+    `backend/tests/integration` for this.
+- **Core still owns:**
+  - the `activate_scheduled_classes` job, which core's scheduler sends and
+    provider-middleware runs, until EN-197;
+  - plain SQL reads of Programs' tables: the facility list's counts and the
+    facility delete check, until EN-200, and the account history's join on
+    `program_classes_history`.
+
+## Files
+
+| File | What it holds |
+|---|---|
+| `module.go` | Registers the routes, opens the Canvas cache buckets, lists the test tables, answers `Deps.LiveProviders` |
+| `handlers.go` | The routes, with their access levels, checks and feature flags |
+| `programs_handler.go`, `program_class_tier_handler.go`, `classes_handler.go`, `class_events.go`, `class_enrollments.go`, `events_attendance_handler.go`, `reports_handler.go`, `facilities_handler.go`, `users_handler.go` | The handlers |
+| `classes_service.go`, `users_service.go` | Class details, missing attendance and facility health; a resident's weekly attendance trend |
+| `canvas_programs.go`, `canvas_classes_cache.go`, `canvas_events_cache.go`, `essential_ed_programs.go`, `live_provider.go` | The Canvas and Essential Education classes, read live and cached in NATS |
+| `store.go` and `*_store.go` | Every database query, for the routes and the api |
+| `api.go` | The answers to core's questions (`api.Programs`) |
+| `program.go`, `program_classes.go`, `class_event.go`, `calendar.go`, `reports.go`, `change_log_entry.go`, `models.go` | Programs' tables and types, and the rows of core's tables it uses |
+| `http.go` | Responses, errors, paging and request helpers, matching core's JSON |
+| `utils.go` | Recurrence-rule helpers |
+| `migrations/` | This module's own migrations (none yet; its tables come from core's) |
+
+## Tests
+
+- `backend/tests/integration/programs_routes_test.go` pins every route's
+  status, JSON, access level and feature flag, the core routes that ask
+  `api/`, and the Canvas and Essential Education paths through a TLS fake,
+  against the saved responses in `testdata/programs/`. After an intended
+  change, regenerate them from `backend/` with:
+
+  ```bash
+  go test ./tests/integration -run 'TestPrograms' -update
+  ```
+
+  The changed JSON then shows in the PR for review.
+- The other integration tests cover classes, events, attendance, conflicts,
+  delete guards, reports and the Programs insights.
+- The unit tests here cover the Canvas and Essential Education readers, the
+  live providers, the calendar, enrollment checks, graduation and the PDF
+  export.
+- The tests run on SQLite without NATS, Canvas, Essential Education or
+  Jasper, so they can't run the Postgres-only queries (pinned as 500s in the
+  route tests), the NATS caches or the PDF rendering. Check those with
+  `make dev`.
