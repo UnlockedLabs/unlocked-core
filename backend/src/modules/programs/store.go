@@ -32,7 +32,7 @@ var Validate = sync.OnceValue(func() *validator.Validate {
 
 func (db *Store) GetUserByID(id uint) (*User, error) {
 	user := User{}
-	if err := db.Preload("Facility").First(&user, id).Error; err != nil {
+	if err := db.First(&user, id).Error; err != nil {
 		return nil, newNotFoundDBError(err, "users")
 	}
 	return &user, nil

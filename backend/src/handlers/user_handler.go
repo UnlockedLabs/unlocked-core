@@ -815,8 +815,6 @@ func (srv *Server) handleGenerateUsageReportPDF(w http.ResponseWriter, r *http.R
 		return newInvalidIdServiceError(err, "error converting user_id")
 	}
 
-	queryCtx := srv.getQueryContext(r)
-
 	subject, err := srv.Db.GetUserByID(uint(userID))
 	if err != nil {
 		return newDatabaseServiceError(err)
@@ -827,7 +825,7 @@ func (srv *Server) handleGenerateUsageReportPDF(w http.ResponseWriter, r *http.R
 	}
 	hasProgramAccess := slices.Contains(subjectFeatures, models.ProgramAccess)
 
-	pdfBytes, err := jasper.GenerateUsageReportPDF(srv.Db, &queryCtx, hasProgramAccess, userID)
+	pdfBytes, err := jasper.GenerateUsageReportPDF(r.Context(), srv.Db, hasProgramAccess, userID)
 	if err != nil {
 		log.errorf("jasper service error: %v", err)
 		return newInternalServerServiceError(err, "failed to generate PDF report")

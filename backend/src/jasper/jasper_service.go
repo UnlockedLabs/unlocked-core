@@ -1,6 +1,7 @@
 package jasper
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -23,15 +24,15 @@ import (
 )
 
 type jasperService struct {
+	ctx              context.Context
 	db               *database.DB
-	queryCtx         *models.QueryContext
 	hasProgramAccess bool
 }
 
-func newJasperServiceWithContext(db *database.DB, queryCtx *models.QueryContext, hasProgramAccess bool) *jasperService {
+func newJasperServiceWithContext(ctx context.Context, db *database.DB, hasProgramAccess bool) *jasperService {
 	return &jasperService{
+		ctx:              ctx,
 		db:               db,
-		queryCtx:         queryCtx,
 		hasProgramAccess: hasProgramAccess,
 	}
 }
@@ -42,7 +43,7 @@ func (js *jasperService) generateUsageReportPDF(userID int) ([]byte, error) {
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
-	userPrograms, err := registry.Programs(js.db.DB).ResidentPrograms(js.queryCtx.Ctx, uint(userID))
+	userPrograms, err := registry.Programs(js.db.DB).ResidentPrograms(js.ctx, uint(userID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user programs: %w", err)
 	}
@@ -52,7 +53,7 @@ func (js *jasperService) generateUsageReportPDF(userID int) ([]byte, error) {
 		return nil, fmt.Errorf("failed to get user engagements: %w", err)
 	}
 
-	resourcesAccessed, err := registry.OpenContent(js.db.DB).ResourcesAccessed(js.queryCtx.Ctx, uint(userID))
+	resourcesAccessed, err := registry.OpenContent(js.db.DB).ResourcesAccessed(js.ctx, uint(userID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get resource count: %w", err)
 	}
@@ -179,8 +180,8 @@ func (js *jasperService) calculateTotalLogins(user *models.User) string {
 	return fmt.Sprintf("%d", user.LoginMetrics.Total)
 }
 
-func GenerateUsageReportPDF(db *database.DB, queryCtx *models.QueryContext, hasProgramAccess bool, userID int) ([]byte, error) {
-	service := newJasperServiceWithContext(db, queryCtx, hasProgramAccess)
+func GenerateUsageReportPDF(ctx context.Context, db *database.DB, hasProgramAccess bool, userID int) ([]byte, error) {
+	service := newJasperServiceWithContext(ctx, db, hasProgramAccess)
 	return service.generateUsageReportPDF(userID)
 }
 
