@@ -12,6 +12,7 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 
 	"github.com/stretchr/testify/require"
 )
@@ -34,9 +35,9 @@ import (
 const (
 	canvasProviderID  = 10
 	essentialEdID     = 11
-	canvasProgramID   = models.CanvasProgramIDOffset + canvasProviderID
+	canvasProgramID   = programs.CanvasProgramIDOffset + canvasProviderID
 	canvasCourseID    = 101
-	canvasClassID     = models.CanvasClassIDOffset + canvasProviderID*1_000_000 + canvasCourseID
+	canvasClassID     = programs.CanvasClassIDOffset + canvasProviderID*1_000_000 + canvasCourseID
 	canvasStudentID   = "9001"
 	essentialEdUserID = "8001"
 )

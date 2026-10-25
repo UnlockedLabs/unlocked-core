@@ -91,6 +91,13 @@ func UintPtr(u uint) *uint {
 	return &u
 }
 
+func FormatNullableString(val *string) string {
+	if val == nil {
+		return ""
+	}
+	return *val
+}
+
 func DerefUint(ptr *uint) uint {
 	if ptr == nil {
 		return 0

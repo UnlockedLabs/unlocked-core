@@ -10,6 +10,7 @@ import (
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent"
 	ocapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
+	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms"
 	ppapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api"
 
@@ -23,7 +24,7 @@ func All() []module.Module {
 	return []module.Module{
 		providerplatforms.Module{},
 		opencontent.Module{},
-		programs.Module{},
+		programsModule(),
 		learningrecord.Module{},
 	}
 }
@@ -36,4 +37,21 @@ func OpenContent(db *gorm.DB) ocapi.OpenContent {
 // ProviderPlatforms is Provider Platforms' answers to core, reading db.
 func ProviderPlatforms(db *gorm.DB) ppapi.ProviderPlatforms {
 	return providerplatforms.NewAPI(db)
+}
+
+// Programs is Programs' answers to core, reading db.
+func Programs(db *gorm.DB) programsapi.Programs {
+	return programs.NewAPI(db)
+}
+
+// LiveProviders is Programs' Canvas and Essential Education code, for
+// Provider Platforms' Deps.LiveProviders.
+func LiveProviders(deps module.Deps) module.LiveProviders {
+	return programsModule().LiveProviders(deps)
+}
+
+// programsModule is the Programs module, which asks Provider Platforms' api
+// about providers.
+func programsModule() programs.Module {
+	return programs.Module{ProviderPlatforms: providerplatforms.NewAPI}
 }

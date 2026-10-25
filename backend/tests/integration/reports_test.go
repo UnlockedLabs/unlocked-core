@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 )
 
 func TestAttendanceReportToCSV(t *testing.T) {
@@ -12,7 +13,7 @@ func TestAttendanceReportToCSV(t *testing.T) {
 	absenceReason := "Medical appointment"
 	recordedBy := "Jane Admin"
 
-	data := []models.AttendanceReportRow{
+	data := []programs.AttendanceReportRow{
 		{
 			FacilityName:     "Test Facility",
 			ProgramName:      "Math 101",
@@ -21,7 +22,7 @@ func TestAttendanceReportToCSV(t *testing.T) {
 			StudentLastName:  "Doe",
 			StudentFirstName: "John",
 			DocID:            "12345",
-			AttendanceStatus: models.Present,
+			AttendanceStatus: programs.Present,
 			SeatTimeMinutes:  &seatTime,
 			RecordedBy:       &recordedBy,
 			AbsenceReason:    nil,
@@ -34,14 +35,14 @@ func TestAttendanceReportToCSV(t *testing.T) {
 			StudentLastName:  "Smith",
 			StudentFirstName: "Jane",
 			DocID:            "67890",
-			AttendanceStatus: models.Absent_Excused,
+			AttendanceStatus: programs.Absent_Excused,
 			SeatTimeMinutes:  nil,
 			RecordedBy:       nil,
 			AbsenceReason:    &absenceReason,
 		},
 	}
 
-	report := models.AttendanceReportData{Data: data}
+	report := programs.AttendanceReportData{Data: data}
 	csv, err := report.ToCSV()
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -95,7 +96,7 @@ func TestAttendanceReportToCSV(t *testing.T) {
 }
 
 func TestProgramOutcomesReportToCSV(t *testing.T) {
-	data := []models.ProgramOutcomesReportRow{
+	data := []programs.ProgramOutcomesReportRow{
 		{
 			ProgramName:       "Math Program",
 			ProgramType:       "Educational",
@@ -108,7 +109,7 @@ func TestProgramOutcomesReportToCSV(t *testing.T) {
 		},
 	}
 
-	report := models.ProgramOutcomesReportData{Data: data}
+	report := programs.ProgramOutcomesReportData{Data: data}
 	csv, err := report.ToCSV()
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -138,7 +139,7 @@ func TestProgramOutcomesReportToCSV(t *testing.T) {
 func TestFacilityComparisonReportToCSV(t *testing.T) {
 	lastActivity := time.Date(2024, 3, 20, 0, 0, 0, 0, time.UTC)
 
-	data := []models.FacilityComparisonReportRow{
+	data := []programs.FacilityComparisonReportRow{
 		{
 			FacilityName:       "Facility A",
 			TotalPrograms:      15,
@@ -167,7 +168,7 @@ func TestFacilityComparisonReportToCSV(t *testing.T) {
 		},
 	}
 
-	report := models.FacilityComparisonReportData{Data: data}
+	report := programs.FacilityComparisonReportData{Data: data}
 	csv, err := report.ToCSV()
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -205,7 +206,7 @@ func TestFormatNullableInt(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := models.FormatNullableInt(tt.input)
+			result := programs.FormatNullableInt(tt.input)
 			if result != tt.expected {
 				t.Errorf("Expected '%s', got '%s'", tt.expected, result)
 			}

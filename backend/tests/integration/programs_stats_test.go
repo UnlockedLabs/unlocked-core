@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -53,8 +54,8 @@ func (suite *ProgramsStatsTestSuite) createTestFacility(name string) *models.Fac
 	return facility
 }
 
-func (suite *ProgramsStatsTestSuite) createTestProgram(name string) *models.Program {
-	program := &models.Program{
+func (suite *ProgramsStatsTestSuite) createTestProgram(name string) *programs.Program {
+	program := &programs.Program{
 		Name:     name,
 		IsActive: true,
 	}
@@ -79,7 +80,7 @@ func (suite *ProgramsStatsTestSuite) createTestUser(facilityID uint, role models
 }
 
 func (suite *ProgramsStatsTestSuite) createProgramFacilityAssociation(programID, facilityID uint) {
-	association := &models.FacilitiesPrograms{
+	association := &programs.FacilitiesPrograms{
 		FacilityID: facilityID,
 		ProgramID:  programID,
 	}
@@ -87,8 +88,8 @@ func (suite *ProgramsStatsTestSuite) createProgramFacilityAssociation(programID,
 	assert.NoError(suite.T(), result.Error)
 }
 
-func (suite *ProgramsStatsTestSuite) createTestClass(programID, facilityID uint, status models.ClassStatus) *models.ProgramClassCohort {
-	class := &models.ProgramClassCohort{
+func (suite *ProgramsStatsTestSuite) createTestClass(programID, facilityID uint, status programs.ClassStatus) *programs.ProgramClassCohort {
+	class := &programs.ProgramClassCohort{
 		ProgramID:  programID,
 		FacilityID: facilityID,
 		Status:     status,
@@ -98,8 +99,8 @@ func (suite *ProgramsStatsTestSuite) createTestClass(programID, facilityID uint,
 	return class
 }
 
-func (suite *ProgramsStatsTestSuite) createTestEnrollment(classID, userID uint, status models.ProgramEnrollmentStatus, enrolledAt, endedAt *time.Time) *models.ProgramClassEnrollment {
-	enrollment := &models.ProgramClassEnrollment{
+func (suite *ProgramsStatsTestSuite) createTestEnrollment(classID, userID uint, status programs.ProgramEnrollmentStatus, enrolledAt, endedAt *time.Time) *programs.ProgramClassEnrollment {
+	enrollment := &programs.ProgramClassEnrollment{
 		CohortID:          classID,
 		UserID:            userID,
 		EnrollmentStatus:  status,
@@ -113,11 +114,11 @@ func (suite *ProgramsStatsTestSuite) createTestEnrollment(classID, userID uint, 
 
 func (suite *ProgramsStatsTestSuite) TestGetProgramsFacilitiesStats_EmptyDatabase() {
 	ctx := context.Background()
-	args := &models.QueryContext{
+	args := &programs.QueryContext{
 		Ctx: ctx,
 	}
 
-	stats, err := suite.env.DB.GetProgramsFacilitiesStats(args, -1)
+	stats, err := suite.env.Programs.GetProgramsFacilitiesStats(args, -1)
 
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), int64(0), *stats.TotalPrograms)
@@ -141,9 +142,9 @@ func (suite *ProgramsStatsTestSuite) TestGetProgramsFacilitiesStats_BasicScenari
 	suite.createProgramFacilityAssociation(program1.ID, facility2.ID)
 
 	// Create active classes with enrollments
-	class1 := suite.createTestClass(program1.ID, facility1.ID, models.Active)
-	class2 := suite.createTestClass(program2.ID, facility1.ID, models.Active)
-	class3 := suite.createTestClass(program1.ID, facility2.ID, models.Active)
+	class1 := suite.createTestClass(program1.ID, facility1.ID, programs.Active)
+	class2 := suite.createTestClass(program2.ID, facility1.ID, programs.Active)
+	class3 := suite.createTestClass(program1.ID, facility2.ID, programs.Active)
 
 	// Create users for enrollments
 	student1 := suite.createTestUser(facility1.ID, models.Student)
@@ -151,16 +152,16 @@ func (suite *ProgramsStatsTestSuite) TestGetProgramsFacilitiesStats_BasicScenari
 
 	// Create enrollments
 	now := time.Now()
-	suite.createTestEnrollment(class1.ID, student1.ID, models.Enrolled, &now, nil)
-	suite.createTestEnrollment(class2.ID, student1.ID, models.Enrolled, &now, nil)
-	suite.createTestEnrollment(class3.ID, student2.ID, models.Enrolled, &now, nil)
+	suite.createTestEnrollment(class1.ID, student1.ID, programs.Enrolled, &now, nil)
+	suite.createTestEnrollment(class2.ID, student1.ID, programs.Enrolled, &now, nil)
+	suite.createTestEnrollment(class3.ID, student2.ID, programs.Enrolled, &now, nil)
 
 	ctx := context.Background()
-	args := &models.QueryContext{
+	args := &programs.QueryContext{
 		Ctx: ctx,
 	}
 
-	stats, err := suite.env.DB.GetProgramsFacilitiesStats(args, -1)
+	stats, err := suite.env.Programs.GetProgramsFacilitiesStats(args, -1)
 
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), int64(2), *stats.TotalPrograms)    // 2 active programs total
@@ -175,7 +176,7 @@ func (suite *ProgramsStatsTestSuite) TestGetProgramsFacilitiesStats_InactiveProg
 	facility := suite.createTestFacility("Test Facility")
 
 	activeProgram := suite.createTestProgram("Active Program")
-	inactiveProgram := &models.Program{
+	inactiveProgram := &programs.Program{
 		Name:     "Inactive Program",
 		IsActive: false, // This should be excluded
 	}
@@ -185,22 +186,22 @@ func (suite *ProgramsStatsTestSuite) TestGetProgramsFacilitiesStats_InactiveProg
 	suite.createProgramFacilityAssociation(inactiveProgram.ID, facility.ID)
 
 	// Create classes for both programs
-	activeClass := suite.createTestClass(activeProgram.ID, facility.ID, models.Active)
-	inactiveClass := suite.createTestClass(inactiveProgram.ID, facility.ID, models.Active)
+	activeClass := suite.createTestClass(activeProgram.ID, facility.ID, programs.Active)
+	inactiveClass := suite.createTestClass(inactiveProgram.ID, facility.ID, programs.Active)
 
 	student := suite.createTestUser(facility.ID, models.Student)
 	now := time.Now()
 
 	// Create enrollments for both
-	suite.createTestEnrollment(activeClass.ID, student.ID, models.Enrolled, &now, nil)
-	suite.createTestEnrollment(inactiveClass.ID, student.ID, models.Enrolled, &now, nil)
+	suite.createTestEnrollment(activeClass.ID, student.ID, programs.Enrolled, &now, nil)
+	suite.createTestEnrollment(inactiveClass.ID, student.ID, programs.Enrolled, &now, nil)
 
 	ctx := context.Background()
-	args := &models.QueryContext{
+	args := &programs.QueryContext{
 		Ctx: ctx,
 	}
 
-	stats, err := suite.env.DB.GetProgramsFacilitiesStats(args, -1)
+	stats, err := suite.env.Programs.GetProgramsFacilitiesStats(args, -1)
 
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), int64(1), *stats.TotalPrograms)                  // Only active program counted
@@ -214,7 +215,7 @@ func (suite *ProgramsStatsTestSuite) TestGetProgramsFacilitiesStats_ArchivedProg
 
 	activeProgram := suite.createTestProgram("Active Program")
 
-	archivedProgram := &models.Program{
+	archivedProgram := &programs.Program{
 		Name:       "Archived Program",
 		IsActive:   true,
 		ArchivedAt: &time.Time{}, // Archived programs should be excluded
@@ -225,11 +226,11 @@ func (suite *ProgramsStatsTestSuite) TestGetProgramsFacilitiesStats_ArchivedProg
 	suite.createProgramFacilityAssociation(archivedProgram.ID, facility.ID)
 
 	ctx := context.Background()
-	args := &models.QueryContext{
+	args := &programs.QueryContext{
 		Ctx: ctx,
 	}
 
-	stats, err := suite.env.DB.GetProgramsFacilitiesStats(args, -1)
+	stats, err := suite.env.Programs.GetProgramsFacilitiesStats(args, -1)
 
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), int64(1), *stats.TotalPrograms) // Only non-archived program
@@ -242,14 +243,14 @@ func (suite *ProgramsStatsTestSuite) TestGetProgramsFacilitiesStats_NoActiveClas
 	suite.createProgramFacilityAssociation(program.ID, facility.ID)
 
 	// Create inactive class
-	suite.createTestClass(program.ID, facility.ID, models.Cancelled)
+	suite.createTestClass(program.ID, facility.ID, programs.Cancelled)
 
 	ctx := context.Background()
-	args := &models.QueryContext{
+	args := &programs.QueryContext{
 		Ctx: ctx,
 	}
 
-	stats, err := suite.env.DB.GetProgramsFacilitiesStats(args, -1)
+	stats, err := suite.env.Programs.GetProgramsFacilitiesStats(args, -1)
 
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), int64(1), *stats.TotalPrograms)                  // Program exists
@@ -263,7 +264,7 @@ func (suite *ProgramsStatsTestSuite) TestGetProgramsFacilitiesStats_TimeFilterin
 	program := suite.createTestProgram("Test Program")
 	suite.createProgramFacilityAssociation(program.ID, facility.ID)
 
-	class := suite.createTestClass(program.ID, facility.ID, models.Active)
+	class := suite.createTestClass(program.ID, facility.ID, programs.Active)
 	student := suite.createTestUser(facility.ID, models.Student)
 
 	now := time.Now()
@@ -271,19 +272,19 @@ func (suite *ProgramsStatsTestSuite) TestGetProgramsFacilitiesStats_TimeFilterin
 	oldDate := now.AddDate(0, 0, -35)   // 35 days ago
 
 	// Create recent completed enrollment
-	suite.createTestEnrollment(class.ID, student.ID, models.EnrollmentCompleted, &recentDate, &recentDate)
+	suite.createTestEnrollment(class.ID, student.ID, programs.EnrollmentCompleted, &recentDate, &recentDate)
 
 	// Create old completed enrollment
 	student2 := suite.createTestUser(facility.ID, models.Student)
-	suite.createTestEnrollment(class.ID, student2.ID, models.EnrollmentCompleted, &oldDate, &oldDate)
+	suite.createTestEnrollment(class.ID, student2.ID, programs.EnrollmentCompleted, &oldDate, &oldDate)
 
 	ctx := context.Background()
-	args := &models.QueryContext{
+	args := &programs.QueryContext{
 		Ctx: ctx,
 	}
 
 	// Test with 30-day filter - should only include recent completion
-	stats, err := suite.env.DB.GetProgramsFacilitiesStats(args, 30)
+	stats, err := suite.env.Programs.GetProgramsFacilitiesStats(args, 30)
 
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), int64(1), *stats.TotalPrograms)
@@ -305,26 +306,26 @@ func (suite *ProgramsStatsTestSuite) TestGetProgramsFacilityStats_FacilitySpecif
 	suite.createProgramFacilityAssociation(program1.ID, facility2.ID)
 
 	// Create active classes with enrollments for both facilities
-	class1 := suite.createTestClass(program1.ID, facility1.ID, models.Active)
-	class2 := suite.createTestClass(program2.ID, facility1.ID, models.Active)
-	class3 := suite.createTestClass(program1.ID, facility2.ID, models.Active)
+	class1 := suite.createTestClass(program1.ID, facility1.ID, programs.Active)
+	class2 := suite.createTestClass(program2.ID, facility1.ID, programs.Active)
+	class3 := suite.createTestClass(program1.ID, facility2.ID, programs.Active)
 
 	student1 := suite.createTestUser(facility1.ID, models.Student)
 	student2 := suite.createTestUser(facility2.ID, models.Student)
 
 	now := time.Now()
-	suite.createTestEnrollment(class1.ID, student1.ID, models.Enrolled, &now, nil)
-	suite.createTestEnrollment(class2.ID, student1.ID, models.Enrolled, &now, nil)
-	suite.createTestEnrollment(class3.ID, student2.ID, models.Enrolled, &now, nil)
+	suite.createTestEnrollment(class1.ID, student1.ID, programs.Enrolled, &now, nil)
+	suite.createTestEnrollment(class2.ID, student1.ID, programs.Enrolled, &now, nil)
+	suite.createTestEnrollment(class3.ID, student2.ID, programs.Enrolled, &now, nil)
 
 	ctx := context.Background()
-	args := &models.QueryContext{
+	args := &programs.QueryContext{
 		Ctx:        ctx,
 		FacilityID: facility1.ID,
 	}
 
 	// Test facility-specific stats for facility1
-	stats, err := suite.env.DB.GetProgramsFacilityStats(args, -1)
+	stats, err := suite.env.Programs.GetProgramsFacilityStats(args, -1)
 
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), int64(2), *stats.TotalPrograms)                  // 2 programs for facility1
@@ -344,18 +345,18 @@ func (suite *ProgramsStatsTestSuite) TestFetchEnrollmentMetrics_CompletionRateCa
 	suite.createProgramFacilityAssociation(program.ID, facility.ID)
 
 	// Class must be Completed for the completion_rate branch to engage.
-	class := suite.createTestClass(program.ID, facility.ID, models.Completed)
+	class := suite.createTestClass(program.ID, facility.ID, programs.Completed)
 
 	now := time.Now()
 	// Completed enrollment WITH enrolled_at: counts in both numerator and denominator.
 	s1 := suite.createTestUser(facility.ID, models.Student)
-	suite.createTestEnrollment(class.ID, s1.ID, models.EnrollmentCompleted, &now, &now)
+	suite.createTestEnrollment(class.ID, s1.ID, programs.EnrollmentCompleted, &now, &now)
 	// Completed enrollment WITHOUT enrolled_at: pre-fix this was counted in the numerator only,
 	// pushing the rate to 200%.
 	s2 := suite.createTestUser(facility.ID, models.Student)
-	suite.createTestEnrollment(class.ID, s2.ID, models.EnrollmentCompleted, nil, nil)
+	suite.createTestEnrollment(class.ID, s2.ID, programs.EnrollmentCompleted, nil, nil)
 
-	metrics, err := suite.env.DB.FetchEnrollmentMetrics(int(program.ID), facility.ID)
+	metrics, err := suite.env.Programs.FetchEnrollmentMetrics(int(program.ID), facility.ID)
 	assert.NoError(suite.T(), err)
 	if assert.NotNil(suite.T(), metrics.CompletionRate) {
 		assert.LessOrEqual(suite.T(), *metrics.CompletionRate, float64(100),

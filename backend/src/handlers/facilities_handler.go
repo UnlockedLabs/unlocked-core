@@ -9,7 +9,6 @@ import (
 )
 
 func (srv *Server) registerFacilitiesRoutes() []routeDef {
-	axx := models.ProgramAccess
 	return []routeDef{
 		newAdminRoute("GET /api/facilities", srv.handleIndexFacilities),
 		newAdminRoute("GET /api/facilities/{id}", srv.handleShowFacility),
@@ -17,10 +16,6 @@ func (srv *Server) registerFacilitiesRoutes() []routeDef {
 		newDeptAdminRoute("GET /api/facilities/{id}/delete-check", srv.handleGetFacilityDeleteCheck),
 		newDeptAdminRoute("DELETE /api/facilities/{id}", srv.handleDeleteFacility),
 		newDeptAdminRoute("PATCH /api/facilities/{id}", srv.handleUpdateFacility),
-		adminFeatureRoute("GET /api/rooms", srv.handleGetRooms, axx),
-		adminFeatureRoute("POST /api/rooms", srv.handleCreateRoom, axx),
-		adminValidatedFeatureRoute("GET /api/facilities/{facilityId}/instructors",
-			srv.handleGetFacilityInstructors, models.ProgramAccess, FacilityAdminResolver("facilities", "facilityId")),
 	}
 }
 
@@ -134,50 +129,4 @@ func (srv *Server) handleDeleteFacility(w http.ResponseWriter, r *http.Request, 
 		return newDatabaseServiceError(err)
 	}
 	return writeJsonResponse(w, http.StatusNoContent, "facility deleted successfully")
-}
-
-func (srv *Server) handleGetRooms(w http.ResponseWriter, r *http.Request, log sLog) error {
-	facilityID := srv.facilityScopedQueryContext(r).FacilityID
-	log.add("facility_id", facilityID)
-	rooms, err := srv.Db.GetRoomsForFacility(facilityID)
-	if err != nil {
-		return newDatabaseServiceError(err)
-	}
-	return writeJsonResponse(w, http.StatusOK, rooms)
-}
-
-func (srv *Server) handleCreateRoom(w http.ResponseWriter, r *http.Request, log sLog) error {
-	facilityID, err := srv.requireFacilityID(r)
-	if err != nil {
-		return err
-	}
-	var room models.Room
-	if err := json.NewDecoder(r.Body).Decode(&room); err != nil {
-		return newJSONReqBodyServiceError(err)
-	}
-	room.FacilityID = facilityID
-	log.add("facility_id", facilityID)
-	log.add("room_name", room.Name)
-	created, err := srv.Db.CreateRoom(&room)
-	if err != nil {
-		return newDatabaseServiceError(err)
-	}
-	return writeJsonResponse(w, http.StatusCreated, created)
-}
-
-/**
-* GET: /api/facilities/{facilityId}/instructors
- */
-func (srv *Server) handleGetFacilityInstructors(w http.ResponseWriter, r *http.Request, log sLog) error {
-	facilityId, err := strconv.Atoi(r.PathValue("facilityId"))
-	if err != nil {
-		return newInvalidIdServiceError(err, "facility ID")
-	}
-
-	instructors, err := srv.Db.GetFacilityInstructors(facilityId)
-	if err != nil {
-		return newDatabaseServiceError(err)
-	}
-
-	return writeJsonResponse(w, http.StatusOK, instructors)
 }

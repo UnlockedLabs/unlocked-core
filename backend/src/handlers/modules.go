@@ -11,6 +11,7 @@ import (
 	"github.com/UnlockedLabs/unlocked-core/backend/src/jasper"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 
 	"github.com/UnlockedLabs/unlocked-contracts/identity"
 )
@@ -168,30 +169,6 @@ func (u moduleUsers) Delete(ctx context.Context, id uint) error {
 	return nil
 }
 
-// liveProviders gives Provider Platforms core's Canvas and Essential Education
-// code until EN-194 moves it there.
-type liveProviders struct{ srv *Server }
-
-func (l liveProviders) Users(ctx context.Context, providerID uint) ([]module.ProviderUser, bool, error) {
-	provider, err := l.srv.providerByID(ctx, providerID)
-	if err != nil {
-		return nil, false, err
-	}
-	lister, ok := l.srv.liveUserListerFor(provider)
-	if !ok {
-		return nil, false, nil
-	}
-	users, err := lister.ListUsers(ctx)
-	if err != nil {
-		return nil, true, err
-	}
-	return users, true, nil
-}
-
-func (l liveProviders) MappingsChanged(providerID, userID uint) {
-	l.srv.invalidateCanvasProgramCache(providerID, int(userID))
-}
-
 // httpClient sends module requests with srv.Client. It reads srv.Client on
 // each call, like wsNotifier, so a client set after startup is the one used.
 type httpClient struct{ srv *Server }
@@ -240,20 +217,22 @@ func dbCause(err error) error {
 }
 
 func (srv *Server) moduleDeps() module.Deps {
-	return module.Deps{
-		DB:            srv.Db.DB,
-		NATS:          srv.nats,
-		Notify:        wsNotifier{srv},
-		Users:         moduleUsers{srv},
-		LiveProviders: liveProviders{srv},
-		HTTP:          httpClient{srv},
-		Features:      facilityFeatures{srv},
-		Reports:       pdfReports{},
+	deps := module.Deps{
+		DB:       srv.Db.DB,
+		NATS:     srv.nats,
+		Notify:   wsNotifier{srv},
+		Users:    moduleUsers{srv},
+		HTTP:     httpClient{srv},
+		Features: facilityFeatures{srv},
+		Reports:  pdfReports{},
 	}
+	deps.LiveProviders = registry.LiveProviders(deps)
+	return deps
 }
 
 func (srv *Server) registerModuleRoutes() {
+	deps := srv.moduleDeps()
 	for _, m := range srv.modules {
-		m.Register(moduleRouter{srv}, srv.moduleDeps())
+		m.Register(moduleRouter{srv}, deps)
 	}
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 
 	"github.com/stretchr/testify/require"
 )
@@ -27,15 +28,15 @@ func TestClassListPopulatesInstructorRef(t *testing.T) {
 	admin, err := env.CreateTestUser("preloadadmin", models.FacilityAdmin, facility.ID, "")
 	require.NoError(t, err)
 
-	program, err := env.CreateTestProgram("Preload Program", models.FundingType(models.FederalGrants),
-		[]models.ProgramType{}, []models.ProgramCreditType{}, true, nil)
+	program, err := env.CreateTestProgram("Preload Program", programs.FundingType(programs.FederalGrants),
+		[]programs.ProgramType{}, []programs.ProgramCreditType{}, true, nil)
 	require.NoError(t, err)
 	require.NoError(t, env.SetFacilitiesToProgram(program.ID, []uint{facility.ID}))
 
 	instructor, err := env.CreateTestInstructor(facility.ID, "preload")
 	require.NoError(t, err)
 
-	cohort, err := env.CreateTestClass(program, facility, models.Active, &instructor.ID)
+	cohort, err := env.CreateTestClass(program, facility, programs.Active, &instructor.ID)
 	require.NoError(t, err)
 
 	_, err = env.CreateTestEvent(cohort.ID, "", instructor.ID)
@@ -44,7 +45,7 @@ func TestClassListPopulatesInstructorRef(t *testing.T) {
 	claims := &handlers.Claims{Role: models.FacilityAdmin, UserID: admin.ID, FacilityID: facility.ID}
 
 	t.Run("GET /api/program-classes preloads the event instructor", func(t *testing.T) {
-		resp := NewRequest[[]models.ProgramClassCohort](env.Client, t, http.MethodGet,
+		resp := NewRequest[[]programs.ProgramClassCohort](env.Client, t, http.MethodGet,
 			"/api/program-classes", nil).
 			WithTestClaims(claims).
 			Do().
@@ -71,11 +72,11 @@ func TestClassListPopulatesInstructorRef(t *testing.T) {
 
 	// This one calls the query directly rather than through GET /api/programs/{id}/classes.
 	// That handler also computes attendance rates via a raw query using Postgres `::numeric`
-	// casts (events_attendance.go:~660), which SQLite cannot parse -- it fails with
+	// casts (events_attendance_store.go), which SQLite cannot parse -- it fails with
 	// "unrecognized token: :" and the endpoint 500s under the test suite regardless of this
 	// fix. So the endpoint itself is untestable here; the preload still is.
 	t.Run("GetProgramClassDetailsByID preloads the event instructor", func(t *testing.T) {
-		details, err := env.DB.GetProgramClassDetailsByID(int(program.ID), &models.QueryContext{
+		details, err := env.Programs.GetProgramClassDetailsByID(int(program.ID), &programs.QueryContext{
 			Ctx:        env.Context,
 			Timezone:   "UTC",
 			FacilityID: facility.ID,

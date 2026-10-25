@@ -7,6 +7,7 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 
 	"github.com/stretchr/testify/require"
 )
@@ -18,15 +19,15 @@ func TestProgramLoadDistribution(t *testing.T) {
 	facility, err := env.CreateTestFacility("Load Facility")
 	require.NoError(t, err)
 
-	progA, err := env.CreateTestProgram("Program A", models.StateGrants,
-		[]models.ProgramType{{ProgramType: models.Educational}}, nil, true, nil)
+	progA, err := env.CreateTestProgram("Program A", programs.StateGrants,
+		[]programs.ProgramType{{ProgramType: programs.Educational}}, nil, true, nil)
 	require.NoError(t, err)
-	progB, err := env.CreateTestProgram("Program B", models.StateGrants,
-		[]models.ProgramType{{ProgramType: models.Vocational}}, nil, true, nil)
+	progB, err := env.CreateTestProgram("Program B", programs.StateGrants,
+		[]programs.ProgramType{{ProgramType: programs.Vocational}}, nil, true, nil)
 	require.NoError(t, err)
-	classA, err := env.CreateTestClass(progA, facility, models.Active, nil)
+	classA, err := env.CreateTestClass(progA, facility, programs.Active, nil)
 	require.NoError(t, err)
-	classB, err := env.CreateTestClass(progB, facility, models.Active, nil)
+	classB, err := env.CreateTestClass(progB, facility, programs.Active, nil)
 	require.NoError(t, err)
 
 	zeroUser, err := env.CreateTestUser("loadzero", models.Student, facility.ID, "")
@@ -37,14 +38,14 @@ func TestProgramLoadDistribution(t *testing.T) {
 	twoUser, err := env.CreateTestUser("loadtwo", models.Student, facility.ID, "")
 	require.NoError(t, err)
 
-	_, err = env.CreateTestEnrollment(classA.ID, oneUser.ID, models.Enrolled)
+	_, err = env.CreateTestEnrollment(classA.ID, oneUser.ID, programs.Enrolled)
 	require.NoError(t, err)
-	_, err = env.CreateTestEnrollment(classA.ID, twoUser.ID, models.Enrolled)
+	_, err = env.CreateTestEnrollment(classA.ID, twoUser.ID, programs.Enrolled)
 	require.NoError(t, err)
-	_, err = env.CreateTestEnrollment(classB.ID, twoUser.ID, models.Enrolled)
+	_, err = env.CreateTestEnrollment(classB.ID, twoUser.ID, programs.Enrolled)
 	require.NoError(t, err)
 
-	dist := NewRequest[models.ProgramLoadDistribution](env.Client, t, http.MethodGet,
+	dist := NewRequest[programs.ProgramLoadDistribution](env.Client, t, http.MethodGet,
 		"/api/department-metrics/programs/load-distribution?facility="+strconv.Itoa(int(facility.ID)), nil).
 		WithTestClaims(&handlers.Claims{Role: models.FacilityAdmin, FacilityID: facility.ID}).
 		Do().
@@ -87,27 +88,27 @@ func TestProgramLoadDistributionAllFacilities(t *testing.T) {
 	facilityTwo, err := env.CreateTestFacility("Facility Two")
 	require.NoError(t, err)
 
-	program, err := env.CreateTestProgram("Cross Facility Program", models.StateGrants,
-		[]models.ProgramType{{ProgramType: models.Educational}}, nil, true, nil)
+	program, err := env.CreateTestProgram("Cross Facility Program", programs.StateGrants,
+		[]programs.ProgramType{{ProgramType: programs.Educational}}, nil, true, nil)
 	require.NoError(t, err)
-	class, err := env.CreateTestClass(program, facilityOne, models.Active, nil)
+	class, err := env.CreateTestClass(program, facilityOne, programs.Active, nil)
 	require.NoError(t, err)
 
 	homeUser, err := env.CreateTestUser("loadhomeone", models.Student, facilityOne.ID, "")
 	require.NoError(t, err)
-	_, err = env.CreateTestEnrollment(class.ID, homeUser.ID, models.Enrolled)
+	_, err = env.CreateTestEnrollment(class.ID, homeUser.ID, programs.Enrolled)
 	require.NoError(t, err)
 
 	crossUser, err := env.CreateTestUser("loadcrosstwo", models.Student, facilityTwo.ID, "")
 	require.NoError(t, err)
-	_, err = env.CreateTestEnrollment(class.ID, crossUser.ID, models.Enrolled)
+	_, err = env.CreateTestEnrollment(class.ID, crossUser.ID, programs.Enrolled)
 	require.NoError(t, err)
 
 	idleUser, err := env.CreateTestUser("loadidletwo", models.Student, facilityTwo.ID, "")
 	require.NoError(t, err)
 	_ = idleUser
 
-	dist := NewRequest[models.ProgramLoadDistribution](env.Client, t, http.MethodGet,
+	dist := NewRequest[programs.ProgramLoadDistribution](env.Client, t, http.MethodGet,
 		"/api/department-metrics/programs/load-distribution?facility=all", nil).
 		WithTestClaims(&handlers.Claims{Role: models.SystemAdmin, FacilityID: facilityOne.ID}).
 		Do().
@@ -122,7 +123,7 @@ func TestProgramLoadDistributionAllFacilities(t *testing.T) {
 	require.Equal(t, int64(2), byBucket["1"])
 
 	require.Len(t, dist.ByFacility, 2)
-	byName := map[string]models.ProgramLoadFacilityRow{}
+	byName := map[string]programs.ProgramLoadFacilityRow{}
 	for _, row := range dist.ByFacility {
 		byName[row.FacilityName] = row
 	}

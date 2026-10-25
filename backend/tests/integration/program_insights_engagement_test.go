@@ -8,6 +8,7 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 
 	"github.com/stretchr/testify/require"
 )
@@ -19,10 +20,10 @@ func TestProgramEngagementOverview(t *testing.T) {
 	facility, err := env.CreateTestFacility("Engagement Facility")
 	require.NoError(t, err)
 
-	program, err := env.CreateTestProgram("GED Prep", models.StateGrants,
-		[]models.ProgramType{{ProgramType: models.Educational}}, nil, true, nil)
+	program, err := env.CreateTestProgram("GED Prep", programs.StateGrants,
+		[]programs.ProgramType{{ProgramType: programs.Educational}}, nil, true, nil)
 	require.NoError(t, err)
-	class, err := env.CreateTestClass(program, facility, models.Active, nil)
+	class, err := env.CreateTestClass(program, facility, programs.Active, nil)
 	require.NoError(t, err)
 
 	// 3 residents: one active, one completed-only (not active), one never enrolled
@@ -35,16 +36,16 @@ func TestProgramEngagementOverview(t *testing.T) {
 	require.NoError(t, err)
 
 	now := time.Now()
-	_, err = env.CreateTestEnrollmentWithDates(class.ID, activeUser.ID, models.Enrolled, now, nil)
+	_, err = env.CreateTestEnrollmentWithDates(class.ID, activeUser.ID, programs.Enrolled, now, nil)
 	require.NoError(t, err)
 	// Completed well before the endpoint's default 30-day lookback window, so it
 	// falls into "previously engaged" rather than "active in this range".
 	completedEnrolledAt := now.AddDate(0, 0, -40)
 	completedEndedAt := now.AddDate(0, 0, -35)
-	_, err = env.CreateTestEnrollmentWithDates(class.ID, completedUser.ID, models.EnrollmentCompleted, completedEnrolledAt, &completedEndedAt)
+	_, err = env.CreateTestEnrollmentWithDates(class.ID, completedUser.ID, programs.EnrollmentCompleted, completedEnrolledAt, &completedEndedAt)
 	require.NoError(t, err)
 
-	overview := NewRequest[models.ProgramEngagementOverview](env.Client, t, http.MethodGet,
+	overview := NewRequest[programs.ProgramEngagementOverview](env.Client, t, http.MethodGet,
 		"/api/department-metrics/programs/engagement-overview?facility="+strconv.Itoa(int(facility.ID)), nil).
 		WithTestClaims(&handlers.Claims{Role: models.FacilityAdmin, FacilityID: facility.ID}).
 		Do().
@@ -62,14 +63,14 @@ func TestProgramEngagementOverview(t *testing.T) {
 // enrollNResidents creates n Student residents in facility and enrolls each of them
 // in classID with the given status, all with enrolled_at set to now (so they fall
 // within the endpoint's default 30-day lookback window with no explicit date range).
-func enrollNResidents(t *testing.T, env *TestEnv, facilityID uint, classID uint, usernamePrefix string, n int, status models.ProgramEnrollmentStatus) {
+func enrollNResidents(t *testing.T, env *TestEnv, facilityID uint, classID uint, usernamePrefix string, n int, status programs.ProgramEnrollmentStatus) {
 	t.Helper()
 	now := time.Now()
 	for i := 0; i < n; i++ {
 		user, err := env.CreateTestUser(usernamePrefix+strconv.Itoa(i), models.Student, facilityID, "")
 		require.NoError(t, err)
 		var endedAt *time.Time
-		if status != models.Enrolled {
+		if status != programs.Enrolled {
 			ended := now.Add(time.Hour)
 			endedAt = &ended
 		}
@@ -85,43 +86,43 @@ func TestProgramEngagementOverview_TopProgramsRanking(t *testing.T) {
 	facility, err := env.CreateTestFacility("Ranking Facility")
 	require.NoError(t, err)
 
-	programA, err := env.CreateTestProgram("Program A", models.StateGrants,
-		[]models.ProgramType{{ProgramType: models.Educational}}, nil, true, nil)
+	programA, err := env.CreateTestProgram("Program A", programs.StateGrants,
+		[]programs.ProgramType{{ProgramType: programs.Educational}}, nil, true, nil)
 	require.NoError(t, err)
-	classA, err := env.CreateTestClass(programA, facility, models.Active, nil)
-	require.NoError(t, err)
-
-	programB, err := env.CreateTestProgram("Program B", models.StateGrants,
-		[]models.ProgramType{{ProgramType: models.Educational}}, nil, true, nil)
-	require.NoError(t, err)
-	classB, err := env.CreateTestClass(programB, facility, models.Active, nil)
+	classA, err := env.CreateTestClass(programA, facility, programs.Active, nil)
 	require.NoError(t, err)
 
-	programC, err := env.CreateTestProgram("Program C", models.StateGrants,
-		[]models.ProgramType{{ProgramType: models.Educational}}, nil, true, nil)
+	programB, err := env.CreateTestProgram("Program B", programs.StateGrants,
+		[]programs.ProgramType{{ProgramType: programs.Educational}}, nil, true, nil)
 	require.NoError(t, err)
-	classC, err := env.CreateTestClass(programC, facility, models.Active, nil)
+	classB, err := env.CreateTestClass(programB, facility, programs.Active, nil)
+	require.NoError(t, err)
+
+	programC, err := env.CreateTestProgram("Program C", programs.StateGrants,
+		[]programs.ProgramType{{ProgramType: programs.Educational}}, nil, true, nil)
+	require.NoError(t, err)
+	classC, err := env.CreateTestClass(programC, facility, programs.Active, nil)
 	require.NoError(t, err)
 
 	// Program A: 5 enrollees, 4 completed, 1 still enrolled -> 80% completion, clears threshold.
-	enrollNResidents(t, env, facility.ID, classA.ID, "proga", 4, models.EnrollmentCompleted)
-	enrollNResidents(t, env, facility.ID, classA.ID, "progaactive", 1, models.Enrolled)
+	enrollNResidents(t, env, facility.ID, classA.ID, "proga", 4, programs.EnrollmentCompleted)
+	enrollNResidents(t, env, facility.ID, classA.ID, "progaactive", 1, programs.Enrolled)
 
 	// Program B: 5 enrollees, 1 completed, 4 still enrolled -> 20% completion, clears threshold.
-	enrollNResidents(t, env, facility.ID, classB.ID, "progb", 1, models.EnrollmentCompleted)
-	enrollNResidents(t, env, facility.ID, classB.ID, "progbactive", 4, models.Enrolled)
+	enrollNResidents(t, env, facility.ID, classB.ID, "progb", 1, programs.EnrollmentCompleted)
+	enrollNResidents(t, env, facility.ID, classB.ID, "progbactive", 4, programs.Enrolled)
 
 	// Program C: only 3 enrollees -> below the >=5 threshold, must be excluded entirely.
-	enrollNResidents(t, env, facility.ID, classC.ID, "progc", 3, models.EnrollmentCompleted)
+	enrollNResidents(t, env, facility.ID, classC.ID, "progc", 3, programs.EnrollmentCompleted)
 
-	overview := NewRequest[models.ProgramEngagementOverview](env.Client, t, http.MethodGet,
+	overview := NewRequest[programs.ProgramEngagementOverview](env.Client, t, http.MethodGet,
 		"/api/department-metrics/programs/engagement-overview?facility="+strconv.Itoa(int(facility.ID)), nil).
 		WithTestClaims(&handlers.Claims{Role: models.FacilityAdmin, FacilityID: facility.ID}).
 		Do().
 		ExpectStatus(http.StatusOK).
 		GetData()
 
-	require.Equal(t, []models.ProgramCompletionRank{
+	require.Equal(t, []programs.ProgramCompletionRank{
 		{ProgramName: "Program A", Enrolled: 5, Completed: 4, CompletionRate: 80},
 		{ProgramName: "Program B", Enrolled: 5, Completed: 1, CompletionRate: 20},
 	}, overview.TopPrograms)
@@ -136,16 +137,16 @@ func TestProgramEngagementOverview_FacilityScopingIsolatesData(t *testing.T) {
 	facilityTwo, err := env.CreateTestFacility("Scope Facility Two")
 	require.NoError(t, err)
 
-	programOne, err := env.CreateTestProgram("Facility One Program", models.StateGrants,
-		[]models.ProgramType{{ProgramType: models.Educational}}, nil, true, nil)
+	programOne, err := env.CreateTestProgram("Facility One Program", programs.StateGrants,
+		[]programs.ProgramType{{ProgramType: programs.Educational}}, nil, true, nil)
 	require.NoError(t, err)
-	classOne, err := env.CreateTestClass(programOne, facilityOne, models.Active, nil)
+	classOne, err := env.CreateTestClass(programOne, facilityOne, programs.Active, nil)
 	require.NoError(t, err)
 
-	programTwo, err := env.CreateTestProgram("Facility Two Program", models.StateGrants,
-		[]models.ProgramType{{ProgramType: models.Educational}}, nil, true, nil)
+	programTwo, err := env.CreateTestProgram("Facility Two Program", programs.StateGrants,
+		[]programs.ProgramType{{ProgramType: programs.Educational}}, nil, true, nil)
 	require.NoError(t, err)
-	classTwo, err := env.CreateTestClass(programTwo, facilityTwo, models.Active, nil)
+	classTwo, err := env.CreateTestClass(programTwo, facilityTwo, programs.Active, nil)
 	require.NoError(t, err)
 
 	// Facility one: 2 residents, 1 active enrollment, 1 never-engaged.
@@ -153,15 +154,15 @@ func TestProgramEngagementOverview_FacilityScopingIsolatesData(t *testing.T) {
 	require.NoError(t, err)
 	_, err = env.CreateTestUser("fneverone", models.Student, facilityOne.ID, "")
 	require.NoError(t, err)
-	_, err = env.CreateTestEnrollmentWithDates(classOne.ID, activeOne.ID, models.Enrolled, time.Now(), nil)
+	_, err = env.CreateTestEnrollmentWithDates(classOne.ID, activeOne.ID, programs.Enrolled, time.Now(), nil)
 	require.NoError(t, err)
 
 	// Facility two: 5 residents, all completed -- enough to clear the top-programs
 	// threshold, so if the facility filter leaks (e.g. wrong join column), this
 	// program would incorrectly surface in facility one's response.
-	enrollNResidents(t, env, facilityTwo.ID, classTwo.ID, "fleaktwo", 5, models.EnrollmentCompleted)
+	enrollNResidents(t, env, facilityTwo.ID, classTwo.ID, "fleaktwo", 5, programs.EnrollmentCompleted)
 
-	overview := NewRequest[models.ProgramEngagementOverview](env.Client, t, http.MethodGet,
+	overview := NewRequest[programs.ProgramEngagementOverview](env.Client, t, http.MethodGet,
 		"/api/department-metrics/programs/engagement-overview?facility="+strconv.Itoa(int(facilityOne.ID)), nil).
 		WithTestClaims(&handlers.Claims{Role: models.FacilityAdmin, FacilityID: facilityOne.ID}).
 		Do().
@@ -184,29 +185,29 @@ func TestProgramEngagementOverview_AllFacilitiesAggregates(t *testing.T) {
 	facilityTwo, err := env.CreateTestFacility("All Facilities Two")
 	require.NoError(t, err)
 
-	programOne, err := env.CreateTestProgram("Program One", models.StateGrants,
-		[]models.ProgramType{{ProgramType: models.Educational}}, nil, true, nil)
+	programOne, err := env.CreateTestProgram("Program One", programs.StateGrants,
+		[]programs.ProgramType{{ProgramType: programs.Educational}}, nil, true, nil)
 	require.NoError(t, err)
-	classOne, err := env.CreateTestClass(programOne, facilityOne, models.Active, nil)
+	classOne, err := env.CreateTestClass(programOne, facilityOne, programs.Active, nil)
 	require.NoError(t, err)
 
-	programTwo, err := env.CreateTestProgram("Program Two", models.StateGrants,
-		[]models.ProgramType{{ProgramType: models.Educational}}, nil, true, nil)
+	programTwo, err := env.CreateTestProgram("Program Two", programs.StateGrants,
+		[]programs.ProgramType{{ProgramType: programs.Educational}}, nil, true, nil)
 	require.NoError(t, err)
-	classTwo, err := env.CreateTestClass(programTwo, facilityTwo, models.Active, nil)
+	classTwo, err := env.CreateTestClass(programTwo, facilityTwo, programs.Active, nil)
 	require.NoError(t, err)
 
 	// Facility one: 6 residents -- 5 enrolled in Program One (3 completed, 2 still
 	// active), plus 1 who never enrolls.
-	enrollNResidents(t, env, facilityOne.ID, classOne.ID, "aone", 3, models.EnrollmentCompleted)
-	enrollNResidents(t, env, facilityOne.ID, classOne.ID, "aoneactive", 2, models.Enrolled)
+	enrollNResidents(t, env, facilityOne.ID, classOne.ID, "aone", 3, programs.EnrollmentCompleted)
+	enrollNResidents(t, env, facilityOne.ID, classOne.ID, "aoneactive", 2, programs.Enrolled)
 	_, err = env.CreateTestUser("aonenever", models.Student, facilityOne.ID, "")
 	require.NoError(t, err)
 
 	// Facility two: 5 residents, all completed in Program Two.
-	enrollNResidents(t, env, facilityTwo.ID, classTwo.ID, "btwo", 5, models.EnrollmentCompleted)
+	enrollNResidents(t, env, facilityTwo.ID, classTwo.ID, "btwo", 5, programs.EnrollmentCompleted)
 
-	overview := NewRequest[models.ProgramEngagementOverview](env.Client, t, http.MethodGet,
+	overview := NewRequest[programs.ProgramEngagementOverview](env.Client, t, http.MethodGet,
 		"/api/department-metrics/programs/engagement-overview?facility=all", nil).
 		WithTestClaims(&handlers.Claims{Role: models.SystemAdmin, FacilityID: facilityOne.ID}).
 		Do().
@@ -220,7 +221,7 @@ func TestProgramEngagementOverview_AllFacilitiesAggregates(t *testing.T) {
 	require.Equal(t, int64(10), overview.ActiveResidents)
 	require.Equal(t, int64(0), overview.PreviouslyEngagedResidents)
 	require.Equal(t, int64(1), overview.NeverEngagedResidents)
-	require.Equal(t, []models.ProgramCompletionRank{
+	require.Equal(t, []programs.ProgramCompletionRank{
 		{ProgramName: "Program Two", Enrolled: 5, Completed: 5, CompletionRate: 100},
 		{ProgramName: "Program One", Enrolled: 5, Completed: 3, CompletionRate: 60},
 	}, overview.TopPrograms)

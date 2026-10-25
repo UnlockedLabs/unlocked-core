@@ -12,7 +12,6 @@ import (
 	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	ocapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/services"
 
 	"github.com/nats-io/nats.go"
 )
@@ -334,9 +333,9 @@ func (srv *Server) handleProgramEngagementOverview(w http.ResponseWriter, r *htt
 	if err != nil {
 		return err
 	}
-	overview, err := srv.Db.GetProgramEngagementOverview(&args, start, end, facilityID)
+	overview, err := srv.programs.EngagementOverview(r.Context(), start, end, facilityID)
 	if err != nil {
-		return newDatabaseServiceError(err)
+		return newDatabaseServiceError(database.NewDBError(err, "error getting program engagement"))
 	}
 	return writeJsonResponse(w, http.StatusOK, overview)
 }
@@ -348,9 +347,9 @@ func (srv *Server) handleSecondProgramEnrollment(w http.ResponseWriter, r *http.
 	if err != nil {
 		return err
 	}
-	rows, err := srv.Db.GetSecondProgramEnrollmentRates(&args, facilityID)
+	rows, err := srv.programs.SecondProgramEnrollment(r.Context(), facilityID)
 	if err != nil {
-		return newDatabaseServiceError(err)
+		return newDatabaseServiceError(database.NewDBError(err, "error getting second program enrollment"))
 	}
 	return writeJsonResponse(w, http.StatusOK, rows)
 }
@@ -362,9 +361,9 @@ func (srv *Server) handleProgramCompletionMatrix(w http.ResponseWriter, r *http.
 	if err != nil {
 		return err
 	}
-	cells, err := srv.Db.GetProgramCompletionMatrix(&args, facilityID)
+	cells, err := srv.programs.CompletionMatrix(r.Context(), facilityID)
 	if err != nil {
-		return newDatabaseServiceError(err)
+		return newDatabaseServiceError(database.NewDBError(err, "error getting program completion matrix"))
 	}
 	return writeJsonResponse(w, http.StatusOK, cells)
 }
@@ -376,9 +375,9 @@ func (srv *Server) handleProgramLoadDistribution(w http.ResponseWriter, r *http.
 	if err != nil {
 		return err
 	}
-	dist, err := srv.Db.GetProgramLoadDistribution(&args, facilityID)
+	dist, err := srv.programs.LoadDistribution(r.Context(), facilityID)
 	if err != nil {
-		return newDatabaseServiceError(err)
+		return newDatabaseServiceError(database.NewDBError(err, "error getting program load distribution"))
 	}
 	return writeJsonResponse(w, http.StatusOK, dist)
 }
@@ -390,9 +389,9 @@ func (srv *Server) handleEnrollmentByProgramType(w http.ResponseWriter, r *http.
 	if err != nil {
 		return err
 	}
-	rows, err := srv.Db.GetEnrollmentByProgramType(&args, facilityID)
+	rows, err := srv.programs.EnrollmentByProgramType(r.Context(), facilityID)
 	if err != nil {
-		return newDatabaseServiceError(err)
+		return newDatabaseServiceError(database.NewDBError(err, "error getting enrollment by program type"))
 	}
 	return writeJsonResponse(w, http.StatusOK, rows)
 }
@@ -508,9 +507,9 @@ func (srv *Server) handleClassDashboardMetrics(w http.ResponseWriter, r *http.Re
 		facilityId = &args.FacilityID
 	}
 
-	metrics, err := srv.Db.GetClassDashboardMetrics(&args, facilityId)
+	metrics, err := srv.programs.ClassMetrics(r.Context(), facilityId)
 	if err != nil {
-		return newDatabaseServiceError(err)
+		return newDatabaseServiceError(database.NewDBError(err, "error getting class metrics"))
 	}
 
 	return writeJsonResponse(w, http.StatusOK, metrics)
@@ -534,10 +533,9 @@ func (srv *Server) handleFacilityHealthSummary(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	service := services.NewClassesService(srv.Db)
-	summaries, err := service.GetFacilityHealthSummaries(&args, facilityID, days)
+	summaries, err := srv.programs.FacilityHealth(r.Context(), facilityID, days, args.Timezone)
 	if err != nil {
-		return newDatabaseServiceError(err)
+		return newDatabaseServiceError(database.NewDBError(err, "error getting facility health"))
 	}
 
 	return writeJsonResponse(w, http.StatusOK, summaries)

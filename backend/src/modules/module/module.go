@@ -107,9 +107,9 @@ type Deps struct {
 	// Users is core's user accounts. Only routes get it: it is nil in
 	// RegisterJobs.
 	Users Users
-	// LiveProviders is core's Canvas and Essential Education code, for
-	// Provider Platforms. Only routes get it. It goes away when EN-194 moves
-	// that code into Provider Platforms.
+	// LiveProviders is Programs' Canvas and Essential Education code, for
+	// Provider Platforms. Only routes get it. It goes away when Provider
+	// Platforms fetches and caches those providers' data itself.
 	LiveProviders LiveProviders
 	// HTTP is core's HTTP client, for calls to services outside Unlocked,
 	// such as an LMS. Only routes get it.
@@ -191,14 +191,14 @@ type ReportFilter struct {
 	Value string
 }
 
-// LiveProviders is what Provider Platforms needs from the Canvas and Essential
-// Education code that stays in core until EN-194.
+// LiveProviders is what Provider Platforms needs from Programs' Canvas and
+// Essential Education code.
 type LiveProviders interface {
 	// Users is every user a provider's own API lists. ok is false for a
 	// provider that can't list them; its users come from provider-middleware.
 	Users(ctx context.Context, providerID uint) (users []ProviderUser, ok bool, err error)
-	// MappingsChanged tells core that a user's account at a provider was
-	// linked or unlinked, so core can clear its cached Canvas programs.
+	// MappingsChanged tells Programs that a user's account at a provider was
+	// linked or unlinked, so it can clear its cached Canvas programs.
 	MappingsChanged(providerID, userID uint)
 }
 

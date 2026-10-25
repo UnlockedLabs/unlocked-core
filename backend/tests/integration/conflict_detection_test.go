@@ -7,6 +7,7 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 
 	"github.com/stretchr/testify/require"
 )
@@ -21,7 +22,7 @@ func TestSchedulingConflictDetection(t *testing.T) {
 	facilityAdmin, err := env.CreateTestUser("conflictadmin", models.FacilityAdmin, facility.ID, "")
 	require.NoError(t, err)
 
-	program, err := env.CreateTestProgram("Conflict Test Program", models.FundingType(models.FederalGrants), []models.ProgramType{}, []models.ProgramCreditType{}, true, nil)
+	program, err := env.CreateTestProgram("Conflict Test Program", programs.FundingType(programs.FederalGrants), []programs.ProgramType{}, []programs.ProgramCreditType{}, true, nil)
 	require.NoError(t, err)
 
 	err = env.SetFacilitiesToProgram(program.ID, []uint{facility.ID})
@@ -34,18 +35,18 @@ func TestSchedulingConflictDetection(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create Class A: Mon/Wed/Fri 10:00-11:00
-	classA, err := env.CreateTestClass(program, facility, models.Active, &instructorA.ID)
+	classA, err := env.CreateTestClass(program, facility, programs.Active, &instructorA.ID)
 	require.NoError(t, err)
-	classB, err := env.CreateTestClass(program, facility, models.Active, &instructorB.ID)
+	classB, err := env.CreateTestClass(program, facility, programs.Active, &instructorB.ID)
 	require.NoError(t, err)
 
 	// Create test room for events
-	room := models.Room{FacilityID: facility.ID, Name: "Conflict Test Room"}
+	room := programs.Room{FacilityID: facility.ID, Name: "Conflict Test Room"}
 	err = env.DB.Create(&room).Error
 	require.NoError(t, err)
 
 	// Update Class A event to be specific
-	eventA := models.ProgramClassEvent{
+	eventA := programs.ProgramClassEvent{
 		CohortID:       classA.ID,
 		Duration:       "1h",
 		RecurrenceRule: "FREQ=WEEKLY;BYDAY=MO,WE,FR;DTSTART=20240101T100000Z", // UTC
@@ -56,7 +57,7 @@ func TestSchedulingConflictDetection(t *testing.T) {
 	require.NoError(t, err)
 
 	// Update Class B event to overlap
-	eventB := models.ProgramClassEvent{
+	eventB := programs.ProgramClassEvent{
 		CohortID:       classB.ID,
 		Duration:       "1h",
 		RecurrenceRule: "FREQ=WEEKLY;BYDAY=MO,WE,FR;DTSTART=20240101T103000Z", // UTC, overlaps by 30 mins

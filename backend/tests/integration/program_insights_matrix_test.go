@@ -7,6 +7,7 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 
 	"github.com/stretchr/testify/require"
 )
@@ -18,22 +19,22 @@ func TestProgramCompletionMatrix(t *testing.T) {
 	facility, err := env.CreateTestFacility("Matrix Facility")
 	require.NoError(t, err)
 
-	program, err := env.CreateTestProgram("GED Prep", models.StateGrants,
-		[]models.ProgramType{{ProgramType: models.Educational}}, nil, true, nil)
+	program, err := env.CreateTestProgram("GED Prep", programs.StateGrants,
+		[]programs.ProgramType{{ProgramType: programs.Educational}}, nil, true, nil)
 	require.NoError(t, err)
-	class, err := env.CreateTestClass(program, facility, models.Active, nil)
+	class, err := env.CreateTestClass(program, facility, programs.Active, nil)
 	require.NoError(t, err)
 
 	// 3 enrollees, 1 completed -> enrolled=3 meets the n>=3 threshold
 	for i := 0; i < 2; i++ {
 		u, err := env.CreateTestUser("matrixres"+string(rune('a'+i)), models.Student, facility.ID, "")
 		require.NoError(t, err)
-		_, err = env.CreateTestEnrollment(class.ID, u.ID, models.Enrolled)
+		_, err = env.CreateTestEnrollment(class.ID, u.ID, programs.Enrolled)
 		require.NoError(t, err)
 	}
 	completedUser, err := env.CreateTestUser("matrixrescompleted", models.Student, facility.ID, "")
 	require.NoError(t, err)
-	_, err = env.CreateTestEnrollment(class.ID, completedUser.ID, models.EnrollmentCompleted)
+	_, err = env.CreateTestEnrollment(class.ID, completedUser.ID, programs.EnrollmentCompleted)
 	require.NoError(t, err)
 
 	// A second program in the SAME facility, with only 2 enrollees (below the
@@ -41,22 +42,22 @@ func TestProgramCompletionMatrix(t *testing.T) {
 	// branch distinctly AND to give the facility average a second, different
 	// cell so the delta calculation is a genuine average, not a trivial
 	// single-cell equivalence.
-	smallProgram, err := env.CreateTestProgram("Financial Literacy", models.StateGrants,
-		[]models.ProgramType{{ProgramType: models.LifeSkills}}, nil, true, nil)
+	smallProgram, err := env.CreateTestProgram("Financial Literacy", programs.StateGrants,
+		[]programs.ProgramType{{ProgramType: programs.LifeSkills}}, nil, true, nil)
 	require.NoError(t, err)
-	smallClass, err := env.CreateTestClass(smallProgram, facility, models.Active, nil)
+	smallClass, err := env.CreateTestClass(smallProgram, facility, programs.Active, nil)
 	require.NoError(t, err)
 
 	smallCompletedUser, err := env.CreateTestUser("matrixressmall", models.Student, facility.ID, "")
 	require.NoError(t, err)
-	_, err = env.CreateTestEnrollment(smallClass.ID, smallCompletedUser.ID, models.EnrollmentCompleted)
+	_, err = env.CreateTestEnrollment(smallClass.ID, smallCompletedUser.ID, programs.EnrollmentCompleted)
 	require.NoError(t, err)
 	smallEnrolledUser, err := env.CreateTestUser("matrixressmallb", models.Student, facility.ID, "")
 	require.NoError(t, err)
-	_, err = env.CreateTestEnrollment(smallClass.ID, smallEnrolledUser.ID, models.Enrolled)
+	_, err = env.CreateTestEnrollment(smallClass.ID, smallEnrolledUser.ID, programs.Enrolled)
 	require.NoError(t, err)
 
-	cells := NewRequest[[]models.ProgramCompletionMatrixCell](env.Client, t, http.MethodGet,
+	cells := NewRequest[[]programs.ProgramCompletionMatrixCell](env.Client, t, http.MethodGet,
 		"/api/department-metrics/programs/completion-matrix?facility="+strconv.Itoa(int(facility.ID)), nil).
 		WithTestClaims(&handlers.Claims{Role: models.SystemAdmin, FacilityID: facility.ID}).
 		Do().
@@ -65,7 +66,7 @@ func TestProgramCompletionMatrix(t *testing.T) {
 
 	require.Len(t, cells, 2)
 
-	var gedCell, smallCell models.ProgramCompletionMatrixCell
+	var gedCell, smallCell programs.ProgramCompletionMatrixCell
 	for _, c := range cells {
 		switch c.ProgramName {
 		case "GED Prep":

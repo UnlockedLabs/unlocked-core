@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/UnlockedLabs/unlocked-core/backend/src"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 
 	"github.com/stretchr/testify/require"
 )
@@ -21,10 +21,13 @@ type TestEnv struct {
 	Server     *handlers.Server
 	TestServer *httptest.Server
 	DB         *database.DB
-	Client     *Client
-	Context    context.Context
-	Cancel     context.CancelFunc
-	T          *testing.T
+	// Programs is the Programs module's database, for tests that call its
+	// queries directly.
+	Programs *programs.Store
+	Client   *Client
+	Context  context.Context
+	Cancel   context.CancelFunc
+	T        *testing.T
 }
 
 func SetupTestEnv(t *testing.T) *TestEnv {
@@ -46,6 +49,7 @@ func SetupTestEnv(t *testing.T) *TestEnv {
 		Server:     server,
 		TestServer: ts,
 		DB:         server.Db,
+		Programs:   &programs.Store{DB: server.Db.DB},
 		Client:     client,
 		Context:    ctx,
 		Cancel:     cancel,
@@ -140,8 +144,8 @@ func (env *TestEnv) CreateTestFacility(name string) (*models.Facility, error) {
 	return facility, nil
 }
 
-func (env *TestEnv) CreateTestProgram(name string, fundingType models.FundingType, programTypes []models.ProgramType, creditTypes []models.ProgramCreditType, isActive bool, archivedAt *time.Time) (*models.Program, error) {
-	program := &models.Program{
+func (env *TestEnv) CreateTestProgram(name string, fundingType programs.FundingType, programTypes []programs.ProgramType, creditTypes []programs.ProgramCreditType, isActive bool, archivedAt *time.Time) (*programs.Program, error) {
+	program := &programs.Program{
 		Name:               name,
 		Description:        "This is a test program created for integration testing purposes.",
 		FundingType:        fundingType,
@@ -151,26 +155,26 @@ func (env *TestEnv) CreateTestProgram(name string, fundingType models.FundingTyp
 		ArchivedAt:         archivedAt,
 	}
 
-	if err := env.DB.CreateProgram(program); err != nil {
+	if err := env.Programs.CreateProgram(program); err != nil {
 		return nil, err
 	}
 	return program, nil
 }
 
 func (env *TestEnv) SetFacilitiesToProgram(programId uint, facilityIds []uint) error {
-	if err := env.DB.Where("program_id = ?", programId).Delete(&models.FacilitiesPrograms{}).Error; err != nil {
+	if err := env.DB.Where("program_id = ?", programId).Delete(&programs.FacilitiesPrograms{}).Error; err != nil {
 		return err
 	}
 
-	facilityPrograms := src.IterMap(func(id uint) models.FacilitiesPrograms {
-		return models.FacilitiesPrograms{
+	facilityPrograms := programs.IterMap(func(id uint) programs.FacilitiesPrograms {
+		return programs.FacilitiesPrograms{
 			FacilityID: id,
 			ProgramID:  programId,
 		}
 	}, facilityIds)
 
 	if len(facilityPrograms) > 0 {
-		if err := env.DB.Model(&models.FacilitiesPrograms{}).Create(&facilityPrograms).Error; err != nil {
+		if err := env.DB.Model(&programs.FacilitiesPrograms{}).Create(&facilityPrograms).Error; err != nil {
 			return err
 		}
 	}
@@ -218,11 +222,11 @@ func (env *TestEnv) CleanupDatabase() error {
 	return nil
 }
 
-func (env *TestEnv) CreateTestClass(program *models.Program, facility *models.Facility, status models.ClassStatus, instructorID *uint) (*models.ProgramClassCohort, error) {
+func (env *TestEnv) CreateTestClass(program *programs.Program, facility *models.Facility, status programs.ClassStatus, instructorID *uint) (*programs.ProgramClassCohort, error) {
 	endDt := time.Now().Add(time.Hour * 24)
 	creditHours := int64(2)
 
-	class := &models.ProgramClassCohort{
+	class := &programs.ProgramClassCohort{
 		ProgramID:    program.ID,
 		FacilityID:   facility.ID,
 		Capacity:     10,
@@ -243,19 +247,19 @@ func (env *TestEnv) CreateTestClass(program *models.Program, facility *models.Fa
 
 func (env *TestEnv) NameCohortClass(cohortID uint, name string) error {
 	var classID uint
-	if err := env.DB.Model(&models.ProgramClassCohort{}).
+	if err := env.DB.Model(&programs.ProgramClassCohort{}).
 		Select("class_id").
 		Where("id = ?", cohortID).
 		Scan(&classID).Error; err != nil {
 		return err
 	}
-	return env.DB.Model(&models.ProgramClass{}).
+	return env.DB.Model(&programs.ProgramClass{}).
 		Where("id = ?", classID).
 		Update("name", name).Error
 }
 
-func (env *TestEnv) CreateTestEnrollment(classID, userID uint, status models.ProgramEnrollmentStatus) (*models.ProgramClassEnrollment, error) {
-	enrollment := &models.ProgramClassEnrollment{
+func (env *TestEnv) CreateTestEnrollment(classID, userID uint, status programs.ProgramEnrollmentStatus) (*programs.ProgramClassEnrollment, error) {
+	enrollment := &programs.ProgramClassEnrollment{
 		CohortID:         classID,
 		UserID:           userID,
 		EnrollmentStatus: status,
@@ -269,14 +273,14 @@ func (env *TestEnv) CreateTestEnrollment(classID, userID uint, status models.Pro
 }
 
 func (env *TestEnv) GetEnrollmentTimestamps(enrollmentID uint) (enrolledAt, endedAt *time.Time, err error) {
-	var enrollment models.ProgramClassEnrollment
+	var enrollment programs.ProgramClassEnrollment
 	if err := env.DB.First(&enrollment, "id = ?", enrollmentID).Error; err != nil {
 		return nil, nil, err
 	}
 	return enrollment.EnrolledAt, enrollment.EnrollmentEndedAt, nil
 }
 
-func (env *TestEnv) CreateTestEvent(classID uint, rrule string, instructorID uint) (*models.ProgramClassEvent, error) {
+func (env *TestEnv) CreateTestEvent(classID uint, rrule string, instructorID uint) (*programs.ProgramClassEvent, error) {
 	if rrule == "" {
 		startDate := time.Now().AddDate(0, 0, -2) // 2 days ago
 		rrule = fmt.Sprintf("DTSTART:%s\nRRULE:FREQ=DAILY;COUNT=10", startDate.Format("20060102T090000Z"))
@@ -286,7 +290,7 @@ func (env *TestEnv) CreateTestEvent(classID uint, rrule string, instructorID uin
 	if err != nil {
 		return nil, err
 	}
-	event := &models.ProgramClassEvent{
+	event := &programs.ProgramClassEvent{
 		CohortID:       classID,
 		Duration:       "2h",
 		RecurrenceRule: rrule,
@@ -302,19 +306,19 @@ func (env *TestEnv) CreateTestEvent(classID uint, rrule string, instructorID uin
 }
 
 func (env *TestEnv) GetEventRecurrenceRule(eventID uint) (string, error) {
-	var event models.ProgramClassEvent
+	var event programs.ProgramClassEvent
 	if err := env.DB.First(&event, "id = ?", eventID).Error; err != nil {
 		return "", err
 	}
 	return event.RecurrenceRule, nil
 }
 
-func (env *TestEnv) CreateTestEventWithRRule(classID uint, customRRule string, instructorID uint) (*models.ProgramClassEvent, error) {
+func (env *TestEnv) CreateTestEventWithRRule(classID uint, customRRule string, instructorID uint) (*programs.ProgramClassEvent, error) {
 	roomID, err := env.getOrCreateTestRoom(classID)
 	if err != nil {
 		return nil, err
 	}
-	event := &models.ProgramClassEvent{
+	event := &programs.ProgramClassEvent{
 		CohortID:       classID,
 		Duration:       "2h",
 		RecurrenceRule: customRRule,
@@ -327,7 +331,7 @@ func (env *TestEnv) CreateTestEventWithRRule(classID uint, customRRule string, i
 	return event, nil
 }
 
-func (env *TestEnv) CreateTestEventOverride(eventID uint, date string, isCancelled bool, reason string) (*models.ProgramClassEventOverride, error) {
+func (env *TestEnv) CreateTestEventOverride(eventID uint, date string, isCancelled bool, reason string) (*programs.ProgramClassEventOverride, error) {
 	parsedDate, err := time.Parse("2006-01-02", date)
 	if err != nil {
 		return nil, err
@@ -335,7 +339,7 @@ func (env *TestEnv) CreateTestEventOverride(eventID uint, date string, isCancell
 
 	rrule := fmt.Sprintf("DTSTART:%s\nRRULE:FREQ=DAILY;COUNT=1", parsedDate.Format("20060102T090000Z"))
 
-	override := &models.ProgramClassEventOverride{
+	override := &programs.ProgramClassEventOverride{
 		EventID:       eventID,
 		Duration:      "2h",
 		OverrideRrule: rrule,
@@ -350,8 +354,8 @@ func (env *TestEnv) CreateTestEventOverride(eventID uint, date string, isCancell
 	return override, nil
 }
 
-func (env *TestEnv) CreateTestAttendance(eventID, userID uint, date time.Time, status models.Attendance, reason string) (*models.ProgramClassEventAttendance, error) {
-	attendance := &models.ProgramClassEventAttendance{
+func (env *TestEnv) CreateTestAttendance(eventID, userID uint, date time.Time, status programs.Attendance, reason string) (*programs.ProgramClassEventAttendance, error) {
+	attendance := &programs.ProgramClassEventAttendance{
 		EventID:          eventID,
 		UserID:           userID,
 		Date:             date.Format("2006-01-02"),
@@ -367,11 +371,11 @@ func (env *TestEnv) CreateTestAttendance(eventID, userID uint, date time.Time, s
 }
 
 func (env *TestEnv) SetClassCreditHours(classID uint, creditHours int64) error {
-	return env.DB.Model(&models.ProgramClassCohort{}).Where("id = ?", classID).Update("credit_hours", creditHours).Error
+	return env.DB.Model(&programs.ProgramClassCohort{}).Where("id = ?", classID).Update("credit_hours", creditHours).Error
 }
 
-func (env *TestEnv) CreateTestEnrollmentWithDates(classID, userID uint, status models.ProgramEnrollmentStatus, enrolledAt time.Time, endedAt *time.Time) (*models.ProgramClassEnrollment, error) {
-	enrollment := &models.ProgramClassEnrollment{
+func (env *TestEnv) CreateTestEnrollmentWithDates(classID, userID uint, status programs.ProgramEnrollmentStatus, enrolledAt time.Time, endedAt *time.Time) (*programs.ProgramClassEnrollment, error) {
+	enrollment := &programs.ProgramClassEnrollment{
 		CohortID:          classID,
 		UserID:            userID,
 		EnrollmentStatus:  status,
@@ -387,7 +391,7 @@ func (env *TestEnv) CreateTestEnrollmentWithDates(classID, userID uint, status m
 }
 
 func (env *TestEnv) getOrCreateInstructorForClass(classID uint) (uint, error) {
-	var class models.ProgramClassCohort
+	var class programs.ProgramClassCohort
 	if err := env.DB.First(&class, "id = ?", classID).Error; err != nil {
 		return 0, err
 	}
@@ -405,16 +409,16 @@ func (env *TestEnv) getOrCreateInstructorForClass(classID uint) (uint, error) {
 }
 
 func (env *TestEnv) getOrCreateTestRoom(classID uint) (uint, error) {
-	var class models.ProgramClassCohort
+	var class programs.ProgramClassCohort
 	if err := env.DB.First(&class, "id = ?", classID).Error; err != nil {
 		return 0, err
 	}
-	var room models.Room
+	var room programs.Room
 	result := env.DB.Where("facility_id = ? AND name = ?", class.FacilityID, "Test Room").First(&room)
 	if result.Error == nil {
 		return room.ID, nil
 	}
-	room = models.Room{
+	room = programs.Room{
 		FacilityID: class.FacilityID,
 		Name:       "Test Room",
 	}

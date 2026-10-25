@@ -361,50 +361,6 @@ func TestFacilityFeatures(t *testing.T) {
 	}
 }
 
-// Only a provider that lists its own users (Essential Ed) answers; the rest
-// fall back to provider-middleware.
-func TestLiveProvidersUsers(t *testing.T) {
-	srv := newTestingServer()
-	status := http.StatusOK
-	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(envelope([]map[string]interface{}{
-			{"id": float64(4329946), "first_name": "Jane", "last_name": "Smith", "username": "jsmith", "email_address": "jane@example.com"},
-		}, true))
-	}))
-	defer ts.Close()
-	srv.Client = ts.Client()
-	const essentialEd, kolibri = 1, 2
-	require.NoError(t, srv.Db.Exec(`INSERT INTO provider_platforms (id, type, name, account_id, access_key, base_url, state) VALUES
-		(?, 'essential_ed', 'Essential Ed', '303', 'token', ?, 'enabled'), (?, 'kolibri', 'Kolibri', '', '', ?, 'enabled')`,
-		essentialEd, ts.URL, kolibri, ts.URL).Error)
-	live := liveProviders{srv}
-
-	t.Run("essential ed lists its users", func(t *testing.T) {
-		users, ok, err := live.Users(context.Background(), essentialEd)
-		require.NoError(t, err)
-		assert.True(t, ok)
-		assert.Equal(t, []module.ProviderUser{{
-			Username: "jsmith", NameFirst: "Jane", NameLast: "Smith", Email: "jane@example.com",
-			ExternalUserID: "4329946", ExternalUsername: "jsmith",
-		}}, users)
-	})
-
-	t.Run("kolibri goes through provider-middleware", func(t *testing.T) {
-		users, ok, err := live.Users(context.Background(), kolibri)
-		require.NoError(t, err)
-		assert.False(t, ok)
-		assert.Nil(t, users)
-	})
-
-	t.Run("a failed listing is an error", func(t *testing.T) {
-		status = http.StatusBadGateway
-		_, ok, err := live.Users(context.Background(), essentialEd)
-		assert.Error(t, err)
-		assert.True(t, ok)
-	})
-}
-
 func TestModuleUsers(t *testing.T) {
 	srv := newTestingServer()
 	users := moduleUsers{srv}

@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 
+	"github.com/UnlockedLabs/unlocked-contracts/identity"
 	"github.com/nats-io/nats.go"
 	"gorm.io/gorm"
 )
@@ -42,9 +44,9 @@ func (sh *ServiceHandler) activateScheduledClasses(ctx context.Context) error {
 
 	var cohortIDs []int
 	if err := sh.db.WithContext(ctx).
-		Model(&models.ProgramClassCohort{}).
+		Model(&programs.ProgramClassCohort{}).
 		Joins("JOIN facilities f ON f.id = program_class_cohorts.facility_id").
-		Where("program_class_cohorts.status = ?", models.Scheduled).
+		Where("program_class_cohorts.status = ?", programs.Scheduled).
 		Where("program_class_cohorts.archived_at IS NULL").
 		Where("program_class_cohorts.start_dt <= (now() AT TIME ZONE f.timezone)::date").
 		Pluck("program_class_cohorts.id", &cohortIDs).Error; err != nil {
@@ -58,19 +60,20 @@ func (sh *ServiceHandler) activateScheduledClasses(ctx context.Context) error {
 	}
 	logger().Infof("activating %d scheduled class(es): %v", len(cohortIDs), cohortIDs)
 
-	batchCtx := context.WithValue(ctx, models.UserIDKey, batchUserID)
+	// Programs' models take the update user from identity.Claims.
+	batchCtx := identity.NewContext(ctx, &identity.Claims{UserID: batchUserID})
 	enrolledAt := time.Now().UTC()
 	if err := sh.db.WithContext(batchCtx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.
-			Model(&models.ProgramClassCohort{}).
+			Model(&programs.ProgramClassCohort{}).
 			Where("id IN ?", cohortIDs).
-			Updates(map[string]any{"status": models.Active}).Error; err != nil {
+			Updates(map[string]any{"status": programs.Active}).Error; err != nil {
 			return err
 		}
 		return tx.
-			Model(&models.ProgramClassEnrollment{}).
+			Model(&programs.ProgramClassEnrollment{}).
 			Where("cohort_id IN ?", cohortIDs).
-			Where("enrollment_status = ?", models.Enrolled).
+			Where("enrollment_status = ?", programs.Enrolled).
 			Where("enrolled_at IS NULL").
 			Updates(map[string]any{
 				"enrolled_at":    enrolledAt,

@@ -14,6 +14,7 @@ import (
 	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
+	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 
 	"github.com/evertonvps/go-jasper"
@@ -41,13 +42,9 @@ func (js *jasperService) generateUsageReportPDF(userID int) ([]byte, error) {
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
-	userPrograms, err := js.db.GetUserProgramInfo(js.queryCtx, userID)
+	userPrograms, err := registry.Programs(js.db.DB).ResidentPrograms(js.queryCtx.Ctx, uint(userID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user programs: %w", err)
-	}
-
-	for i := range userPrograms {
-		userPrograms[i].CalculateAttendancePercentage()
 	}
 
 	sessionEngagements, err := js.db.GetUserSessionEngagement(userID, -1)
@@ -61,7 +58,7 @@ func (js *jasperService) generateUsageReportPDF(userID int) ([]byte, error) {
 	}
 
 	type JasperReportData struct {
-		Programs []models.ResidentProgramClassInfo `json:"programs"`
+		Programs []programsapi.ResidentProgramClassInfo `json:"programs"`
 	}
 	reportData := JasperReportData{
 		Programs: userPrograms,

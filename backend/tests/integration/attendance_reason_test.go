@@ -8,6 +8,7 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +26,7 @@ func TestAttendanceReasons(t *testing.T) {
 	student, err := env.CreateTestUser("student", models.Student, facility.ID, "STU001")
 	require.NoError(t, err)
 
-	program, err := env.CreateTestProgram("Test Program", models.FundingType(models.FederalGrants), []models.ProgramType{}, []models.ProgramCreditType{}, true, nil)
+	program, err := env.CreateTestProgram("Test Program", programs.FundingType(programs.FederalGrants), []programs.ProgramType{}, []programs.ProgramCreditType{}, true, nil)
 	require.NoError(t, err)
 
 	err = env.SetFacilitiesToProgram(program.ID, []uint{facility.ID})
@@ -34,23 +35,23 @@ func TestAttendanceReasons(t *testing.T) {
 	instructor, err := env.CreateTestInstructor(facility.ID, "reason")
 	require.NoError(t, err)
 
-	class, err := env.CreateTestClass(program, facility, models.Active, &instructor.ID)
+	class, err := env.CreateTestClass(program, facility, programs.Active, &instructor.ID)
 	require.NoError(t, err)
 
 	event, err := env.CreateTestEvent(class.ID, "", instructor.ID)
 	require.NoError(t, err)
 
-	_, err = env.CreateTestEnrollment(class.ID, student.ID, models.Enrolled)
+	_, err = env.CreateTestEnrollment(class.ID, student.ID, programs.Enrolled)
 	require.NoError(t, err)
 
 	date := time.Now().Format("2006-01-02")
 
 	t.Run("Save attendance with Medical reason", func(t *testing.T) {
-		attendanceData := []models.ProgramClassEventAttendance{
+		attendanceData := []programs.ProgramClassEventAttendance{
 			{
 				UserID:           student.ID,
 				Date:             date,
-				AttendanceStatus: models.Absent_Excused,
+				AttendanceStatus: programs.Absent_Excused,
 				ReasonCategory:   models.StringPtr("Medical"),
 				Note:             nil,
 			},
@@ -67,7 +68,7 @@ func TestAttendanceReasons(t *testing.T) {
 			ExpectStatus(http.StatusOK)
 
 		// Verify in DB
-		var stored models.ProgramClassEventAttendance
+		var stored programs.ProgramClassEventAttendance
 		err := env.DB.Where("user_id = ? AND event_id = ? AND date = ?", student.ID, event.ID, date).First(&stored).Error
 		require.NoError(t, err)
 		require.Equal(t, "Medical", models.FormatNullableString(stored.ReasonCategory))
@@ -75,11 +76,11 @@ func TestAttendanceReasons(t *testing.T) {
 	})
 
 	t.Run("Save attendance with Other reason and Note", func(t *testing.T) {
-		attendanceData := []models.ProgramClassEventAttendance{
+		attendanceData := []programs.ProgramClassEventAttendance{
 			{
 				UserID:           student.ID,
 				Date:             date,
-				AttendanceStatus: models.Absent_Unexcused,
+				AttendanceStatus: programs.Absent_Unexcused,
 				ReasonCategory:   models.StringPtr("Other"),
 				Note:             models.StringPtr("Something specific"),
 			},
@@ -96,7 +97,7 @@ func TestAttendanceReasons(t *testing.T) {
 			ExpectStatus(http.StatusOK)
 
 		// Verify in DB
-		var stored models.ProgramClassEventAttendance
+		var stored programs.ProgramClassEventAttendance
 		err := env.DB.Where("user_id = ? AND event_id = ? AND date = ?", student.ID, event.ID, date).First(&stored).Error
 		require.NoError(t, err)
 		require.Equal(t, "Other", models.FormatNullableString(stored.ReasonCategory))
@@ -106,11 +107,11 @@ func TestAttendanceReasons(t *testing.T) {
 	t.Run("Update to Present clears reason and note", func(t *testing.T) {
 		// First set it to something else (should be covered by previous test, but good to be explicit if run in isolation)
 		// But here we just update the existing record from previous step
-		attendanceData := []models.ProgramClassEventAttendance{
+		attendanceData := []programs.ProgramClassEventAttendance{
 			{
 				UserID:           student.ID,
 				Date:             date,
-				AttendanceStatus: models.Present,
+				AttendanceStatus: programs.Present,
 				ReasonCategory:   models.StringPtr(""), // Frontend sends empty string
 				Note:             models.StringPtr(""),
 			},
@@ -127,10 +128,10 @@ func TestAttendanceReasons(t *testing.T) {
 			ExpectStatus(http.StatusOK)
 
 		// Verify in DB
-		var stored models.ProgramClassEventAttendance
+		var stored programs.ProgramClassEventAttendance
 		err := env.DB.Where("user_id = ? AND event_id = ? AND date = ?", student.ID, event.ID, date).First(&stored).Error
 		require.NoError(t, err)
-		require.Equal(t, models.Present, stored.AttendanceStatus)
+		require.Equal(t, programs.Present, stored.AttendanceStatus)
 		// Note: Depending on how the update works, it might not clear fields if they are not specified,
 		// but the handler receives the whole struct.
 		// The `LogUserAttendance` uses `clause.OnConflict` with `DoUpdates`.
@@ -140,11 +141,11 @@ func TestAttendanceReasons(t *testing.T) {
 	})
 
 	t.Run("Update from Present back to Absent saves reason", func(t *testing.T) {
-		attendanceData := []models.ProgramClassEventAttendance{
+		attendanceData := []programs.ProgramClassEventAttendance{
 			{
 				UserID:           student.ID,
 				Date:             date,
-				AttendanceStatus: models.Absent_Excused,
+				AttendanceStatus: programs.Absent_Excused,
 				ReasonCategory:   models.StringPtr("Disciplinary"),
 				Note:             nil,
 			},
@@ -161,10 +162,10 @@ func TestAttendanceReasons(t *testing.T) {
 			ExpectStatus(http.StatusOK)
 
 		// Verify in DB
-		var stored models.ProgramClassEventAttendance
+		var stored programs.ProgramClassEventAttendance
 		err := env.DB.Where("user_id = ? AND event_id = ? AND date = ?", student.ID, event.ID, date).First(&stored).Error
 		require.NoError(t, err)
-		require.Equal(t, models.Absent_Excused, stored.AttendanceStatus)
+		require.Equal(t, programs.Absent_Excused, stored.AttendanceStatus)
 		require.Equal(t, "Disciplinary", models.FormatNullableString(stored.ReasonCategory))
 	})
 }

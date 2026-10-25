@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,15 +27,15 @@ func TestProgramOutcomesReport_ClassAggregation(t *testing.T) {
 	class3 := createTestClass(t, env, program, facility, "Math 103")
 
 	user := createTestUser(t, env, "student", facility.ID)
-	createTestEnrollment(t, env, class3.ID, user.ID, models.Enrolled)
+	createTestEnrollment(t, env, class3.ID, user.ID, programs.Enrolled)
 
-	req := &models.ReportGenerateRequest{
-		Type:      models.ProgramOutcomesReport,
+	req := &programs.ReportGenerateRequest{
+		Type:      programs.ProgramOutcomesReport,
 		StartDate: time.Now().AddDate(0, -2, 0),
 		EndDate:   time.Now(),
 	}
 
-	rows, err := env.DB.GenerateProgramOutcomesReport(context.Background(), req)
+	rows, err := env.Programs.GenerateProgramOutcomesReport(context.Background(), req)
 
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -55,17 +57,17 @@ func TestProgramOutcomesReport_EnrollmentNoDuplication(t *testing.T) {
 	user2 := createTestUser(t, env, "student2", facility.ID)
 	user3 := createTestUser(t, env, "student3", facility.ID)
 
-	createTestEnrollment(t, env, class.ID, user1.ID, models.Enrolled)
-	createTestEnrollment(t, env, class.ID, user2.ID, models.Enrolled)
-	createTestEnrollment(t, env, class.ID, user3.ID, models.EnrollmentCompleted)
+	createTestEnrollment(t, env, class.ID, user1.ID, programs.Enrolled)
+	createTestEnrollment(t, env, class.ID, user2.ID, programs.Enrolled)
+	createTestEnrollment(t, env, class.ID, user3.ID, programs.EnrollmentCompleted)
 
-	req := &models.ReportGenerateRequest{
-		Type:      models.ProgramOutcomesReport,
+	req := &programs.ReportGenerateRequest{
+		Type:      programs.ProgramOutcomesReport,
 		StartDate: time.Now().AddDate(0, -2, 0),
 		EndDate:   time.Now(),
 	}
 
-	rows, err := env.DB.GenerateProgramOutcomesReport(context.Background(), req)
+	rows, err := env.Programs.GenerateProgramOutcomesReport(context.Background(), req)
 
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -81,10 +83,10 @@ func createTestFacility(t *testing.T, env *TestEnv, name string) *models.Facilit
 	return facility
 }
 
-func createTestProgram(t *testing.T, env *TestEnv, name string, facilityID uint) *models.Program {
+func createTestProgram(t *testing.T, env *TestEnv, name string, facilityID uint) *programs.Program {
 	program, err := env.CreateTestProgram(
 		name,
-		models.FederalGrants,
+		programs.FederalGrants,
 		nil,
 		nil,
 		true,
@@ -95,15 +97,15 @@ func createTestProgram(t *testing.T, env *TestEnv, name string, facilityID uint)
 	err = env.SetFacilitiesToProgram(program.ID, []uint{facilityID})
 	require.NoError(t, err)
 
-	programType := models.ProgramType{
-		ProgramType: models.Educational,
+	programType := programs.ProgramType{
+		ProgramType: programs.Educational,
 		ProgramID:   program.ID,
 	}
 	err = env.DB.Create(&programType).Error
 	require.NoError(t, err)
 
-	creditType := models.ProgramCreditType{
-		CreditType: models.Education,
+	creditType := programs.ProgramCreditType{
+		CreditType: programs.Education,
 		ProgramID:  program.ID,
 	}
 	err = env.DB.Create(&creditType).Error
@@ -112,7 +114,7 @@ func createTestProgram(t *testing.T, env *TestEnv, name string, facilityID uint)
 	return program
 }
 
-func createTestClass(t *testing.T, env *TestEnv, program *models.Program, facility *models.Facility, name string) *models.ProgramClassCohort {
+func createTestClass(t *testing.T, env *TestEnv, program *programs.Program, facility *models.Facility, name string) *programs.ProgramClassCohort {
 	// Create unique instructor prefix from class name (remove spaces and special chars for alphanumunicode validation)
 	instructorPrefix := strings.ToLower(strings.ReplaceAll(name, " ", ""))
 	// Remove any non-alphanumeric characters to comply with validation
@@ -130,11 +132,11 @@ func createTestClass(t *testing.T, env *TestEnv, program *models.Program, facili
 	instructor, err := env.CreateTestInstructor(facility.ID, instructorPrefix)
 	require.NoError(t, err)
 
-	class, err := env.CreateTestClass(program, facility, models.Active, &instructor.ID)
+	class, err := env.CreateTestClass(program, facility, programs.Active, &instructor.ID)
 	require.NoError(t, err)
 	// The displayed name lives on the parent CLASS now -- the cohort has none. Reports
 	// select it through a join, so renaming the class is what the assertions observe.
-	err = env.DB.Model(&models.ProgramClass{}).
+	err = env.DB.Model(&programs.ProgramClass{}).
 		Where("id = ?", class.ClassID).
 		Update("name", name).Error
 	require.NoError(t, err)
@@ -148,7 +150,7 @@ func createTestUser(t *testing.T, env *TestEnv, username string, facilityID uint
 	return user
 }
 
-func createTestEnrollment(t *testing.T, env *TestEnv, classID, userID uint, status models.ProgramEnrollmentStatus) *models.ProgramClassEnrollment {
+func createTestEnrollment(t *testing.T, env *TestEnv, classID, userID uint, status programs.ProgramEnrollmentStatus) *programs.ProgramClassEnrollment {
 	enrolledAt := time.Now().AddDate(0, -1, 0)
 	enrollment, err := env.CreateTestEnrollmentWithDates(classID, userID, status, enrolledAt, nil)
 	require.NoError(t, err)
@@ -177,8 +179,8 @@ func TestGetEnrolledResidentsForClass(t *testing.T) {
 	student2 := createTestUserWithName(t, env, "student2", "Jones", "Jane", facility.ID, "DOC002")
 	student3 := createTestUserWithName(t, env, "student3", "Brown", "Bob", facility.ID, "DOC003")
 
-	createTestEnrollment(t, env, class.ID, student1.ID, models.Enrolled)
-	createTestEnrollment(t, env, class.ID, student2.ID, models.Enrolled)
+	createTestEnrollment(t, env, class.ID, student1.ID, programs.Enrolled)
+	createTestEnrollment(t, env, class.ID, student2.ID, programs.Enrolled)
 
 	args := &models.QueryContext{
 		Ctx:     context.Background(),
@@ -186,7 +188,7 @@ func TestGetEnrolledResidentsForClass(t *testing.T) {
 		Page:    1,
 	}
 
-	users, err := env.DB.GetEnrolledResidentsForClass(args, int(class.ID))
+	users, err := enrolledResidents(env, args, class.ID)
 
 	require.NoError(t, err)
 	require.Len(t, users, 2, "Should return only 2 enrolled students")
@@ -214,9 +216,9 @@ func TestGetEnrolledResidentsForClass_ExcludesNonEnrolledStatuses(t *testing.T) 
 	student2 := createTestUserWithName(t, env, "student2", "Jones", "Jane", facility.ID, "DOC456")
 	student3 := createTestUserWithName(t, env, "student3", "Brown", "Bob", facility.ID, "DOC789")
 
-	createTestEnrollment(t, env, class.ID, student1.ID, models.Enrolled)
-	createTestEnrollment(t, env, class.ID, student2.ID, models.EnrollmentCompleted)
-	createTestEnrollment(t, env, class.ID, student3.ID, models.EnrollmentIncompleteDropped)
+	createTestEnrollment(t, env, class.ID, student1.ID, programs.Enrolled)
+	createTestEnrollment(t, env, class.ID, student2.ID, programs.EnrollmentCompleted)
+	createTestEnrollment(t, env, class.ID, student3.ID, programs.EnrollmentIncompleteDropped)
 
 	args := &models.QueryContext{
 		Ctx:     context.Background(),
@@ -224,9 +226,19 @@ func TestGetEnrolledResidentsForClass_ExcludesNonEnrolledStatuses(t *testing.T) 
 		Page:    1,
 	}
 
-	users, err := env.DB.GetEnrolledResidentsForClass(args, int(class.ID))
+	users, err := enrolledResidents(env, args, class.ID)
 
 	require.NoError(t, err)
 	require.Len(t, users, 1, "Should return only actively enrolled student")
 	assert.Equal(t, student1.ID, users[0].ID)
+}
+
+// enrolledResidents is the users list's only_enrolled filter: Programs'
+// enrolled user IDs, then core's page of those residents.
+func enrolledResidents(env *TestEnv, args *models.QueryContext, classID uint) ([]models.User, error) {
+	ids, err := registry.Programs(env.DB.DB).EnrolledUserIDs(args.Ctx, classID)
+	if err != nil {
+		return nil, err
+	}
+	return env.DB.GetResidentsByIDs(args, ids, "users.name_last asc")
 }
