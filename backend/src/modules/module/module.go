@@ -116,6 +116,9 @@ type Deps struct {
 	HTTP HTTPClient
 	// Features is core's feature flags for each facility. Only routes get it.
 	Features Features
+	// Reports renders reports as PDFs with core's report templates. Only
+	// routes get it.
+	Reports Reports
 }
 
 // Notifier sends a message to a user over core's websocket. A user with no
@@ -161,6 +164,31 @@ type Features interface {
 	// settings, else the statewide ones, leaving out a sub-feature whose
 	// parent is off.
 	FacilityFeatures(ctx context.Context, facilityID uint) ([]features.Access, error)
+}
+
+// Reports renders reports with core's PDF report templates.
+type Reports interface {
+	// PDF is report rendered with the named template, such as
+	// "attendance_report".
+	PDF(template string, report Report) ([]byte, error)
+}
+
+// Report is the table a PDF report shows.
+type Report struct {
+	Title   string
+	Rows    [][]string
+	SubRows [][]string
+	// Params are extra template parameters, such as which columns to show.
+	// Set only those the template declares.
+	Params map[string]string
+	// Filters are the filters the report was run with, shown in its header.
+	Filters []ReportFilter
+}
+
+// ReportFilter is one filter in a report's header, such as "Facility".
+type ReportFilter struct {
+	Label string
+	Value string
 }
 
 // LiveProviders is what Provider Platforms needs from the Canvas and Essential

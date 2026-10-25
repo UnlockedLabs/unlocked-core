@@ -306,6 +306,7 @@ func TestModuleDeps(t *testing.T) {
 	assert.NotPanics(t, func() { deps.LiveProviders.MappingsChanged(1, 1) })
 	assert.NotNil(t, deps.HTTP)
 	assert.NotNil(t, deps.Features)
+	assert.NotNil(t, deps.Reports)
 }
 
 // A module request goes out with the client the server has when it is sent,

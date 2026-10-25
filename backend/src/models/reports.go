@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
+
 	"github.com/xuri/excelize/v2"
 )
 
@@ -50,19 +52,6 @@ type ReportGenerateRequest struct {
 	IncludeIncompleteReason bool     `json:"include_incomplete_reason"`
 	IncludeAttendanceRate   bool     `json:"include_attendance_rate"`
 	IncludeEnrollmentDates  bool     `json:"include_enrollment_dates"`
-}
-
-type PDFConfig struct {
-	Title         string
-	Data          [][]string
-	SubRows       [][]string
-	Params        map[string]string
-	FilterSummary []PDFFilterLine
-}
-
-type PDFFilterLine struct {
-	Label string
-	Value string
 }
 
 type AttendanceReportRow struct {
@@ -375,7 +364,7 @@ func (r FacilityComparisonReportData) ToExcel() (*excelize.File, error) {
 	return f, nil
 }
 
-func (r AttendanceReportData) ToPDF() (PDFConfig, error) {
+func (r AttendanceReportData) ToPDF() (module.Report, error) {
 	tableData := make([][]string, len(r.Data))
 	for i, row := range r.Data {
 		tableData[i] = []string{
@@ -390,21 +379,21 @@ func (r AttendanceReportData) ToPDF() (PDFConfig, error) {
 		}
 	}
 
-	return PDFConfig{
+	return module.Report{
 		Title: "Attendance Records",
-		Data:  tableData,
+		Rows:  tableData,
 	}, nil
 }
 
-func (r ProgramOutcomesReportData) ToPDF() (PDFConfig, error) {
+func (r ProgramOutcomesReportData) ToPDF() (module.Report, error) {
 	tableData := make([][]string, len(r.Data))
 	for i, row := range r.Data {
 		tableData[i] = r.rowValues(row)
 	}
 
-	return PDFConfig{
+	return module.Report{
 		Title:   "Program Export",
-		Data:    tableData,
+		Rows:    tableData,
 		SubRows: r.subRows(),
 		// Toggles the trailing Status column in the PDF template.
 		Params: map[string]string{
@@ -437,7 +426,7 @@ func (r ProgramOutcomesReportData) subRows() [][]string {
 	return rows
 }
 
-func (r FacilityComparisonReportData) ToPDF() (PDFConfig, error) {
+func (r FacilityComparisonReportData) ToPDF() (module.Report, error) {
 	tableData := make([][]string, len(r.Data))
 	for i, row := range r.Data {
 		lastActivity := ""
@@ -459,9 +448,9 @@ func (r FacilityComparisonReportData) ToPDF() (PDFConfig, error) {
 		}
 	}
 
-	return PDFConfig{
+	return module.Report{
 		Title: "Facility Comparison",
-		Data:  tableData,
+		Rows:  tableData,
 	}, nil
 }
 
@@ -583,7 +572,7 @@ func (r ClassRosterReportData) ToExcel() (*excelize.File, error) {
 	return f, nil
 }
 
-func (r ClassRosterReportData) ToPDF() (PDFConfig, error) {
+func (r ClassRosterReportData) ToPDF() (module.Report, error) {
 	tableData := make([][]string, len(r.Data))
 	for i, row := range r.Data {
 		status, reason := splitEnrollmentStatus(row.EnrollmentStatus)
@@ -598,9 +587,9 @@ func (r ClassRosterReportData) ToPDF() (PDFConfig, error) {
 		}
 	}
 
-	return PDFConfig{
+	return module.Report{
 		Title: "Class Roster",
-		Data:  tableData,
+		Rows:  tableData,
 		// use these to hide/show columns in report
 		Params: map[string]string{
 			"ShowIncompleteReason": strconv.FormatBool(r.IncludeIncompleteReason),
@@ -687,15 +676,15 @@ func (r ResidentProfileReportData) ToExcel() (*excelize.File, error) {
 	return f, nil
 }
 
-func (r ResidentProfileReportData) ToPDF() (PDFConfig, error) {
+func (r ResidentProfileReportData) ToPDF() (module.Report, error) {
 	tableData := make([][]string, len(r.Data))
 	for i, row := range r.Data {
 		tableData[i] = r.rowValues(row)
 	}
 
-	return PDFConfig{
+	return module.Report{
 		Title: "Resident Profile",
-		Data:  tableData,
+		Rows:  tableData,
 	}, nil
 }
 

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/jasper"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
 
@@ -210,6 +211,13 @@ func (f facilityFeatures) FacilityFeatures(ctx context.Context, facilityID uint)
 	return access, nil
 }
 
+// pdfReports renders module reports with core's Jasper report templates.
+type pdfReports struct{}
+
+func (pdfReports) PDF(template string, report module.Report) ([]byte, error) {
+	return jasper.GenerateReportPDF(template, report)
+}
+
 func toModuleUser(u *models.User) module.User {
 	return module.User{
 		ID:         u.ID,
@@ -240,6 +248,7 @@ func (srv *Server) moduleDeps() module.Deps {
 		LiveProviders: liveProviders{srv},
 		HTTP:          httpClient{srv},
 		Features:      facilityFeatures{srv},
+		Reports:       pdfReports{},
 	}
 }
 

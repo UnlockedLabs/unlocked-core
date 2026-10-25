@@ -13,6 +13,7 @@ import (
 	"github.com/UnlockedLabs/unlocked-core/backend/src"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 
 	"github.com/evertonvps/go-jasper"
@@ -215,13 +216,13 @@ func recompileTemplate(templateDir, baseTemplateName string) error {
 	return nil
 }
 
-func GenerateReportPDF(config models.PDFConfig, filterSummary []models.PDFFilterLine, templateName string) ([]byte, error) {
+func GenerateReportPDF(templateName string, config module.Report) ([]byte, error) {
 	type ReportData struct {
 		Rows    [][]string `json:"rows"`
 		SubRows [][]string `json:"subrows"`
 	}
 
-	rows := config.Data
+	rows := config.Rows
 	if len(rows) == 0 {
 		rows = [][]string{}
 	}
@@ -259,7 +260,7 @@ func GenerateReportPDF(config models.PDFConfig, filterSummary []models.PDFFilter
 
 	// Build individual filter label/value parameters for proper spacing in JRXML.
 	// Each filter line is passed as FilterLabelN and FilterValueN pairs.
-	filterCount := len(filterSummary)
+	filterCount := len(config.Filters)
 	maxFilters := 6
 
 	params := []jasper.Parameter{
@@ -284,8 +285,8 @@ func GenerateReportPDF(config models.PDFConfig, filterSummary []models.PDFFilter
 
 	for i := 0; i < filterCount && i < maxFilters; i++ {
 		params = append(params,
-			jasper.Parameter{Key: fmt.Sprintf("FilterLabel%d", i+1), Value: filterSummary[i].Label},
-			jasper.Parameter{Key: fmt.Sprintf("FilterValue%d", i+1), Value: filterSummary[i].Value},
+			jasper.Parameter{Key: fmt.Sprintf("FilterLabel%d", i+1), Value: config.Filters[i].Label},
+			jasper.Parameter{Key: fmt.Sprintf("FilterValue%d", i+1), Value: config.Filters[i].Value},
 		)
 	}
 

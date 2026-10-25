@@ -12,6 +12,7 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/jasper"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
 
 	"github.com/sirupsen/logrus"
 	"github.com/xuri/excelize/v2"
@@ -325,7 +326,7 @@ func (srv *Server) exportReport(w http.ResponseWriter, report reportExporter, fo
 			return newInternalServerServiceError(err, "failed to generate PDF config")
 		}
 
-		filterSummary := srv.buildFilterSummary(req, facilityName, residentName)
+		config.Filters = srv.buildFilterSummary(req, facilityName, residentName)
 
 		templateName := ""
 		switch req.Type {
@@ -343,7 +344,7 @@ func (srv *Server) exportReport(w http.ResponseWriter, report reportExporter, fo
 			return newBadRequestServiceError(errors.New("unsupported report type"), "unsupported report type for PDF generation")
 		}
 
-		pdfBytes, err := jasper.GenerateReportPDF(config, filterSummary, templateName)
+		pdfBytes, err := jasper.GenerateReportPDF(templateName, config)
 
 		if err != nil {
 			logrus.WithError(err).Error("Failed to generate PDF with Jasper")
@@ -389,7 +390,7 @@ func summarizeFilterValues(all bool, names []string) string {
 	return b.String()
 }
 
-func (srv *Server) buildFilterSummary(req *models.ReportGenerateRequest, facilityName, residentName string) []models.PDFFilterLine {
+func (srv *Server) buildFilterSummary(req *models.ReportGenerateRequest, facilityName, residentName string) []module.ReportFilter {
 	dateRange := fmt.Sprintf("%s - %s",
 		req.StartDate.Format("January 2, 2006"),
 		req.EndDate.Format("January 2, 2006"))
@@ -420,7 +421,7 @@ func (srv *Server) buildFilterSummary(req *models.ReportGenerateRequest, facilit
 			typeNames = append(typeNames, pt.HumanReadable())
 		}
 
-		return []models.PDFFilterLine{
+		return []module.ReportFilter{
 			{Label: "Facilities", Value: facilityValue},
 			{Label: "Programs", Value: programValue},
 			{Label: "Program Types", Value: summarizeFilterValues(len(req.ProgramTypes) == 0, typeNames)},
@@ -429,67 +430,67 @@ func (srv *Server) buildFilterSummary(req *models.ReportGenerateRequest, facilit
 	}
 
 	if req.Type == models.AttendanceReport {
-		var filters []models.PDFFilterLine
+		var filters []module.ReportFilter
 		classValue := "All classes"
 		if req.CohortID != nil {
 			if class, err := srv.Db.GetCohortByID(int(*req.CohortID)); err == nil && class != nil {
 				classValue = class.ClassName
 			}
 		}
-		filters = append(filters, models.PDFFilterLine{Label: "Class", Value: classValue})
+		filters = append(filters, module.ReportFilter{Label: "Class", Value: classValue})
 
 		residentValue := "All residents"
 		if residentName != "" {
 			residentValue = residentName
 		}
-		filters = append(filters, models.PDFFilterLine{Label: "Resident", Value: residentValue})
+		filters = append(filters, module.ReportFilter{Label: "Resident", Value: residentValue})
 
-		filters = append(filters, models.PDFFilterLine{Label: "Date Range", Value: dateRange})
+		filters = append(filters, module.ReportFilter{Label: "Date Range", Value: dateRange})
 
 		if facilityName != "" {
-			filters = append(filters, models.PDFFilterLine{Label: "Facility", Value: facilityName})
+			filters = append(filters, module.ReportFilter{Label: "Facility", Value: facilityName})
 		}
 		return filters
 	}
 
 	if req.Type == models.ClassRosterReport {
-		var filters []models.PDFFilterLine
+		var filters []module.ReportFilter
 		if req.CohortID != nil {
 			if class, err := srv.Db.GetCohortByID(int(*req.CohortID)); err == nil && class != nil {
-				filters = append(filters, models.PDFFilterLine{Label: "Class", Value: class.ClassName})
+				filters = append(filters, module.ReportFilter{Label: "Class", Value: class.ClassName})
 			}
 		}
-		filters = append(filters, models.PDFFilterLine{
+		filters = append(filters, module.ReportFilter{
 			Label: "Enrollment Statuses",
 			Value: summarizeFilterValues(len(req.EnrollmentStatuses) == 0, req.EnrollmentStatuses),
 		})
 		if facilityName != "" {
-			filters = append(filters, models.PDFFilterLine{Label: "Facility", Value: facilityName})
+			filters = append(filters, module.ReportFilter{Label: "Facility", Value: facilityName})
 		}
 		return filters
 	}
 
 	if req.Type == models.ResidentProfileReport {
 		if residentName != "" {
-			return []models.PDFFilterLine{{Label: "Resident", Value: residentName}}
+			return []module.ReportFilter{{Label: "Resident", Value: residentName}}
 		}
 		return nil
 	}
 
-	var filters []models.PDFFilterLine
+	var filters []module.ReportFilter
 
-	filters = append(filters, models.PDFFilterLine{Label: "Date Range", Value: dateRange})
+	filters = append(filters, module.ReportFilter{Label: "Date Range", Value: dateRange})
 
 	if facilityName != "" {
-		filters = append(filters, models.PDFFilterLine{Label: "Facility", Value: facilityName})
+		filters = append(filters, module.ReportFilter{Label: "Facility", Value: facilityName})
 	}
 
 	if residentName != "" {
-		filters = append(filters, models.PDFFilterLine{Label: "Resident", Value: residentName})
+		filters = append(filters, module.ReportFilter{Label: "Resident", Value: residentName})
 	}
 
 	if req.ClassStatus != nil && *req.ClassStatus != "" && *req.ClassStatus != "All" {
-		filters = append(filters, models.PDFFilterLine{Label: "Class Status", Value: *req.ClassStatus})
+		filters = append(filters, module.ReportFilter{Label: "Class Status", Value: *req.ClassStatus})
 	}
 
 	if len(req.ProgramTypes) > 0 {
@@ -497,7 +498,7 @@ func (srv *Server) buildFilterSummary(req *models.ReportGenerateRequest, facilit
 		for _, pt := range req.ProgramTypes {
 			types = append(types, pt.HumanReadable())
 		}
-		filters = append(filters, models.PDFFilterLine{Label: "Program Types", Value: strings.Join(types, ", ")})
+		filters = append(filters, module.ReportFilter{Label: "Program Types", Value: strings.Join(types, ", ")})
 	}
 
 	if len(req.FundingTypes) > 0 {
@@ -505,7 +506,7 @@ func (srv *Server) buildFilterSummary(req *models.ReportGenerateRequest, facilit
 		for _, ft := range req.FundingTypes {
 			types = append(types, ft.HumanReadable())
 		}
-		filters = append(filters, models.PDFFilterLine{Label: "Funding Types", Value: strings.Join(types, ", ")})
+		filters = append(filters, module.ReportFilter{Label: "Funding Types", Value: strings.Join(types, ", ")})
 	}
 
 	return filters
@@ -553,7 +554,7 @@ func isValidReportFormat(format models.ReportFormat) bool {
 type reportExporter interface {
 	ToCSV() ([][]string, error)
 	ToExcel() (*excelize.File, error)
-	ToPDF() (models.PDFConfig, error)
+	ToPDF() (module.Report, error)
 	Len() int
 }
 
