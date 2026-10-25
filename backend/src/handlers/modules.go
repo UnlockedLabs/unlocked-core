@@ -191,6 +191,25 @@ func (l liveProviders) MappingsChanged(providerID, userID uint) {
 	l.srv.invalidateCanvasProgramCache(providerID, int(userID))
 }
 
+// httpClient sends module requests with srv.Client. It reads srv.Client on
+// each call, like wsNotifier, so a client set after startup is the one used.
+type httpClient struct{ srv *Server }
+
+func (c httpClient) Do(req *http.Request) (*http.Response, error) {
+	return c.srv.Client.Do(req)
+}
+
+// facilityFeatures gives modules core's feature flags for each facility.
+type facilityFeatures struct{ srv *Server }
+
+func (f facilityFeatures) FacilityFeatures(ctx context.Context, facilityID uint) ([]models.FeatureAccess, error) {
+	access, err := database.NewDB(f.srv.Db.WithContext(ctx)).GetFacilityFeatureAccess(facilityID, f.srv.features)
+	if err != nil {
+		return nil, fmt.Errorf("get features for facility %d: %w", facilityID, dbCause(err))
+	}
+	return access, nil
+}
+
 func toModuleUser(u *models.User) module.User {
 	return module.User{
 		ID:         u.ID,
@@ -219,6 +238,8 @@ func (srv *Server) moduleDeps() module.Deps {
 		Notify:        wsNotifier{srv},
 		Users:         moduleUsers{srv},
 		LiveProviders: liveProviders{srv},
+		HTTP:          httpClient{srv},
+		Features:      facilityFeatures{srv},
 	}
 }
 

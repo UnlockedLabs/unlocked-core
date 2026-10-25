@@ -111,6 +111,11 @@ type Deps struct {
 	// Provider Platforms. Only routes get it. It goes away when EN-194 moves
 	// that code into Provider Platforms.
 	LiveProviders LiveProviders
+	// HTTP is core's HTTP client, for calls to services outside Unlocked,
+	// such as an LMS. Only routes get it.
+	HTTP HTTPClient
+	// Features is core's feature flags for each facility. Only routes get it.
+	Features Features
 }
 
 // Notifier sends a message to a user over core's websocket. A user with no
@@ -143,6 +148,19 @@ type Users interface {
 	// Delete removes a user and their links to provider platform accounts,
 	// such as to undo a Create. It doesn't remove their Kratos login.
 	Delete(ctx context.Context, id uint) error
+}
+
+// HTTPClient sends a request with core's HTTP client. *http.Client is one.
+type HTTPClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
+// Features is core's feature flags.
+type Features interface {
+	// FacilityFeatures is the features turned on at a facility: its own
+	// settings, else the statewide ones, leaving out a sub-feature whose
+	// parent is off.
+	FacilityFeatures(ctx context.Context, facilityID uint) ([]features.Access, error)
 }
 
 // LiveProviders is what Provider Platforms needs from the Canvas and Essential
