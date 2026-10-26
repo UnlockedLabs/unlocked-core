@@ -10,15 +10,21 @@ EN-183, the same split `unlocked-core`'s EN-177 plan used with
 
 ## What's blocking this
 
-1. **An ECR repo to pull the chart from.** `chart_release.yml` pushes to
-   `oci://<ecr>/charts/unlocked-core` on release, but that ECR repo doesn't
-   exist yet — confirmed by searching every repo in the `UnlockedLabs` GitHub
-   org; `unlocked-infra`'s Terraform has `aws_ecr_repository` resources for
-   the three image repos (`unlockedv2`, `provider_middleware`, `frontend`)
-   but none for charts. The user (CK-7vn) said they can create this
-   themselves — do it before trying step 1 below, or the `helm dependency
-   build` / `helm pull` in every step after will fail with "repository not
-   found." **Still the only real blocker as of 2026-10-26.**
+~~1. An ECR repo to pull the chart from~~ — done 2026-10-26.
+   `charts/unlocked-core` exists in ECR
+   (`239442854891.dkr.ecr.us-west-2.amazonaws.com/charts/unlocked-core`,
+   confirmed with Rich: core is the first chart this account has ever
+   published, so the naming (`charts/<chart-name>`, one repo per chart, not
+   one shared `charts` repo) is the pattern future product charts — tutor's
+   EN-203 next — will copy). `unlocked-infra`'s Terraform is not what
+   manages the real ECR repos in this account (verified directly: the real
+   `frontend`/`unlockedv2`/`provider_middleware` repos predate that repo's
+   last commit by a year, have no tags, and don't match its naming scheme —
+   they were created by hand), so this one was created the same way, by
+   hand, for consistency with how every other repo here actually exists.
+   Also confirmed: the `GithubActionsBuildPushEcr` role `chart_release.yml`
+   assumes already has push access (wildcard `repository/*` policy) — no
+   IAM change was needed.
 
 ~~2. The migration-hook Job and scheduler aren't in `unlocked-core`'s chart yet~~
    — done. EN-177 merged on both sides 2026-10-22
@@ -86,8 +92,10 @@ EN-183, the same split `unlocked-core`'s EN-177 plan used with
    dependencies:
      - name: unlocked-core
        version: "X.Y.Z"  # pinned per release, same as nats/kratos
-       repository: "oci://<ecr>/charts"
+       repository: "oci://239442854891.dkr.ecr.us-west-2.amazonaws.com/charts"
    ```
+   (Helm appends the dependency's own `name` to that path, resolving to the
+   same `charts/unlocked-core` repo `chart_release.yml` pushes to.)
 
 4. **Verify output is unchanged for staging**: `scripts/render.sh staging`
    before and after, diffed (the repo already has `scripts/manifest-diff.py`
@@ -98,7 +106,5 @@ EN-183, the same split `unlocked-core`'s EN-177 plan used with
 
 ## Not part of this plan
 
-- Creating the ECR chart repo itself — the user is handling that directly,
-  not through this plan.
 - Any change to `unlocked-core`'s chart beyond what EN-177/EN-191 add — this
   plan only consumes what that chart publishes, it doesn't design it further.

@@ -57,16 +57,23 @@ alongside its Job — that's a workaround for staging's non-Helm restart path
 specific to that repo (gone once EN-184 lands there), not a concern of this
 chart.
 
+## Publishing
+
+`charts/unlocked-core` exists in ECR (`239442854891.dkr.ecr.us-west-2.amazonaws.com/charts/unlocked-core`,
+created 2026-10-26 — this is the first chart ever published to this account's
+ECR; confirmed with Rich, nothing else publishes one today). The
+`GithubActionsBuildPushEcr` role `chart_release.yml` assumes already has
+push access — its policy is a wildcard on `repository/*`, not scoped to
+specific repos, so no IAM change was needed for this new one.
+
 ## Known gap: wiring this into unlocked-platform
 
 This chart is independently `helm pull`/`helm template`-able today, but
-`unlocked-platform` doesn't consume it yet. Two things still need a design
+`unlocked-platform` doesn't consume it yet. One thing still needs a design
 decision before that happens — see
 `docs/plans/2026-10-20-en-183-platform-chart-dependency.md`:
-
-1. How per-site values (`unlocked-platform/sites/<site>.yaml`) map onto this
-   chart's flatter values schema when it's pulled in as a chart dependency.
-2. The ECR chart repo this gets published to doesn't exist yet.
+how per-site values (`unlocked-platform/sites/<site>.yaml`) map onto this
+chart's flatter values schema when it's pulled in as a chart dependency.
 
 ## Local verification
 
