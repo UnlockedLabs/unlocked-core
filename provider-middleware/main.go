@@ -6,9 +6,6 @@ import (
 	"net/http"
 	"os"
 	"sync"
-	"time"
-
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms"
 
 	"github.com/joho/godotenv"
 	"github.com/nats-io/nats.go"
@@ -16,18 +13,6 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
-
-type ProviderServiceInterface interface {
-	GetUsers(db *gorm.DB) ([]providerplatforms.ImportUser, error)
-
-	ImportCourses(db *gorm.DB) error
-
-	ImportMilestones(coursePair map[string]any, mappings []map[string]any, db *gorm.DB, lastRun time.Time) error
-
-	ImportActivityForCourse(coursePair map[string]any, db *gorm.DB) error
-
-	GetJobParams() map[string]interface{}
-}
 
 /**
 * Handler struct that will be passed to our HTTP server handlers

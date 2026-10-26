@@ -1,4 +1,4 @@
-package main
+package providerplatforms
 
 import (
 	"encoding/base64"
@@ -6,9 +6,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms"
 
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -42,8 +39,8 @@ func newKolibriDB(t *testing.T) *gorm.DB {
 
 func newTestKolibriService(t *testing.T, db *gorm.DB) (*KolibriService, *gorm.DB) {
 	t.Helper()
-	p := createProvider(t, db, providerplatforms.ProviderPlatform{
-		Type:      providerplatforms.Kolibri,
+	p := createProvider(t, db, ProviderPlatform{
+		Type:      Kolibri,
 		Name:      "Kolibri",
 		AccountID: "facility-1",
 		BaseUrl:   "http://kolibri.local",
@@ -64,7 +61,7 @@ func TestKolibriGetUsers(t *testing.T) {
 
 	users, err := ks.GetUsers(db)
 	require.NoError(t, err)
-	assert.Equal(t, []providerplatforms.ImportUser{
+	assert.Equal(t, []ImportUser{
 		{NameFirst: "Ada", NameLast: "Lovelace", Username: "ada", Email: "ada@unlocked.v2", ExternalUserID: "u1"},
 		{NameFirst: "Plato", NameLast: "", Username: "plato", Email: "plato@unlocked.v2", ExternalUserID: "u2"},
 	}, users)
@@ -85,30 +82,30 @@ func TestKolibriImportCourses(t *testing.T) {
 	require.NoError(t, kdb.Exec(`INSERT INTO lessons_lesson VALUES
 		('l1', 'cccc-3333', 'true', ''), ('l2', 'cccc-3333', 'true', ''), ('l3', 'dddd-4444', 'true', '')`).Error)
 	require.NoError(t, kdb.Exec(`INSERT INTO exams_exam VALUES ('x1', 'cccc-3333')`).Error)
-	require.NoError(t, db.Create(&providerplatforms.Course{ProviderPlatformID: ks.ProviderPlatformID, ExternalID: "bbbb-2222", Name: "Old channel", TotalProgressMilestones: 1}).Error)
-	require.NoError(t, db.Create(&providerplatforms.Course{ProviderPlatformID: ks.ProviderPlatformID, ExternalID: "dddd-4444", Name: "Class B", TotalProgressMilestones: 7}).Error)
+	require.NoError(t, db.Create(&Course{ProviderPlatformID: ks.ProviderPlatformID, ExternalID: "bbbb-2222", Name: "Old channel", TotalProgressMilestones: 1}).Error)
+	require.NoError(t, db.Create(&Course{ProviderPlatformID: ks.ProviderPlatformID, ExternalID: "dddd-4444", Name: "Class B", TotalProgressMilestones: 7}).Error)
 
 	require.NoError(t, ks.ImportCourses(db))
 
-	var courses []providerplatforms.Course
+	var courses []Course
 	require.NoError(t, db.Order("external_id").Find(&courses).Error)
 	require.Len(t, courses, 4)
 	khan, old, classA, classB := courses[0], courses[1], courses[2], courses[3]
 
 	assert.Equal(t, "Khan", khan.Name)
-	assert.Equal(t, providerplatforms.CourseType("open_content"), khan.Type)
-	assert.Equal(t, models.StringPtr("completion"), khan.OutcomeTypes)
-	assert.Equal(t, models.StringPtr(strings.Repeat("d", 255)), khan.Description)
-	assert.Equal(t, models.StringPtr("/api/photos/aaaa-1111.png"), khan.ThumbnailURL)
-	assert.Equal(t, models.StringPtr("http://kolibri.local/en/learn/%23/topics/t/aaaa1111/folders%3Flast=HOME"), khan.ExternalURL)
+	assert.Equal(t, CourseType("open_content"), khan.Type)
+	assert.Equal(t, stringPtr("completion"), khan.OutcomeTypes)
+	assert.Equal(t, stringPtr(strings.Repeat("d", 255)), khan.Description)
+	assert.Equal(t, stringPtr("/api/photos/aaaa-1111.png"), khan.ThumbnailURL)
+	assert.Equal(t, stringPtr("http://kolibri.local/en/learn/%23/topics/t/aaaa1111/folders%3Flast=HOME"), khan.ExternalURL)
 	assert.Equal(t, uint(40), khan.TotalProgressMilestones)
 
 	assert.Equal(t, uint(1), old.TotalProgressMilestones, "an existing channel isn't updated")
 
 	assert.Equal(t, "Class A", classA.Name)
-	assert.Equal(t, models.StringPtr("Kolibri managed course"), classA.Description)
+	assert.Equal(t, stringPtr("Kolibri managed course"), classA.Description)
 	assert.Nil(t, classA.ThumbnailURL)
-	assert.Equal(t, models.StringPtr("http://kolibri.local/en/learn/%23/home/classes/cccc3333"), classA.ExternalURL)
+	assert.Equal(t, stringPtr("http://kolibri.local/en/learn/%23/home/classes/cccc3333"), classA.ExternalURL)
 	assert.Equal(t, uint(3), classA.TotalProgressMilestones, "two lessons and one exam")
 
 	assert.Equal(t, uint(1), classB.TotalProgressMilestones, "an existing class gets its new total")
@@ -136,7 +133,7 @@ func TestKolibriEnrollmentMilestones(t *testing.T) {
 	require.NoError(t, importEnrollmentMilestones(ks, po, db))
 
 	var enrolled []uint
-	require.NoError(t, db.Model(&providerplatforms.UserEnrollment{}).Pluck("user_id", &enrolled).Error)
+	require.NoError(t, db.Model(&UserEnrollment{}).Pluck("user_id", &enrolled).Error)
 	assert.Equal(t, []uint{101}, enrolled)
 }
 
@@ -155,7 +152,7 @@ func TestKolibriActivity(t *testing.T) {
 		('a6', 'u8', '4', '', 'c', '1', 'video', 'ch'),
 		('a7', 'u1', '5', '', 'c', '1', 'video', 'other')`).Error)
 	createResident(t, db, ks.ProviderPlatformID, 101, "student", "u1")
-	other := createProvider(t, db, providerplatforms.ProviderPlatform{Type: providerplatforms.Kolibri, Name: "other"})
+	other := createProvider(t, db, ProviderPlatform{Type: Kolibri, Name: "other"})
 	createResident(t, db, other.ID, 109, "student", "u9")
 	require.NoError(t, db.Exec(`INSERT INTO activities (course_id, user_id, type, total_time, time_delta, external_id) VALUES (5, 101, 'content_interaction', 1, 1, 'a1')`).Error)
 	calls := recordCalls(t, db)
@@ -163,9 +160,9 @@ func TestKolibriActivity(t *testing.T) {
 	require.NoError(t, ks.ImportActivityForCourse(map[string]any{"course_id": int64(5), "external_course_id": "ch"}, db))
 
 	assert.Equal(t, []procedureCall{
-		{"insert_daily_activity_kolibri", []any{uint(109), 5, providerplatforms.ContentInteraction, 1.0, "a3"}},
-		{"insert_daily_activity_kolibri", []any{uint(101), 5, providerplatforms.CourseInteraction, 3.0, "a4"}},
-		{"insert_daily_activity_kolibri", []any{uint(101), 5, providerplatforms.ContentInteraction, 4.0, "a5"}},
+		{"insert_daily_activity_kolibri", []any{uint(109), 5, ContentInteraction, 1.0, "a3"}},
+		{"insert_daily_activity_kolibri", []any{uint(101), 5, CourseInteraction, 3.0, "a4"}},
+		{"insert_daily_activity_kolibri", []any{uint(101), 5, ContentInteraction, 4.0, "a5"}},
 	}, *calls)
 }
 

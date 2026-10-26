@@ -58,6 +58,11 @@ func (m jobModule) RegisterJobs(s module.Scheduler, deps module.Deps) {
 func TestStart(t *testing.T) {
 	t.Setenv("MIDDLEWARE_CRON_SCHEDULE", "0 22 * * *")
 	db := database.InitDB(context.Background(), true)
+	// An LMS provider's jobs are Provider Platforms' own (EN-197), so core
+	// doesn't schedule them.
+	if err := db.Exec(`INSERT INTO provider_platforms (type, name, state) VALUES ('canvas_cloud', 'Canvas', 'enabled')`).Error; err != nil {
+		t.Fatal(err)
+	}
 
 	var got module.Deps
 	// dev skips the run-everything-at-start, which needs NATS.
@@ -69,8 +74,8 @@ func TestStart(t *testing.T) {
 		t.Errorf("the module got DB %p, want the scheduler's %p", got.DB, db.DB)
 	}
 
-	// The test database has no LMS providers, so core schedules only the
-	// class-activation job; the module adds its cron and at-start jobs.
+	// Core schedules only the class-activation job; the module adds its cron
+	// and at-start jobs.
 	var names []string
 	if err := db.Model(&models.CronJob{}).Pluck("name", &names).Error; err != nil {
 		t.Fatal(err)

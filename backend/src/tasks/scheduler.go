@@ -1,11 +1,9 @@
 package tasks
 
 import (
-	"context"
 	"encoding/json"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 
 	"github.com/nats-io/nats.go"
 	log "github.com/sirupsen/logrus"
@@ -35,13 +33,10 @@ func (s *Scheduler) runTask(task *models.RunnableTask) {
 	log.Info("Published job: ", jobType)
 }
 
+// generateTasks builds core's tasks. The LMS jobs are Provider Platforms'
+// own since EN-197 (its RegisterJobs).
 func (s *Scheduler) generateTasks() ([]models.RunnableTask, error) {
 	allTasks := make([]models.RunnableTask, 0, 10)
-	if providerTasks, err := s.generateProviderTasks(); err == nil {
-		allTasks = append(allTasks, providerTasks...)
-	} else {
-		log.Println("Failed to generate provider tasks")
-	}
 	if systemTasks, err := s.generateSystemTasks(); err == nil {
 		allTasks = append(allTasks, systemTasks...)
 	} else {
@@ -87,57 +82,6 @@ func (s *Scheduler) intoSystemTask(cj *models.CronJob, task *models.RunnableTask
 	}
 	task.Job = cj
 	task.Prepare(nil)
-	return nil
-}
-
-func (s *Scheduler) generateProviderTasks() ([]models.RunnableTask, error) {
-	providers, err := registry.ProviderPlatforms(s.db).ActiveProviders(context.Background())
-	if err != nil {
-		log.Errorln("failed to fetch all provider platforms")
-		return nil, err
-	}
-	log.Infof("Found %d active providers", len(providers))
-	tasksToRun := make([]models.RunnableTask, 0)
-	for _, provider := range providers {
-		// at some point these may differ per provider, for now they all run the default jobs
-		for _, jobType := range models.AllDefaultProviderJobs {
-			log.WithFields(log.Fields{"job": jobType, "provider": provider.Name}).Info("Job added for provider")
-			created, err := s.createIfNotExists(jobType)
-			if err != nil {
-				log.Errorf("failed to create job: %v", err)
-				return nil, err
-			}
-			newTask := models.RunnableTask{JobID: created.ID, ProviderPlatformID: &provider.ID, Status: models.StatusPending}
-			err = s.intoTask(created, &provider.ID, &newTask)
-			if err != nil {
-				log.Errorf("failed to create task: %v", err)
-				return nil, err
-			}
-			newTask.ProviderType = provider.Type
-			tasksToRun = append(tasksToRun, newTask)
-		}
-	}
-	log.Infof("Generated %d total tasks for %d providers", len(tasksToRun), len(providers))
-	return tasksToRun, nil
-}
-
-func (s *Scheduler) intoTask(cj *models.CronJob, provId *uint, task *models.RunnableTask) error {
-	if task.ID == 0 {
-		tx := s.db.Model(&models.RunnableTask{}).Where("job_id = ?", cj.ID)
-		if cj.Category == models.ProviderPlatformJob {
-			tx = tx.Where("provider_platform_id = ?", provId)
-		}
-		if err := tx.FirstOrCreate(&task).Error; err != nil {
-			log.Errorf("failed to create task for job: %v. error: %v", cj.Name, err)
-			return err
-		}
-		if err := s.db.Model(&models.RunnableTask{}).Preload("Job").First(&task, task.ID).Error; err != nil {
-			log.Errorf("failed to reload task for job: %v. error: %v", cj.Name, err)
-			return err
-		}
-	}
-	task.Job = cj
-	task.Prepare(provId)
 	return nil
 }
 

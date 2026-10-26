@@ -5,10 +5,12 @@
 package providerplatforms
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"io/fs"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
@@ -26,6 +28,7 @@ type Module struct{}
 var (
 	_ module.Module     = Module{}
 	_ module.TestModels = Module{}
+	_ module.Worker     = Module{}
 )
 
 func (Module) Name() string { return "providerplatforms" }
@@ -60,9 +63,19 @@ func (Module) Register(r module.Router, deps module.Deps) {
 	}
 }
 
-// RegisterJobs does nothing yet: the provider jobs run from core's scheduler
-// and provider-middleware until EN-197.
-func (Module) RegisterJobs(module.Scheduler, module.Deps) {}
+// RegisterJobs schedules each active provider's LMS jobs for the worker
+// (jobs.go).
+func (Module) RegisterJobs(s module.Scheduler, deps module.Deps) {
+	p := &jobPublisher{store: &store{db: deps.DB}, publish: deps.NATS.PublishMsg}
+	scheduleJobs(s, p, os.Getenv("APP_ENV") == "dev")
+}
+
+// Work runs the LMS jobs and serves the provider user lists until ctx is
+// canceled (worker.go).
+func (Module) Work(ctx context.Context, deps module.Deps) error {
+	w := &worker{db: deps.DB}
+	return w.run(ctx, deps.NATS)
+}
 
 func (Module) Migrations() fs.FS { return migrations }
 
@@ -94,5 +107,7 @@ func (Module) TestModels() []any {
 		&OidcClient{},
 		&UserEnrollment{},
 		&UserCourseActivityTotals{},
+		&cronJob{},
+		&runnableTask{},
 	}
 }

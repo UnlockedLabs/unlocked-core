@@ -5,8 +5,6 @@ import (
 	"slices"
 	"time"
 
-	ppapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api"
-
 	"github.com/UnlockedLabs/unlocked-contracts/jobs"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -57,10 +55,6 @@ type RunnableTask struct {
 	ProviderPlatformID    *uint          `json:"provider_platform_id"`
 	OpenContentProviderID *uint          `json:"open_content_provider_id"`
 	Status                JobStatus      `json:"status"`
-
-	// ProviderType is the provider platform's type, which sets when its jobs
-	// run. The scheduler fills it in; it isn't stored.
-	ProviderType ppapi.ProviderType `gorm:"-" json:"-"`
 
 	Job *CronJob `gorm:"foreignKey:JobID" json:"-"`
 }

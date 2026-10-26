@@ -1,15 +1,12 @@
 package tasks
 
 import (
-	"fmt"
 	"os"
 	"strconv"
 	"time"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
-	ppapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api"
 
 	"github.com/go-co-op/gocron/v2"
 	"github.com/nats-io/nats.go"
@@ -35,20 +32,15 @@ func InitScheduling(dev bool, nats *nats.Conn, db *gorm.DB) *Scheduler {
 		log.Fatalf("failed to generate tasks: %v", err)
 		return nil
 	}
-	hour := 1
 	for _, task := range tasks {
 		if task.Job == nil {
 			log.Errorf("Task %v has no job", task.ID)
 			continue
 		}
-		_, err := runner.NewJob(gocron.CronJob(getCronSchedule(&task, hour), false), gocron.NewTask(runner.runTask, &task))
+		_, err := runner.NewJob(gocron.CronJob(task.Job.Schedule, false), gocron.NewTask(runner.runTask, &task))
 		if err != nil {
 			log.Errorf("Failed to create job: %v", err)
 			continue
-		}
-		hour++
-		if hour > 23 {
-			hour = 1
 		}
 	}
 	if !dev {
@@ -119,18 +111,7 @@ func (s *Scheduler) execute() {
 	}
 	log.Infof("Generated %v tasks", tasks)
 	for _, task := range tasks {
-		if task.ProviderType == ppapi.Brightspace {
-			continue
-		}
 		log.Infof("Running task: %v", task.Job.Name)
 		s.runTask(&task)
-	}
-}
-
-func getCronSchedule(task *models.RunnableTask, hour int) string {
-	if task.ProviderType == ppapi.Brightspace {
-		return fmt.Sprintf("0 %d * * 4", hour)
-	} else {
-		return task.Job.Schedule
 	}
 }

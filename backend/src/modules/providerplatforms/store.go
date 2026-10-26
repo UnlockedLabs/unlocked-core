@@ -541,3 +541,30 @@ func (s *store) getUserCourses(qCtx *queryContext) (UserCoursesInfo, error) {
 	courseInfo.Courses = courses
 	return courseInfo, nil
 }
+
+// LMS job bookkeeping
+
+// getOrCreateTask returns the provider's runnable_tasks row for job's
+// cron_jobs row, creating either one the first time. cj is the cron_jobs row
+// to create; an existing row with its name is used as it is.
+func (s *store) getOrCreateTask(ctx context.Context, cj cronJob, providerID uint) (*runnableTask, error) {
+	var job cronJob
+	if err := s.db.WithContext(ctx).Where("name = ?", cj.Name).Attrs(cj).FirstOrCreate(&job).Error; err != nil {
+		return nil, newGetRecordsDBError(err, "cron_jobs")
+	}
+	var task runnableTask
+	if err := s.db.WithContext(ctx).
+		Where("job_id = ? AND provider_platform_id = ?", job.ID, providerID).
+		Attrs(runnableTask{JobID: job.ID, ProviderPlatformID: &providerID, Status: taskPending}).
+		FirstOrCreate(&task).Error; err != nil {
+		return nil, newGetRecordsDBError(err, "runnable_tasks")
+	}
+	return &task, nil
+}
+
+func (s *store) setTaskStatus(ctx context.Context, taskID uint, status taskStatus) error {
+	if err := s.db.WithContext(ctx).Model(&runnableTask{}).Where("id = ?", taskID).Update("status", status).Error; err != nil {
+		return newUpdateDBError(err, "runnable_tasks")
+	}
+	return nil
+}

@@ -1,4 +1,4 @@
-package main
+package providerplatforms
 
 import (
 	"encoding/json"
@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms"
 
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -40,7 +38,7 @@ type BrightspaceService struct {
 	CsvFileMap         map[string]string
 }
 
-func newBrightspaceService(provider *providerplatforms.ProviderPlatform, db *gorm.DB, params map[string]any) (*BrightspaceService, error) {
+func newBrightspaceService(provider *ProviderPlatform, db *gorm.DB, params map[string]any) (*BrightspaceService, error) {
 	keysSplit := strings.Split(provider.AccessKey, ";")
 	if len(keysSplit) < 2 {
 		return nil, errors.New("unable to find refresh token, unable to intialize BrightspaceService")
@@ -55,7 +53,7 @@ func newBrightspaceService(provider *providerplatforms.ProviderPlatform, db *gor
 		ClientID:           provider.AccountID,
 		ClientSecret:       keysSplit[0],
 		RefreshToken:       keysSplit[1],
-		Scope:              providerplatforms.BrightspaceScopes,
+		Scope:              BrightspaceScopes,
 		JobParams:          params,
 	}
 	data := url.Values{}
@@ -141,7 +139,7 @@ func (srv *BrightspaceService) getBrightspaceBulkData(pluginName, zipFileName st
 		return "", err
 	}
 	log.Infof("successfully retrieved plugin id %s for downloading csv file for %s", pluginId, pluginName)
-	downloadUrl := fmt.Sprintf(DataDownloadEnpoint, providerplatforms.BrightspaceApiVersion, pluginId)
+	downloadUrl := fmt.Sprintf(DataDownloadEnpoint, BrightspaceApiVersion, pluginId)
 	csvFile, err := srv.downloadAndUnzipFile(zipFileName, downloadUrl)
 	if err != nil {
 		log.Errorf("error attempting to download zip file for %s using plugin id %s, error is: %v", pluginName, pluginId, err)
@@ -151,21 +149,21 @@ func (srv *BrightspaceService) getBrightspaceBulkData(pluginName, zipFileName st
 	return csvFile, err
 }
 
-func (srv *BrightspaceService) GetUsers(db *gorm.DB) ([]providerplatforms.ImportUser, error) {
+func (srv *BrightspaceService) GetUsers(db *gorm.DB) ([]ImportUser, error) {
 	csvFile, err := srv.getBrightspaceBulkData("Users", "users/Users.zip")
 	if err != nil {
 		log.Errorf("error attempting to get bulk data for Brightspace courses, error is: %v", err)
 		return nil, err
 	}
 	bsUsers := []BrightspaceUser{}
-	importUsers := []providerplatforms.ImportUser{}
+	importUsers := []ImportUser{}
 	readCSV(&bsUsers, csvFile)
 	cleanUpFiles(csvFile)
 	fields := log.Fields{"provider": srv.ProviderPlatformID, "Function": "GetUsers", "csvFile": csvFile}
 	log.WithFields(fields).Info("importing users from provider using csv file")
 	for _, bsUser := range bsUsers {
 		if strings.ToUpper(bsUser.IsActive) == "TRUE" {
-			if db.Where("provider_platform_id = ? AND external_user_id = ?", srv.ProviderPlatformID, bsUser.UserId).First(&providerplatforms.ProviderUserMapping{}).RowsAffected > 0 {
+			if db.Where("provider_platform_id = ? AND external_user_id = ?", srv.ProviderPlatformID, bsUser.UserId).First(&ProviderUserMapping{}).RowsAffected > 0 {
 				continue
 			}
 			user := srv.IntoImportUser(bsUser)
@@ -205,7 +203,7 @@ func (srv *BrightspaceService) ImportCourses(db *gorm.DB) error {
 	for _, bsCourse := range bsCourses {
 		if strings.ToUpper(bsCourse.IsActive) == "TRUE" && strings.ToUpper(bsCourse.IsDeleted) == "FALSE" && bsCourse.Type == "Course Offering" && totalProgressMilestonesMap[bsCourse.OrgUnitId] > 0 {
 			bsCourse.TotalContentCount = totalProgressMilestonesMap[bsCourse.OrgUnitId]
-			if db.Where("provider_platform_id = ? AND external_id = ?", srv.ProviderPlatformID, bsCourse.OrgUnitId).First(&providerplatforms.Course{}).RowsAffected > 0 {
+			if db.Where("provider_platform_id = ? AND external_id = ?", srv.ProviderPlatformID, bsCourse.OrgUnitId).First(&Course{}).RowsAffected > 0 {
 				srv.updateTotalProgress(db, bsCourse.TotalContentCount, bsCourse.OrgUnitId)
 				continue
 			}
@@ -221,8 +219,8 @@ func (srv *BrightspaceService) ImportCourses(db *gorm.DB) error {
 }
 
 func (srv *BrightspaceService) updateTotalProgress(db *gorm.DB, totalProgressMilestones int, externalId string) {
-	if db.Where("provider_platform_id = ? AND external_id = ? AND total_progress_milestones = ?", srv.ProviderPlatformID, externalId, totalProgressMilestones).First(&providerplatforms.Course{}).RowsAffected == 0 {
-		if err := db.Model(&providerplatforms.Course{}).Where("provider_platform_id = ? AND external_id = ?", srv.ProviderPlatformID, externalId).Update("total_progress_milestones", totalProgressMilestones).Error; err != nil {
+	if db.Where("provider_platform_id = ? AND external_id = ? AND total_progress_milestones = ?", srv.ProviderPlatformID, externalId, totalProgressMilestones).First(&Course{}).RowsAffected == 0 {
+		if err := db.Model(&Course{}).Where("provider_platform_id = ? AND external_id = ?", srv.ProviderPlatformID, externalId).Update("total_progress_milestones", totalProgressMilestones).Error; err != nil {
 			log.Errorln("error updating course total_progress_milestones in db, error is: ", err) //just logging the error if it occurs, logic will continue
 		}
 	}
@@ -297,8 +295,8 @@ func importBSEnrollmentMilestones(srv *BrightspaceService, po milestonePO, db *g
 	for _, bsEnrollment := range filteredBSEnrollments {
 		id = bsEnrollment.getCompositeKeyId()
 		userId = usersMap[bsEnrollment.UserId]
-		if db.Model(&providerplatforms.UserEnrollment{}).First(&providerplatforms.UserEnrollment{}, "user_id = ? AND course_id = ? AND external_id = ?", userId, courseId, id).RowsAffected == 0 {
-			if err := db.Create(&providerplatforms.UserEnrollment{UserID: userId, CourseID: uint(courseId)}).Error; err != nil {
+		if db.Model(&UserEnrollment{}).First(&UserEnrollment{}, "user_id = ? AND course_id = ? AND external_id = ?", userId, courseId, id).RowsAffected == 0 {
+			if err := db.Create(&UserEnrollment{UserID: userId, CourseID: uint(courseId)}).Error; err != nil {
 				log.WithFields(log.Fields{"userId": userId, "course_id": courseId, "error": err}).Error("Failed to create enrollment")
 				continue
 			}
@@ -346,27 +344,27 @@ func importBSAssignmentSubmissionMilestones(srv *BrightspaceService, po mileston
 		userId = usersMap[bsAssignment.UserId]
 		switch strings.ToUpper(bsAssignment.IsGraded) {
 		case "TRUE":
-			if db.Where("user_id = ? AND course_id = ? AND external_id = ?", userId, courseId, gradedId).First(&providerplatforms.Milestone{}).RowsAffected > 0 {
+			if db.Where("user_id = ? AND course_id = ? AND external_id = ?", userId, courseId, gradedId).First(&Milestone{}).RowsAffected > 0 {
 				addAssignmentMilestoneIfNotExists(db, userId, courseId, bsAssignment)
 				continue
 			}
 		case "FALSE":
-			if db.Where("user_id = ? AND course_id = ? AND external_id = ?", userId, courseId, id).First(&providerplatforms.Milestone{}).RowsAffected > 0 {
+			if db.Where("user_id = ? AND course_id = ? AND external_id = ?", userId, courseId, id).First(&Milestone{}).RowsAffected > 0 {
 				continue
 			}
 		}
-		milestone := providerplatforms.Milestone{
+		milestone := Milestone{
 			UserID:      userId,
 			CourseID:    courseId,
 			IsCompleted: true, //check
 		}
 		switch strings.ToUpper(bsAssignment.IsGraded) {
 		case "TRUE":
-			milestone.Type = providerplatforms.GradeReceived
+			milestone.Type = GradeReceived
 			milestone.ExternalID = gradedId
 
 		case "FALSE":
-			milestone.Type = providerplatforms.AssignmentSubmission
+			milestone.Type = AssignmentSubmission
 			milestone.ExternalID = id
 		}
 		if err = db.Create(&milestone).Error; err != nil {
@@ -416,26 +414,26 @@ func importBSQuizSubmissionMilestones(srv *BrightspaceService, po milestonePO, d
 		userId = usersMap[bsQuiz.UserId]
 		switch strings.ToUpper(bsQuiz.IsGraded) {
 		case "TRUE":
-			if db.Where("user_id = ? AND course_id = ? AND external_id = ?", userId, courseId, gradedId).First(&providerplatforms.Milestone{}).RowsAffected > 0 {
+			if db.Where("user_id = ? AND course_id = ? AND external_id = ?", userId, courseId, gradedId).First(&Milestone{}).RowsAffected > 0 {
 				addQuizMilestoneIfNotExists(db, userId, courseId, bsQuiz)
 				continue
 			}
 		case "FALSE":
-			if db.Where("user_id = ? AND course_id = ? AND external_id = ?", userId, courseId, id).First(&providerplatforms.Milestone{}).RowsAffected > 0 {
+			if db.Where("user_id = ? AND course_id = ? AND external_id = ?", userId, courseId, id).First(&Milestone{}).RowsAffected > 0 {
 				continue
 			}
 		}
-		milestone := providerplatforms.Milestone{
+		milestone := Milestone{
 			UserID:      userId,
 			CourseID:    courseId,
 			IsCompleted: true,
 		}
 		switch strings.ToUpper(bsQuiz.IsGraded) {
 		case "TRUE":
-			milestone.Type = providerplatforms.GradeReceived
+			milestone.Type = GradeReceived
 			milestone.ExternalID = gradedId
 		case "FALSE":
-			milestone.Type = providerplatforms.QuizSubmission
+			milestone.Type = QuizSubmission
 			milestone.ExternalID = id
 		}
 		if err = db.Create(&milestone).Error; err != nil {
@@ -447,12 +445,12 @@ func importBSQuizSubmissionMilestones(srv *BrightspaceService, po milestonePO, d
 }
 
 func addAssignmentMilestoneIfNotExists(db *gorm.DB, userId, courseId uint, bsAssignment BrightspaceAssignmentSubmission) {
-	if db.Where("user_id = ? AND course_id = ? AND external_id = ?", userId, courseId, bsAssignment.getCompositeKeyId()).First(&providerplatforms.Milestone{}).RowsAffected == 0 {
-		milestone := providerplatforms.Milestone{
+	if db.Where("user_id = ? AND course_id = ? AND external_id = ?", userId, courseId, bsAssignment.getCompositeKeyId()).First(&Milestone{}).RowsAffected == 0 {
+		milestone := Milestone{
 			UserID:      userId,
 			CourseID:    courseId,
 			IsCompleted: true,
-			Type:        providerplatforms.AssignmentSubmission,
+			Type:        AssignmentSubmission,
 			ExternalID:  bsAssignment.getCompositeKeyId(),
 		}
 		if err := db.Create(&milestone).Error; err != nil {
@@ -462,12 +460,12 @@ func addAssignmentMilestoneIfNotExists(db *gorm.DB, userId, courseId uint, bsAss
 }
 
 func addQuizMilestoneIfNotExists(db *gorm.DB, userId, courseId uint, bsQuiz BrightspaceQuizSubmission) {
-	if db.Where("user_id = ? AND course_id = ? AND external_id = ?", userId, courseId, bsQuiz.AttemptId).First(&providerplatforms.Milestone{}).RowsAffected == 0 {
-		milestone := providerplatforms.Milestone{
+	if db.Where("user_id = ? AND course_id = ? AND external_id = ?", userId, courseId, bsQuiz.AttemptId).First(&Milestone{}).RowsAffected == 0 {
+		milestone := Milestone{
 			UserID:      userId,
 			CourseID:    courseId,
 			IsCompleted: true,
-			Type:        providerplatforms.QuizSubmission,
+			Type:        QuizSubmission,
 			ExternalID:  bsQuiz.AttemptId,
 		}
 		if err := db.Create(&milestone).Error; err != nil {
@@ -517,7 +515,7 @@ func (srv *BrightspaceService) ImportActivityForCourse(course map[string]any, db
 			}
 			// TODO: check if there is a timestamp we can use to get the exact time /date of the activity being entered
 			if err = db.Exec("CALL insert_daily_activity_brightspace(?, ?, ?, ?, ?, ?)",
-				userId, courseId, providerplatforms.ContentInteraction, bsDto.TotalTime, bsDto.ExternalId, time.Now()).Error; err != nil {
+				userId, courseId, ContentInteraction, bsDto.TotalTime, bsDto.ExternalId, time.Now()).Error; err != nil {
 				log.WithFields(log.Fields{"user_id": userId, "course_id": courseId, "error": err}).Error("Failed to create activity using brightspace data")
 				continue
 			}
@@ -541,7 +539,7 @@ func (srv *BrightspaceService) getUsersActivity(db *gorm.DB, externalCourseId, c
 	readCSV(&bsContentUserProgress, userProgressCsvFile)
 	for _, contentUser := range bsContentUserProgress { //separate by user
 		var userId uint //filter out the users
-		if err := db.Model(&providerplatforms.ProviderUserMapping{}).Select("user_id").First(&userId, "external_user_id = ? and provider_platform_id = ?", contentUser.UserId, srv.ProviderPlatformID).Error; err != nil {
+		if err := db.Model(&ProviderUserMapping{}).Select("user_id").First(&userId, "external_user_id = ? and provider_platform_id = ?", contentUser.UserId, srv.ProviderPlatformID).Error; err != nil {
 			log.Errorln("error finding brightspace user by external id in ImportActivityForCourse")
 			continue
 		}

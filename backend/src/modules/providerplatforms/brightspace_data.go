@@ -1,4 +1,4 @@
-package main
+package providerplatforms
 
 import (
 	"archive/zip"
@@ -12,15 +12,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms"
-
 	"github.com/gocarina/gocsv"
 	"github.com/microcosm-cc/bluemonday"
 	log "github.com/sirupsen/logrus"
 )
 
-// REMOVE ME
 type DataSetPlugin struct {
 	PluginId     string  `json:"PluginId"`
 	Name         string  `json:"Name"`
@@ -150,8 +146,8 @@ type BrightspaceUserContentDto struct {
 	ExternalId        string
 }
 
-func (srv *BrightspaceService) IntoImportUser(bsUser BrightspaceUser) *providerplatforms.ImportUser {
-	user := providerplatforms.ImportUser{
+func (srv *BrightspaceService) IntoImportUser(bsUser BrightspaceUser) *ImportUser {
+	user := ImportUser{
 		Username:       bsUser.UserName,
 		NameFirst:      bsUser.FirstName,
 		NameLast:       bsUser.LastName,
@@ -161,9 +157,9 @@ func (srv *BrightspaceService) IntoImportUser(bsUser BrightspaceUser) *providerp
 	return &user
 }
 
-func (srv *BrightspaceService) IntoCourse(bsCourse BrightspaceCourse) *providerplatforms.Course {
+func (srv *BrightspaceService) IntoCourse(bsCourse BrightspaceCourse) *Course {
 	id := bsCourse.OrgUnitId
-	courseImageUrl := fmt.Sprintf("%s/d2l/api/lp/%s/courses/%s/image", srv.BaseURL, providerplatforms.BrightspaceApiVersion, id)
+	courseImageUrl := fmt.Sprintf("%s/d2l/api/lp/%s/courses/%s/image", srv.BaseURL, BrightspaceApiVersion, id)
 	response, err := srv.SendRequest(courseImageUrl)
 	if err != nil {
 		log.Errorf("error executing request to retrieve image from url %v, error is %v", courseImageUrl, err)
@@ -171,7 +167,7 @@ func (srv *BrightspaceService) IntoCourse(bsCourse BrightspaceCourse) *providerp
 	}
 	defer func() {
 		if response.Body.Close() != nil {
-			logger().Errorf("error closing response body, error is %v", err)
+			log.Errorf("error closing response body, error is %v", err)
 		}
 	}()
 	var (
@@ -190,7 +186,7 @@ func (srv *BrightspaceService) IntoCourse(bsCourse BrightspaceCourse) *providerp
 			}
 		}
 	}
-	courseOfferingUrl := fmt.Sprintf("%s/d2l/api/lp/%s/courses/%s", srv.BaseURL, providerplatforms.BrightspaceApiVersion, id)
+	courseOfferingUrl := fmt.Sprintf("%s/d2l/api/lp/%s/courses/%s", srv.BaseURL, BrightspaceApiVersion, id)
 	resp, err := srv.SendRequest(courseOfferingUrl)
 	if err != nil {
 		log.Errorf("error executing request to retrieve course offering from url %v, error is %v", courseOfferingUrl, err)
@@ -198,7 +194,7 @@ func (srv *BrightspaceService) IntoCourse(bsCourse BrightspaceCourse) *providerp
 	}
 	defer func() {
 		if resp.Body.Close() != nil {
-			logger().Errorf("error closing zip file reader, error is %v", err)
+			log.Errorf("error closing zip file reader, error is %v", err)
 		}
 	}()
 	var courseDescription string
@@ -219,17 +215,17 @@ func (srv *BrightspaceService) IntoCourse(bsCourse BrightspaceCourse) *providerp
 	if courseDescription == "" {
 		courseDescription = fmt.Sprintf("Brightspace Managed Course: %s", bsCourse.Name)
 	}
-	course := providerplatforms.Course{
+	course := Course{
 		ProviderPlatformID:      srv.ProviderPlatformID,
 		ExternalID:              bsCourse.OrgUnitId,
 		Name:                    bsCourse.Name,
-		AltName:                 models.NilIfBlank(bsCourse.Code),
-		OutcomeTypes:            models.StringPtr("completion"),
-		ThumbnailURL:            models.NilIfBlank(imgPath),
+		AltName:                 nilIfBlank(bsCourse.Code),
+		OutcomeTypes:            stringPtr("completion"),
+		ThumbnailURL:            nilIfBlank(imgPath),
 		Type:                    "fixed_enrollment", //open to discussion
-		Description:             models.NilIfBlank(courseDescription),
+		Description:             nilIfBlank(courseDescription),
 		TotalProgressMilestones: uint(bsCourse.TotalContentCount),
-		ExternalURL:             models.StringPtr(srv.BaseURL + "/" + "d2l/le/sequenceLauncher/" + bsCourse.OrgUnitId + "/View"), //WIP
+		ExternalURL:             stringPtr(srv.BaseURL + "/" + "d2l/le/sequenceLauncher/" + bsCourse.OrgUnitId + "/View"), //WIP
 	}
 	datePattern := "2006-01-02T15:04:05.000Z"
 	if bsCourse.StartDate != "" {
@@ -275,7 +271,7 @@ func UploadBrightspaceImage(imgBytes []byte, bsCourseId string) (string, error) 
 	}
 	defer func() {
 		if response.Body.Close() != nil {
-			logger().Errorf("error closing response body, error is %v", err)
+			log.Errorf("error closing response body, error is %v", err)
 		}
 	}()
 	if response.StatusCode != http.StatusOK {
@@ -296,13 +292,13 @@ func UploadBrightspaceImage(imgBytes []byte, bsCourseId string) (string, error) 
 
 func (srv *BrightspaceService) getPluginId(pluginName string) (string, error) {
 	var pluginId string
-	resp, err := srv.SendRequest(fmt.Sprintf(DataSetsEndpoint, providerplatforms.BrightspaceApiVersion))
+	resp, err := srv.SendRequest(fmt.Sprintf(DataSetsEndpoint, BrightspaceApiVersion))
 	if err != nil {
 		return pluginId, err
 	}
 	defer func() {
 		if resp.Body.Close() != nil {
-			logger().Errorf("error closing response body, error is %v", err)
+			log.Errorf("error closing response body, error is %v", err)
 		}
 	}()
 	pluginData := []DataSetPlugin{}
@@ -328,7 +324,7 @@ func readCSV[T any](values *T, csvFilePath string) {
 	}
 	defer func() {
 		if coursesFile.Close() != nil {
-			logger().Errorf("error closing response body, error is %v", err)
+			log.Errorf("error closing response body, error is %v", err)
 		}
 	}()
 	if err := gocsv.UnmarshalFile(coursesFile, values); err != nil {
@@ -344,7 +340,7 @@ func (srv *BrightspaceService) downloadAndUnzipFile(targetFileName string, endpo
 	}
 	defer func() {
 		if resp.Body.Close() != nil {
-			logger().Errorf("error closing response body, error is %v", err)
+			log.Errorf("error closing response body, error is %v", err)
 		}
 	}()
 	if resp.StatusCode != http.StatusOK {
@@ -381,7 +377,7 @@ func (srv *BrightspaceService) downloadAndUnzipFile(targetFileName string, endpo
 		}
 		defer func() {
 			if zipFile.Close() != nil {
-				logger().Errorf("error closing zip file reader, error is %v", err)
+				log.Errorf("error closing zip file reader, error is %v", err)
 			}
 			cleanUpFiles(zipFilePath) //delete zipfile here
 		}()
@@ -404,7 +400,7 @@ func (srv *BrightspaceService) downloadAndUnzipFile(targetFileName string, endpo
 			}
 			defer func() {
 				if outFile.Close() != nil {
-					logger().Errorf("error closing zip file reader, error is %v", err)
+					log.Errorf("error closing zip file reader, error is %v", err)
 				}
 			}()
 			rc, err := zippedFile.Open()
@@ -414,7 +410,7 @@ func (srv *BrightspaceService) downloadAndUnzipFile(targetFileName string, endpo
 			}
 			defer func() {
 				if rc.Close() != nil {
-					logger().Errorf("error closing zip file reader, error is %v", err)
+					log.Errorf("error closing zip file reader, error is %v", err)
 				}
 			}()
 			_, err = io.Copy(outFile, rc)

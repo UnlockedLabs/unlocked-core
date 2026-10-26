@@ -1,4 +1,4 @@
-package main
+package providerplatforms
 
 import (
 	"archive/zip"
@@ -11,9 +11,6 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-
-	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -119,10 +116,10 @@ func useTempDir(t *testing.T) string {
 	return dir
 }
 
-func createBrightspaceProvider(t *testing.T, db *gorm.DB, fb *fakeBrightspace) *providerplatforms.ProviderPlatform {
+func createBrightspaceProvider(t *testing.T, db *gorm.DB, fb *fakeBrightspace) *ProviderPlatform {
 	t.Helper()
-	return createProvider(t, db, providerplatforms.ProviderPlatform{
-		Type:      providerplatforms.Brightspace,
+	return createProvider(t, db, ProviderPlatform{
+		Type:      Brightspace,
 		Name:      "Brightspace",
 		AccountID: "client-id",
 		AccessKey: "secret;refresh-1",
@@ -130,7 +127,7 @@ func createBrightspaceProvider(t *testing.T, db *gorm.DB, fb *fakeBrightspace) *
 	})
 }
 
-func newTestBrightspaceService(t *testing.T, db *gorm.DB, p *providerplatforms.ProviderPlatform) *BrightspaceService {
+func newTestBrightspaceService(t *testing.T, db *gorm.DB, p *ProviderPlatform) *BrightspaceService {
 	t.Helper()
 	srv, err := newBrightspaceService(p, db, nil)
 	require.NoError(t, err)
@@ -145,7 +142,7 @@ func TestBrightspaceTokenRefresh(t *testing.T) {
 	useTempDir(t)
 	fb := newFakeBrightspace(t)
 	created := createBrightspaceProvider(t, db, fb)
-	var p providerplatforms.ProviderPlatform
+	var p ProviderPlatform
 	require.NoError(t, db.First(&p, created.ID).Error)
 
 	srv := newTestBrightspaceService(t, db, &p)
@@ -155,7 +152,7 @@ func TestBrightspaceTokenRefresh(t *testing.T) {
 		"refresh_token": {"refresh-1"},
 		"client_id":     {"client-id"},
 		"client_secret": {"secret"},
-		"scope":         {providerplatforms.BrightspaceScopes},
+		"scope":         {BrightspaceScopes},
 	}, fb.tokenForm)
 	assert.Equal(t, "Bearer access-2", srv.BaseHeaders["Authorization"])
 	var stored string
@@ -201,7 +198,7 @@ func TestBrightspaceGetUsers(t *testing.T) {
 
 	users, err := newTestBrightspaceService(t, db, p).GetUsers(db)
 	require.NoError(t, err)
-	assert.Equal(t, []providerplatforms.ImportUser{
+	assert.Equal(t, []ImportUser{
 		{Username: "ada", NameFirst: "Ada", NameLast: "Lovelace", Email: "ada@example.com", ExternalUserID: "1"},
 	}, users)
 	assert.NoFileExists(t, filepath.Join(dir, "users", "Users.csv"))
@@ -228,33 +225,33 @@ func TestBrightspaceImportCourses(t *testing.T) {
 	fb.offerings["10"] = CourseOffering{Description: RichText{Text: "Numbers"}}
 	fb.offerings["11"] = CourseOffering{Description: RichText{Html: "<p>Cells <b>live</b></p>"}}
 	p := createBrightspaceProvider(t, db, fb)
-	require.NoError(t, db.Create(&providerplatforms.Course{ProviderPlatformID: p.ID, ExternalID: "17", Name: "Existing", TotalProgressMilestones: 1}).Error)
+	require.NoError(t, db.Create(&Course{ProviderPlatformID: p.ID, ExternalID: "17", Name: "Existing", TotalProgressMilestones: 1}).Error)
 
 	require.NoError(t, newTestBrightspaceService(t, db, p).ImportCourses(db))
 
-	var courses []providerplatforms.Course
+	var courses []Course
 	require.NoError(t, db.Order("external_id").Find(&courses).Error)
 	require.Len(t, courses, 4)
 	alg, bio, chem, existing := courses[0], courses[1], courses[2], courses[3]
 
 	assert.Equal(t, "Algebra", alg.Name)
-	assert.Equal(t, models.StringPtr("ALG"), alg.AltName)
-	assert.Equal(t, models.StringPtr("Numbers"), alg.Description)
+	assert.Equal(t, stringPtr("ALG"), alg.AltName)
+	assert.Equal(t, stringPtr("Numbers"), alg.Description)
 	// The upload is named image_brightspace/10.jpg, but a multipart reader
 	// keeps only the base name, as core's /upload does.
-	assert.Equal(t, models.StringPtr("/api/photos/10.jpg"), alg.ThumbnailURL)
-	assert.Equal(t, models.StringPtr("completion"), alg.OutcomeTypes)
-	assert.Equal(t, providerplatforms.CourseType("fixed_enrollment"), alg.Type)
+	assert.Equal(t, stringPtr("/api/photos/10.jpg"), alg.ThumbnailURL)
+	assert.Equal(t, stringPtr("completion"), alg.OutcomeTypes)
+	assert.Equal(t, CourseType("fixed_enrollment"), alg.Type)
 	assert.Equal(t, uint(2), alg.TotalProgressMilestones)
-	assert.Equal(t, models.StringPtr(fb.URL+"/d2l/le/sequenceLauncher/10/View"), alg.ExternalURL)
+	assert.Equal(t, stringPtr(fb.URL+"/d2l/le/sequenceLauncher/10/View"), alg.ExternalURL)
 	assert.Equal(t, "2026-01-05", alg.StartDt.Format("2006-01-02"))
 	assert.Nil(t, alg.EndDt)
 
 	assert.Nil(t, bio.AltName)
-	assert.Equal(t, models.StringPtr("Cells live"), bio.Description)
+	assert.Equal(t, stringPtr("Cells live"), bio.Description)
 	assert.Nil(t, bio.ThumbnailURL, "no image and no fallback when the image request isn't a 200")
 
-	assert.Equal(t, models.StringPtr("Brightspace Managed Course: Chemistry"), chem.Description)
+	assert.Equal(t, stringPtr("Brightspace Managed Course: Chemistry"), chem.Description)
 
 	assert.Equal(t, "Existing", existing.Name)
 	assert.Equal(t, uint(3), existing.TotalProgressMilestones)
@@ -287,7 +284,7 @@ func TestBrightspaceImportMilestones(t *testing.T) {
 	require.NoError(t, srv.ImportMilestones(course, users, db, lastRun))
 
 	var enrolled []uint
-	require.NoError(t, db.Model(&providerplatforms.UserEnrollment{}).Order("user_id").Pluck("user_id", &enrolled).Error)
+	require.NoError(t, db.Model(&UserEnrollment{}).Order("user_id").Pluck("user_id", &enrolled).Error)
 	assert.Equal(t, []uint{101, 102}, enrolled)
 
 	type row struct {
@@ -296,7 +293,7 @@ func TestBrightspaceImportMilestones(t *testing.T) {
 		Type       string
 	}
 	var got []row
-	require.NoError(t, db.Model(&providerplatforms.Milestone{}).Order("id").Find(&got).Error)
+	require.NoError(t, db.Model(&Milestone{}).Order("id").Find(&got).Error)
 	// The graded ids start with the user id of the row before (0 for the
 	// first), because gradedId is built before userId is set.
 	assert.Equal(t, []row{
@@ -310,7 +307,7 @@ func TestBrightspaceImportMilestones(t *testing.T) {
 	// Later courses in the same job reuse the downloaded files.
 	require.NoError(t, srv.ImportMilestones(map[string]any{"course_id": int64(6), "external_course_id": "11"}, users, db, lastRun))
 	assert.Equal(t, []string{"User Enrollments", "Assignment Submissions", "Quiz Attempts"}, fb.Downloads())
-	require.NoError(t, db.Model(&providerplatforms.UserEnrollment{}).Where("course_id = 6").Pluck("user_id", &enrolled).Error)
+	require.NoError(t, db.Model(&UserEnrollment{}).Where("course_id = 6").Pluck("user_id", &enrolled).Error)
 	assert.Equal(t, []uint{101}, enrolled)
 }
 
@@ -340,7 +337,7 @@ func TestBrightspaceActivity(t *testing.T) {
 	calls := recordCalls(t, db)
 	require.NoError(t, srv.ImportActivityForCourse(map[string]any{"course_id": int64(5), "external_course_id": "10"}, db))
 	assert.Equal(t, []procedureCall{
-		{"insert_daily_activity_brightspace", []any{uint(101), uint(5), providerplatforms.ContentInteraction, "120", "1-c1-1-2026-03-02"}},
+		{"insert_daily_activity_brightspace", []any{uint(101), uint(5), ContentInteraction, "120", "1-c1-1-2026-03-02"}},
 	}, *calls)
 	assert.True(t, srv.IsDownloaded)
 	assert.Equal(t, []string{"Content Objects", "Content User Progress"}, fb.Downloads())

@@ -602,4 +602,47 @@ type user struct {
 
 func (user) TableName() string { return "users" }
 
+// cronJob and runnableTask are rows of core's cron_jobs and runnable_tasks
+// tables, which hold the LMS jobs' bookkeeping: one cron_jobs row per job,
+// and one runnable_tasks row per job and provider with its status and the
+// time of its last successful run (jobs.go).
+type cronJob struct {
+	ID        string `gorm:"primaryKey"`
+	Name      string
+	Schedule  string
+	Category  int
+	CreatedAt time.Time
+}
+
+func (cronJob) TableName() string { return "cron_jobs" }
+
+type runnableTask struct {
+	ID                 uint `gorm:"primaryKey"`
+	JobID              string
+	LastRun            time.Time
+	ProviderPlatformID *uint
+	Status             taskStatus
+}
+
+func (runnableTask) TableName() string { return "runnable_tasks" }
+
+type taskStatus string
+
+const (
+	// providerPlatformJob is the cron_jobs category of the LMS jobs.
+	providerPlatformJob = 1
+
+	taskPending taskStatus = "pending"
+	taskRunning taskStatus = "running"
+)
+
 func stringPtr(s string) *string { return &s }
+
+// nilIfBlank returns nil for empty or whitespace-only strings so they are
+// stored as NULL.
+func nilIfBlank(s string) *string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	return &s
+}

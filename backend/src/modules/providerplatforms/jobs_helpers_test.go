@@ -1,7 +1,6 @@
-package main
+package providerplatforms
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,37 +12,32 @@ import (
 	"testing"
 	"time"
 
-	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms"
+	"github.com/UnlockedLabs/unlocked-contracts/jobs"
 
 	"github.com/glebarez/sqlite"
+	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
 
 // newTestDB returns an empty in-memory database with Provider Platforms'
-// tables, core's job tables and a minimal users table.
+// tables and a minimal users table.
 func newTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	t.Setenv("APP_KEY", "test-app-key")
 	dsn := fmt.Sprintf("file:%s_%d?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"), time.Now().UnixNano())
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{DisableForeignKeyConstraintWhenMigrating: true})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(providerplatforms.Module{}.TestModels()...))
-	require.NoError(t, db.AutoMigrate(&models.CronJob{}, &models.RunnableTask{}))
+	require.NoError(t, db.AutoMigrate(Module{}.TestModels()...))
 	require.NoError(t, db.Exec(`CREATE TABLE users (id integer PRIMARY KEY, username text, role text)`).Error)
 	return db
 }
 
-func newHandler(db *gorm.DB) *ServiceHandler {
-	return &ServiceHandler{db: db, ctx: context.Background()}
-}
-
-func createProvider(t *testing.T, db *gorm.DB, p providerplatforms.ProviderPlatform) *providerplatforms.ProviderPlatform {
+func createProvider(t *testing.T, db *gorm.DB, p ProviderPlatform) *ProviderPlatform {
 	t.Helper()
 	if p.State == "" {
-		p.State = providerplatforms.Enabled
+		p.State = Enabled
 	}
 	require.NoError(t, db.Create(&p).Error)
 	return &p
@@ -54,7 +48,7 @@ func createProvider(t *testing.T, db *gorm.DB, p providerplatforms.ProviderPlatf
 func createResident(t *testing.T, db *gorm.DB, providerID uint, id uint, role, externalID string) uint {
 	t.Helper()
 	require.NoError(t, db.Exec(`INSERT INTO users (id, username, role) VALUES (?, ?, ?)`, id, fmt.Sprintf("user%d", id), role).Error)
-	require.NoError(t, db.Create(&providerplatforms.ProviderUserMapping{
+	require.NoError(t, db.Create(&ProviderUserMapping{
 		UserID:             id,
 		ProviderPlatformID: providerID,
 		ExternalUserID:     externalID,
@@ -63,30 +57,23 @@ func createResident(t *testing.T, db *gorm.DB, providerID uint, id uint, role, e
 	return id
 }
 
-// createTask adds the runnable_tasks row for a provider job, as core's
-// scheduler does, marked running.
-func createTask(t *testing.T, db *gorm.DB, job models.JobType, providerID uint, lastRun time.Time) (*models.CronJob, *models.RunnableTask) {
+// createTask adds the cron_jobs and runnable_tasks rows for a provider job,
+// marked running, as the scheduler leaves them when it publishes the job.
+func createTask(t *testing.T, db *gorm.DB, job jobs.Type, providerID uint, lastRun time.Time) (*cronJob, *runnableTask) {
 	t.Helper()
-	t.Setenv("MIDDLEWARE_CRON_SCHEDULE", "0 22 * * *")
-	cj := models.CronJob{Name: string(job)}
+	cj := cronJob{ID: uuid.NewString(), Name: string(job), Category: providerPlatformJob, Schedule: "0 22 * * *"}
 	require.NoError(t, db.Create(&cj).Error)
-	task := models.RunnableTask{JobID: cj.ID, ProviderPlatformID: &providerID, Status: models.StatusRunning, LastRun: lastRun}
+	task := runnableTask{JobID: cj.ID, ProviderPlatformID: &providerID, Status: taskRunning, LastRun: lastRun}
 	require.NoError(t, db.Create(&task).Error)
 	return &cj, &task
 }
 
-// jobMsg is the message core's scheduler publishes for a provider job
-// (tasks.runTask).
-func jobMsg(t *testing.T, job models.JobType, jobID string, providerID uint, lastRun time.Time) *nats.Msg {
+// taskMsg is the message the scheduler publishes for the task (jobMsg).
+func taskMsg(t *testing.T, job jobs.Type, task *runnableTask) *nats.Msg {
 	t.Helper()
-	data, err := json.Marshal(map[string]any{
-		"job_type":             string(job),
-		"job_id":               jobID,
-		"provider_platform_id": &providerID,
-		"last_run":             lastRun,
-	})
+	msg, err := jobMsg(job, task, *task.ProviderPlatformID)
 	require.NoError(t, err)
-	return &nats.Msg{Subject: job.PubName(), Data: data}
+	return msg
 }
 
 // fakeCore stands in for the server's POST /upload, which stores thumbnails.

@@ -1,4 +1,4 @@
-package main
+package providerplatforms
 
 import (
 	"encoding/json"
@@ -7,9 +7,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -75,10 +72,10 @@ func (fc *fakeCanvas) Requests() []string {
 	return append([]string(nil), fc.requests...)
 }
 
-func createCanvasProvider(t *testing.T, db *gorm.DB, fc *fakeCanvas) *providerplatforms.ProviderPlatform {
+func createCanvasProvider(t *testing.T, db *gorm.DB, fc *fakeCanvas) *ProviderPlatform {
 	t.Helper()
-	return createProvider(t, db, providerplatforms.ProviderPlatform{
-		Type:      providerplatforms.CanvasCloud,
+	return createProvider(t, db, ProviderPlatform{
+		Type:      CanvasCloud,
 		Name:      "Canvas",
 		AccountID: "1",
 		AccessKey: " token-123\n",
@@ -106,7 +103,7 @@ func TestCanvasUsers(t *testing.T) {
 
 	all, err := srv.GetAllUsers()
 	require.NoError(t, err)
-	assert.Equal(t, []providerplatforms.ImportUser{
+	assert.Equal(t, []ImportUser{
 		{ExternalUserID: "11", ExternalUsername: "ada@example.com", NameFirst: "Ada", NameLast: "Lovelace", Email: "ada@example.com", Username: "LovelaceAda"},
 		{ExternalUserID: "12", ExternalUsername: "grace@example.com", NameFirst: "Grace", NameLast: "Hopper", Email: "grace@example.com", Username: "HopperGrace"},
 		{ExternalUserID: "13", ExternalUsername: "plato@example.com", NameFirst: "Plato", NameLast: "Plato", Email: "plato@example.com", Username: "PlatoPlato"},
@@ -141,21 +138,21 @@ func TestCanvasImportCourses(t *testing.T) {
 	}
 	fc.assignments = map[string]int{"101": 4, "102": 0}
 	p := createCanvasProvider(t, db, fc)
-	require.NoError(t, db.Create(&providerplatforms.Course{ProviderPlatformID: p.ID, ExternalID: "103", Name: "Kept"}).Error)
+	require.NoError(t, db.Create(&Course{ProviderPlatformID: p.ID, ExternalID: "103", Name: "Kept"}).Error)
 
 	require.NoError(t, newCanvasService(p, nil).ImportCourses(db))
 
-	var courses []providerplatforms.Course
+	var courses []Course
 	require.NoError(t, db.Order("external_id").Find(&courses).Error)
 	require.Len(t, courses, 3)
 	alg, bio := courses[0], courses[1]
 	assert.Equal(t, "Algebra", alg.Name)
-	assert.Equal(t, models.StringPtr("ALG-1"), alg.AltName)
-	assert.Equal(t, models.StringPtr("ALG-1"), alg.Description)
-	assert.Equal(t, models.StringPtr(fc.URL+"/courses/101"), alg.ExternalURL)
-	assert.Equal(t, providerplatforms.CourseType("open_enrollment"), alg.Type)
-	assert.Equal(t, models.StringPtr("grade, college_credit"), alg.OutcomeTypes)
-	assert.Equal(t, models.StringPtr("https://img/alg.png"), alg.ThumbnailURL)
+	assert.Equal(t, stringPtr("ALG-1"), alg.AltName)
+	assert.Equal(t, stringPtr("ALG-1"), alg.Description)
+	assert.Equal(t, stringPtr(fc.URL+"/courses/101"), alg.ExternalURL)
+	assert.Equal(t, CourseType("open_enrollment"), alg.Type)
+	assert.Equal(t, stringPtr("grade, college_credit"), alg.OutcomeTypes)
+	assert.Equal(t, stringPtr("https://img/alg.png"), alg.ThumbnailURL)
 	assert.Equal(t, uint(4), alg.TotalProgressMilestones)
 	assert.Equal(t, "2026-01-05", alg.StartDt.Format(time.DateOnly))
 	assert.Equal(t, "2026-05-01", alg.EndDt.Format(time.DateOnly))
@@ -164,7 +161,7 @@ func TestCanvasImportCourses(t *testing.T) {
 	assert.Nil(t, bio.AltName)
 	assert.Nil(t, bio.Description)
 	assert.Nil(t, bio.ThumbnailURL)
-	assert.Equal(t, providerplatforms.CourseType("fixed_enrollment"), bio.Type)
+	assert.Equal(t, CourseType("fixed_enrollment"), bio.Type)
 	assert.Nil(t, bio.StartDt)
 	assert.Equal(t, "Kept", courses[2].Name)
 }
@@ -186,7 +183,7 @@ func TestCanvasImportMilestones(t *testing.T) {
 		{"id": float64(5), "user_id": float64(99), "workflow_state": "graded", "grade": "A", "anonymous_id": "anon5", "submitted_at": "2026-03-02T00:00:00Z"},
 	}
 	p := createCanvasProvider(t, db, fc)
-	course := providerplatforms.Course{ProviderPlatformID: p.ID, ExternalID: "101"}
+	course := Course{ProviderPlatformID: p.ID, ExternalID: "101"}
 	require.NoError(t, db.Create(&course).Error)
 	users := []map[string]any{
 		{"user_id": uint(1), "external_user_id": "21"},
@@ -204,7 +201,7 @@ func TestCanvasImportMilestones(t *testing.T) {
 		IsCompleted bool
 	}
 	var got []row
-	require.NoError(t, db.Model(&providerplatforms.Milestone{}).Order("id").Find(&got).Error)
+	require.NoError(t, db.Model(&Milestone{}).Order("id").Find(&got).Error)
 	assert.Equal(t, []row{
 		{1, "1", "assignment_submission", true},
 		{1, "anon1", "grade_received", true},
@@ -256,18 +253,18 @@ func TestCanvasImportActivity(t *testing.T) {
 		{"user_id": float64(99), "total_activity_time": float64(5)},
 	}
 	p := createCanvasProvider(t, db, fc)
-	course := providerplatforms.Course{ProviderPlatformID: p.ID, ExternalID: "101"}
+	course := Course{ProviderPlatformID: p.ID, ExternalID: "101"}
 	require.NoError(t, db.Create(&course).Error)
 	createResident(t, db, p.ID, 1, "student", "21")
 	createResident(t, db, p.ID, 2, "student", "22")
-	require.NoError(t, db.Create(&providerplatforms.UserEnrollment{UserID: 2, CourseID: course.ID}).Error)
+	require.NoError(t, db.Create(&UserEnrollment{UserID: 2, CourseID: course.ID}).Error)
 	calls := recordCalls(t, db)
 
 	pair := map[string]any{"course_id": int64(course.ID), "external_course_id": "101"}
 	require.NoError(t, newCanvasService(p, nil).ImportActivityForCourse(pair, db))
 
 	var enrolled []uint
-	require.NoError(t, db.Model(&providerplatforms.UserEnrollment{}).Order("user_id").Pluck("user_id", &enrolled).Error)
+	require.NoError(t, db.Model(&UserEnrollment{}).Order("user_id").Pluck("user_id", &enrolled).Error)
 	assert.Equal(t, []uint{1, 2}, enrolled)
 	assert.Equal(t, []procedureCall{
 		{"insert_daily_activity_canvas", []any{uint(1), course.ID, "course_interaction", uint(600), "101"}},

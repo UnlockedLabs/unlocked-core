@@ -1,12 +1,10 @@
-package main
+package providerplatforms
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"testing"
-
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -15,9 +13,8 @@ import (
 // doesn't check the Authorization header: only the server can reach it.
 func TestUserRoutes(t *testing.T) {
 	db := newTestDB(t)
-	sh := newHandler(db)
-	sh.Mux = http.NewServeMux()
-	sh.registerRoutes()
+	w := &worker{db: db}
+	routes := w.routes()
 	fc := newFakeCanvas(t)
 	fc.users = []map[string]any{
 		canvasUser(11, "Ada Lovelace", "Lovelace, Ada", "Ada", "ada@example.com"),
@@ -25,9 +22,9 @@ func TestUserRoutes(t *testing.T) {
 	}
 	canvas := createCanvasProvider(t, db, fc)
 	createResident(t, db, canvas.ID, 1, "student", "15")
-	moodle := createProvider(t, db, providerplatforms.ProviderPlatform{Type: "moodle", Name: "m"})
-	down := createProvider(t, db, providerplatforms.ProviderPlatform{Type: providerplatforms.CanvasOSS, Name: "d", BaseUrl: "http://127.0.0.1:1"})
-	id := func(p *providerplatforms.ProviderPlatform) string { return strconv.Itoa(int(p.ID)) }
+	moodle := createProvider(t, db, ProviderPlatform{Type: "moodle", Name: "m"})
+	down := createProvider(t, db, ProviderPlatform{Type: CanvasOSS, Name: "d", BaseUrl: "http://127.0.0.1:1"})
+	id := func(p *ProviderPlatform) string { return strconv.Itoa(int(p.ID)) }
 
 	const (
 		ada    = `{"username":"LovelaceAda","name_first":"Ada","name_last":"Lovelace","email":"ada@example.com","external_user_id":"11","external_username":"ada@example.com"}`
@@ -55,7 +52,7 @@ func TestUserRoutes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
-			sh.Mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tt.path, nil))
+			routes.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tt.path, nil))
 			assert.Equal(t, tt.wantCode, rec.Code)
 			if tt.wantJSON != "" {
 				assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
