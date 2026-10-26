@@ -33,6 +33,7 @@ func newKolibriDB(t *testing.T) *gorm.DB {
 		`CREATE TABLE exams_exam (id text, collection_id text)`,
 		`CREATE TABLE logger_contentsessionlog (id text, channel_id text, user_id text, start_timestamp text)`,
 		`CREATE TABLE logger_contentsummarylog (id text, user_id text, time_spent text, completion_timestamp text, content_id text, progress text, kind text, channel_id text)`,
+		`CREATE TABLE notifications_learnerprogressnotification (id integer, user_id text, classroom_id text, notification_object text, notification_event text, quiz_num_correct integer, quiz_num_answered integer)`,
 	} {
 		require.NoError(t, kdb.Exec(stmt).Error)
 	}

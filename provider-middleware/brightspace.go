@@ -231,7 +231,13 @@ func (srv *BrightspaceService) updateTotalProgress(db *gorm.DB, totalProgressMil
 func (srv *BrightspaceService) ImportMilestones(course map[string]interface{}, users []map[string]interface{}, db *gorm.DB, lastRun time.Time) error {
 	usersMap := make(map[string]uint)
 	for _, user := range users {
-		usersMap[user["external_user_id"].(string)] = uint(user["user_id"].(int64))
+		userId, ok := dbUint(user, "user_id")
+		if !ok {
+			log.WithFields(log.Fields{"task": "ImportMilestones", "user_id": user["user_id"]}).
+				Warnf("skipping user mapping with unexpected user_id type %T", user["user_id"])
+			continue
+		}
+		usersMap[user["external_user_id"].(string)] = userId
 	}
 	paramObj := milestonePO{
 		course:   course,

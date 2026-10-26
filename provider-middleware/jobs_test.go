@@ -187,25 +187,52 @@ func TestHandleMilestonesCanceled(t *testing.T) {
 	assert.Equal(t, models.StatusRunning, reloadTask(t, sh, task.ID).Status)
 }
 
-// Kolibri and Brightspace read user_id as int64, but the user mappings
-// arrive as uint (see dbUint), so their milestone import panics as soon as a
-// course has a mapped student. This pins today's behavior; a panic in a NATS
-// handler stops provider-middleware.
-func TestImportMilestonesUserIDType(t *testing.T) {
-	db := newTestDB(t)
-	sh := newHandler(db)
-	p := createProvider(t, db, providerplatforms.ProviderPlatform{Type: providerplatforms.Kolibri, Name: "k"})
-	createResident(t, db, p.ID, 1, "student", "k1")
-	users, err := sh.lookupUserMapping(map[string]any{"provider_platform_id": float64(p.ID)})
-	require.NoError(t, err)
-	require.IsType(t, uint(0), users[0]["user_id"])
+// Kolibri and Brightspace import milestones for the user mappings as the
+// milestones job looks them up, where user_id arrives as uint (see dbUint).
+// A mapping whose user_id they can't read is skipped.
+func TestImportMilestonesMappedStudent(t *testing.T) {
+	t.Run("kolibri", func(t *testing.T) {
+		db := newTestDB(t)
+		sh := newHandler(db)
+		ks, kdb := newTestKolibriService(t, db)
+		createResident(t, db, ks.ProviderPlatformID, 1, "student", "k1")
+		require.NoError(t, kdb.Exec(`INSERT INTO kolibriauth_facilityuser VALUES ('k1', 'A', 'a', 'facility-1')`).Error)
+		require.NoError(t, kdb.Exec(`INSERT INTO content_channelmetadata VALUES ('ch', 'Khan', '', '', 1, 'ch')`).Error)
+		require.NoError(t, kdb.Exec(`INSERT INTO logger_contentsessionlog VALUES ('s1', 'ch', 'k1', '2026-03-01')`).Error)
+		users, err := sh.lookupUserMapping(map[string]any{"provider_platform_id": float64(ks.ProviderPlatformID)})
+		require.NoError(t, err)
+		require.IsType(t, uint(0), users[0]["user_id"])
+		users = append(users, map[string]any{"user_id": "bad", "external_user_id": "k2"})
 
-	course := map[string]any{"course_id": int64(1), "external_course_id": "c"}
-	assert.PanicsWithError(t, "interface conversion: interface {} is uint, not int64", func() {
-		_ = (&KolibriService{}).ImportMilestones(course, users, db, lastRun)
+		course := map[string]any{"course_id": int64(5), "external_course_id": "ch"}
+		require.NoError(t, ks.ImportMilestones(course, users, db, lastRun))
+
+		var enrolled []uint
+		require.NoError(t, db.Model(&providerplatforms.UserEnrollment{}).Pluck("user_id", &enrolled).Error)
+		assert.Equal(t, []uint{1}, enrolled)
 	})
-	assert.PanicsWithError(t, "interface conversion: interface {} is uint, not int64", func() {
-		_ = (&BrightspaceService{}).ImportMilestones(course, users, db, lastRun)
+
+	t.Run("brightspace", func(t *testing.T) {
+		db := newTestDB(t)
+		sh := newHandler(db)
+		useTempDir(t)
+		fb := newFakeBrightspace(t)
+		fb.datasets["User Enrollments"] = "OrgUnitId,UserId\n10,b1\n"
+		fb.datasets["Assignment Submissions"] = "DropboxId,OrgUnitId,SubmitterId,IsGraded\n"
+		fb.datasets["Quiz Attempts"] = "AttemptId,UserId,OrgUnitId,IsGraded,IsDeleted\n"
+		p := createBrightspaceProvider(t, db, fb)
+		createResident(t, db, p.ID, 1, "student", "b1")
+		users, err := sh.lookupUserMapping(map[string]any{"provider_platform_id": float64(p.ID)})
+		require.NoError(t, err)
+		require.IsType(t, uint(0), users[0]["user_id"])
+		users = append(users, map[string]any{"user_id": "bad", "external_user_id": "b2"})
+
+		course := map[string]any{"course_id": int64(5), "external_course_id": "10"}
+		require.NoError(t, newTestBrightspaceService(t, db, p).ImportMilestones(course, users, db, lastRun))
+
+		var enrolled []uint
+		require.NoError(t, db.Model(&providerplatforms.UserEnrollment{}).Pluck("user_id", &enrolled).Error)
+		assert.Equal(t, []uint{1}, enrolled)
 	})
 }
 
