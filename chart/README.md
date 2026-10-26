@@ -44,6 +44,14 @@ hostnames in `values.yaml` — this chart does not create any of those. Today
 that means deploying it standalone requires `unlocked-platform` to also be
 installed in the same namespace for the in-cluster services it talks to.
 
+One required-key difference from `unlocked-platform`'s Secret: there,
+`APP_KEY` is `optional: true` (prod intentionally has none). Here it's
+required — a deliberate fix for a fail-open encryption-key gap (a missing
+key silently encrypted data under a known constant). A site reusing an
+existing `core-secrets` Secret that has no `APP_KEY` entry must add one
+(an explicit empty string preserves today's behavior) before this chart's
+server will start.
+
 Not included: the suspended staging CronJob variant platform also renders
 alongside its Job — that's a workaround for staging's non-Helm restart path
 specific to that repo (gone once EN-184 lands there), not a concern of this

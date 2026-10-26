@@ -46,6 +46,20 @@ Usage: {{- include "unlocked-core.pullPolicy" (list . "server") | nindent 8 }}
 {{- end }}
 
 {{/*
+initContainer that waits until NATS accepts connections. Shared by every
+workload that needs NATS (server, scheduler) — platform's chart has the same
+helper (unlocked.waitForNats) for the same reason: two copies of a retry
+loop drift the moment one gets a fix (a timeout, a digest bump) the other
+doesn't.
+Usage: {{- include "unlocked-core.waitForNats" . | nindent 6 }}
+*/}}
+{{- define "unlocked-core.waitForNats" -}}
+- name: wait-for-nats
+  image: {{ .Values.waitForNats.image }}
+  command: ["sh", "-c", "until nc -z -w 2 {{ .Values.nats.host }} {{ .Values.nats.port }}; do echo waiting for nats; sleep 2; done"]
+{{- end }}
+
+{{/*
 DB connection env vars: APP_DSN (external RDS) or DB_HOST/PORT/USER/NAME/
 PASSWORD (in-cluster), chosen by database.useAppDsn. Shared by every
 workload that talks to Postgres (server, scheduler, and the migrate Job)

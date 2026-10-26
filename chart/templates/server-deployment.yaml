@@ -19,9 +19,7 @@ spec:
         app: server
     spec:
       initContainers:
-      - name: wait-for-nats
-        image: {{ .Values.waitForNats.image }}
-        command: ["sh", "-c", "until nc -z -w 2 {{ .Values.nats.host }} {{ .Values.nats.port }}; do echo waiting for nats; sleep 2; done"]
+      {{- include "unlocked-core.waitForNats" . | nindent 6 }}
       containers:
       - args:
         - ./backend
