@@ -17,6 +17,8 @@ import (
 	"github.com/UnlockedLabs/unlocked-contracts/identity"
 	"github.com/glebarez/sqlite"
 	"github.com/go-playground/validator/v10"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
@@ -192,6 +194,53 @@ func openPostgres() *sql.DB {
 	}
 	if err := db.Ping(); err != nil {
 		logrus.Fatalf("Failed to ping database: %v", err)
+	}
+	return db
+}
+
+// ModuleDBs is the database connection of each feature module.
+type ModuleDBs struct {
+	core *gorm.DB
+	own  map[string]*gorm.DB
+}
+
+// OpenModuleDBs opens a pool for each of mods that has its own schema
+// (module.Schema), with search_path set to the schema, then public. A process
+// opens them once, at startup. The SQLite tests have no schemas, so every
+// module shares core's connection there.
+func OpenModuleDBs(core *gorm.DB, mods []module.Module) ModuleDBs {
+	dbs := ModuleDBs{core: core, own: map[string]*gorm.DB{}}
+	if core.Name() != "postgres" {
+		return dbs
+	}
+	for _, m := range mods {
+		if s, ok := m.(module.Schema); ok {
+			dbs.own[m.Name()] = openGorm(openModulePostgres(s.Schema()))
+		}
+	}
+	return dbs
+}
+
+// For is the connection the module called name uses: its own when it has a
+// schema, else core's.
+func (dbs ModuleDBs) For(name string) *gorm.DB {
+	if db, ok := dbs.own[name]; ok {
+		return db
+	}
+	return dbs.core
+}
+
+// openModulePostgres opens a pool on core's database whose sessions look up
+// tables in schema first, then public.
+func openModulePostgres(schema string) *sql.DB {
+	cfg, err := pgx.ParseConfig(PostgresDSN("allow"))
+	if err != nil {
+		logrus.Fatalf("Failed to parse the database connection string: %v", err)
+	}
+	cfg.RuntimeParams["search_path"] = schema + ", public"
+	db := stdlib.OpenDB(*cfg)
+	if err := db.Ping(); err != nil {
+		logrus.Fatalf("Failed to ping database for schema %s: %v", schema, err)
 	}
 	return db
 }

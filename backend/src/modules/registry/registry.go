@@ -29,9 +29,10 @@ func All() []module.Module {
 	}
 }
 
-// OpenContent is Open Content's answers to core, reading db.
-func OpenContent(db *gorm.DB) ocapi.OpenContent {
-	return opencontent.NewAPI(db)
+// OpenContent is Open Content's answers to core, on the connection db gives
+// the Open Content module (database.ModuleDBs.For).
+func OpenContent(db func(name string) *gorm.DB) ocapi.OpenContent {
+	return opencontent.NewAPI(db(opencontent.Module{}.Name()))
 }
 
 // ProviderPlatforms is Provider Platforms' answers to core, reading db.

@@ -233,6 +233,8 @@ func (srv *Server) moduleDeps() module.Deps {
 func (srv *Server) registerModuleRoutes() {
 	deps := srv.moduleDeps()
 	for _, m := range srv.modules {
-		m.Register(moduleRouter{srv}, deps)
+		moduleDeps := deps
+		moduleDeps.DB = srv.moduleDBs.For(m.Name())
+		m.Register(moduleRouter{srv}, moduleDeps)
 	}
 }

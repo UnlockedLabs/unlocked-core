@@ -232,6 +232,13 @@ type NewUser struct {
 	Role       users.Role
 }
 
+// Schema is a module whose tables live in its own Postgres schema. Core
+// connects its routes, jobs and worker with search_path set to the schema,
+// then public, so its queries find its own tables first, then core's.
+type Schema interface {
+	Schema() string
+}
+
 // Seeder is a module that adds default rows to a new database. Core calls
 // Seed once, right after it creates the default facility. ctx carries the
 // identity.Claims of the user the rows are created by.

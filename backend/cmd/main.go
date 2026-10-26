@@ -76,7 +76,7 @@ func runScheduler(ctx context.Context, dev bool) {
 		log.Info("Scheduler stopped before migrations finished")
 		return
 	}
-	s := tasks.Start(dev, nc, db, mods)
+	s := tasks.Start(dev, nc, db, mods, database.OpenModuleDBs(db, mods))
 	log.Info("Scheduler started")
 	<-ctx.Done()
 	if err := s.Stop(); err != nil {
@@ -88,7 +88,8 @@ func runScheduler(ctx context.Context, dev bool) {
 // runWorker runs the named feature module's worker until ctx is canceled.
 // Like the scheduler, it waits until the database is migrated.
 func runWorker(ctx context.Context, name string) {
-	w, err := findWorker(registry.All(), name)
+	mods := registry.All()
+	w, err := findWorker(mods, name)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -99,7 +100,7 @@ func runWorker(ctx context.Context, name string) {
 		return
 	}
 	log.Infof("Worker %s started", name)
-	if err := w.Work(ctx, module.Deps{DB: db, NATS: nc}); err != nil {
+	if err := w.Work(ctx, module.Deps{DB: database.OpenModuleDBs(db, mods).For(name), NATS: nc}); err != nil {
 		log.Errorf("Worker %s failed: %v", name, err)
 		return
 	}

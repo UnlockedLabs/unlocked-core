@@ -15,6 +15,7 @@ import (
 	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
+	ocapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api"
 	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 
@@ -26,13 +27,15 @@ import (
 type jasperService struct {
 	ctx              context.Context
 	db               *database.DB
+	openContent      ocapi.OpenContent
 	hasProgramAccess bool
 }
 
-func newJasperServiceWithContext(ctx context.Context, db *database.DB, hasProgramAccess bool) *jasperService {
+func newJasperServiceWithContext(ctx context.Context, db *database.DB, openContent ocapi.OpenContent, hasProgramAccess bool) *jasperService {
 	return &jasperService{
 		ctx:              ctx,
 		db:               db,
+		openContent:      openContent,
 		hasProgramAccess: hasProgramAccess,
 	}
 }
@@ -53,7 +56,7 @@ func (js *jasperService) generateUsageReportPDF(userID int) ([]byte, error) {
 		return nil, fmt.Errorf("failed to get user engagements: %w", err)
 	}
 
-	resourcesAccessed, err := registry.OpenContent(js.db.DB).ResourcesAccessed(js.ctx, uint(userID))
+	resourcesAccessed, err := js.openContent.ResourcesAccessed(js.ctx, uint(userID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get resource count: %w", err)
 	}
@@ -180,8 +183,8 @@ func (js *jasperService) calculateTotalLogins(user *models.User) string {
 	return fmt.Sprintf("%d", user.LoginMetrics.Total)
 }
 
-func GenerateUsageReportPDF(ctx context.Context, db *database.DB, hasProgramAccess bool, userID int) ([]byte, error) {
-	service := newJasperServiceWithContext(ctx, db, hasProgramAccess)
+func GenerateUsageReportPDF(ctx context.Context, db *database.DB, openContent ocapi.OpenContent, hasProgramAccess bool, userID int) ([]byte, error) {
+	service := newJasperServiceWithContext(ctx, db, openContent, hasProgramAccess)
 	return service.generateUsageReportPDF(userID)
 }
 
