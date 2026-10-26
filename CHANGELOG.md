@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0](https://github.com/UnlockedLabs/unlocked-core/compare/v1.5.0...v1.6.0) (2026-10-26)
+
+
+### Features
+
+* EN-196 move open content jobs out of provider middleware ([0ad7e80](https://github.com/UnlockedLabs/unlocked-core/commit/0ad7e8018ac276bd8b665e7747b422c5a93266af))
+
 ## [1.5.0](https://github.com/UnlockedLabs/unlocked-core/compare/v1.4.0...v1.5.0) (2026-10-22)
 
 
