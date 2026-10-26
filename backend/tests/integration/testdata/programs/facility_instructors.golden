@@ -1,0 +1,33 @@
+{
+  "data": [
+    {
+      "email": "",
+      "id": 0,
+      "name_first": "Unassigned",
+      "name_last": "",
+      "username": "unassigned"
+    },
+    {
+      "email": "instructornorth@example.com",
+      "id": 11,
+      "name_first": "Ivy",
+      "name_last": "Instructor",
+      "username": "instructornorth"
+    },
+    {
+      "email": "facadmin@example.com",
+      "id": 8,
+      "name_first": "Test",
+      "name_last": "User",
+      "username": "facadmin"
+    },
+    {
+      "email": "deptadmin@example.com",
+      "id": 10,
+      "name_first": "Test",
+      "name_last": "User",
+      "username": "deptadmin"
+    }
+  ],
+  "message": "Data fetched successfully"
+}

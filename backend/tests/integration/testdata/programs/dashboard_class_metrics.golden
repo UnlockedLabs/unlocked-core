@@ -1,0 +1,10 @@
+{
+  "data": {
+    "active_classes": 1,
+    "attendance_concerns": 0,
+    "scheduled_classes": 2,
+    "total_enrollments": 3,
+    "total_seats": 10
+  },
+  "message": "Data fetched successfully"
+}

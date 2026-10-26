@@ -10,6 +10,7 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 
 	"github.com/stretchr/testify/require"
 )
@@ -39,7 +40,7 @@ func TestExportResidentAttendanceCSV(t *testing.T) {
 	student2, err := env.CreateTestUser("student2", models.Student, facility2.ID, "STU002")
 	require.NoError(t, err)
 
-	program, err := env.CreateTestProgram("Math Program", models.FundingType(models.FederalGrants), []models.ProgramType{}, []models.ProgramCreditType{}, true, nil)
+	program, err := env.CreateTestProgram("Math Program", programs.FundingType(programs.FederalGrants), []programs.ProgramType{}, []programs.ProgramCreditType{}, true, nil)
 	require.NoError(t, err)
 
 	err = env.SetFacilitiesToProgram(program.ID, []uint{facility1.ID, facility2.ID})
@@ -48,7 +49,7 @@ func TestExportResidentAttendanceCSV(t *testing.T) {
 	instructor1, err := env.CreateTestInstructor(facility1.ID, "export1")
 	require.NoError(t, err)
 
-	class1, err := env.CreateTestClass(program, facility1, models.Active, &instructor1.ID)
+	class1, err := env.CreateTestClass(program, facility1, programs.Active, &instructor1.ID)
 	require.NoError(t, err)
 	require.NoError(t, env.NameCohortClass(class1.ID, "Math Class"))
 
@@ -60,37 +61,37 @@ func TestExportResidentAttendanceCSV(t *testing.T) {
 	date3 := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 
 	enrollmentDate := time.Now().AddDate(0, 0, -10)
-	enrollment := models.ProgramClassEnrollment{
+	enrollment := programs.ProgramClassEnrollment{
 		CohortID:         class1.ID,
 		UserID:           student1.ID,
-		EnrollmentStatus: models.Enrolled,
+		EnrollmentStatus: programs.Enrolled,
 		EnrolledAt:       &enrollmentDate,
 	}
 	require.NoError(t, env.DB.Create(&enrollment).Error)
 
-	attendance1 := models.ProgramClassEventAttendance{
+	attendance1 := programs.ProgramClassEventAttendance{
 		EventID:          event1.ID,
 		UserID:           student1.ID,
 		Date:             date1,
-		AttendanceStatus: models.Present,
+		AttendanceStatus: programs.Present,
 		Note:             models.StringPtr("Great participation"),
 	}
 	require.NoError(t, env.DB.Create(&attendance1).Error)
 
-	attendance2 := models.ProgramClassEventAttendance{
+	attendance2 := programs.ProgramClassEventAttendance{
 		EventID:          event1.ID,
 		UserID:           student1.ID,
 		Date:             date2,
-		AttendanceStatus: models.Absent_Excused,
+		AttendanceStatus: programs.Absent_Excused,
 		Note:             models.StringPtr("Doctor appointment"),
 	}
 	require.NoError(t, env.DB.Create(&attendance2).Error)
 
-	attendance3 := models.ProgramClassEventAttendance{
+	attendance3 := programs.ProgramClassEventAttendance{
 		EventID:          event1.ID,
 		UserID:           student1.ID,
 		Date:             date3,
-		AttendanceStatus: models.Absent_Unexcused,
+		AttendanceStatus: programs.Absent_Unexcused,
 		Note:             nil,
 	}
 	require.NoError(t, env.DB.Create(&attendance3).Error)
@@ -221,7 +222,7 @@ func TestExportResidentAttendanceCSV(t *testing.T) {
 		instructor2, err := env.CreateTestInstructor(facility1.ID, "export2")
 		require.NoError(t, err)
 
-		class2, err := env.CreateTestClass(program, facility1, models.Active, &instructor2.ID)
+		class2, err := env.CreateTestClass(program, facility1, programs.Active, &instructor2.ID)
 		require.NoError(t, err)
 
 		event2, err := env.CreateTestEvent(class2.ID, "", instructor2.ID)
@@ -230,10 +231,10 @@ func TestExportResidentAttendanceCSV(t *testing.T) {
 		enrollDate := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -10)
 		endDate := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2)
 
-		enrollment2 := models.ProgramClassEnrollment{
+		enrollment2 := programs.ProgramClassEnrollment{
 			CohortID:          class2.ID,
 			UserID:            studentEnrollmentDates.ID,
-			EnrollmentStatus:  models.Enrolled,
+			EnrollmentStatus:  programs.Enrolled,
 			EnrolledAt:        &enrollDate,
 			EnrollmentEndedAt: &endDate,
 		}
@@ -243,29 +244,29 @@ func TestExportResidentAttendanceCSV(t *testing.T) {
 		duringEnrollment := enrollDate.AddDate(0, 0, 1).Format("2006-01-02")
 		afterEnrollment := endDate.AddDate(0, 0, 1).Format("2006-01-02")
 
-		attendanceBefore := models.ProgramClassEventAttendance{
+		attendanceBefore := programs.ProgramClassEventAttendance{
 			EventID:          event2.ID,
 			UserID:           studentEnrollmentDates.ID,
 			Date:             beforeEnrollment,
-			AttendanceStatus: models.Present,
+			AttendanceStatus: programs.Present,
 			Note:             models.StringPtr("Before enrollment"),
 		}
 		require.NoError(t, env.DB.Create(&attendanceBefore).Error)
 
-		attendanceDuring := models.ProgramClassEventAttendance{
+		attendanceDuring := programs.ProgramClassEventAttendance{
 			EventID:          event2.ID,
 			UserID:           studentEnrollmentDates.ID,
 			Date:             duringEnrollment,
-			AttendanceStatus: models.Present,
+			AttendanceStatus: programs.Present,
 			Note:             models.StringPtr("During enrollment"),
 		}
 		require.NoError(t, env.DB.Create(&attendanceDuring).Error)
 
-		attendanceAfter := models.ProgramClassEventAttendance{
+		attendanceAfter := programs.ProgramClassEventAttendance{
 			EventID:          event2.ID,
 			UserID:           studentEnrollmentDates.ID,
 			Date:             afterEnrollment,
-			AttendanceStatus: models.Present,
+			AttendanceStatus: programs.Present,
 			Note:             models.StringPtr("After enrollment"),
 		}
 		require.NoError(t, env.DB.Create(&attendanceAfter).Error)
@@ -295,7 +296,7 @@ func TestExportResidentAttendanceCSV(t *testing.T) {
 		studentSorting, err := env.CreateTestUser("studentsort", models.Student, facility1.ID, "STU005")
 		require.NoError(t, err)
 
-		program2, err := env.CreateTestProgram("Algebra Program", models.FundingType(models.FederalGrants), []models.ProgramType{}, []models.ProgramCreditType{}, true, nil)
+		program2, err := env.CreateTestProgram("Algebra Program", programs.FundingType(programs.FederalGrants), []programs.ProgramType{}, []programs.ProgramCreditType{}, true, nil)
 		require.NoError(t, err)
 
 		err = env.SetFacilitiesToProgram(program2.ID, []uint{facility1.ID})
@@ -306,10 +307,10 @@ func TestExportResidentAttendanceCSV(t *testing.T) {
 		instructor4, err := env.CreateTestInstructor(facility1.ID, "export4")
 		require.NoError(t, err)
 
-		class3, err := env.CreateTestClass(program2, facility1, models.Active, &instructor3.ID)
+		class3, err := env.CreateTestClass(program2, facility1, programs.Active, &instructor3.ID)
 		require.NoError(t, err)
 
-		class4, err := env.CreateTestClass(program, facility1, models.Active, &instructor4.ID)
+		class4, err := env.CreateTestClass(program, facility1, programs.Active, &instructor4.ID)
 		require.NoError(t, err)
 
 		event3, err := env.CreateTestEvent(class3.ID, "", instructor3.ID)
@@ -319,18 +320,18 @@ func TestExportResidentAttendanceCSV(t *testing.T) {
 		require.NoError(t, err)
 
 		enrollDate := time.Now().AddDate(0, 0, -10)
-		enrollment3 := models.ProgramClassEnrollment{
+		enrollment3 := programs.ProgramClassEnrollment{
 			CohortID:         class3.ID,
 			UserID:           studentSorting.ID,
-			EnrollmentStatus: models.Enrolled,
+			EnrollmentStatus: programs.Enrolled,
 			EnrolledAt:       &enrollDate,
 		}
 		require.NoError(t, env.DB.Create(&enrollment3).Error)
 
-		enrollment4 := models.ProgramClassEnrollment{
+		enrollment4 := programs.ProgramClassEnrollment{
 			CohortID:         class4.ID,
 			UserID:           studentSorting.ID,
-			EnrollmentStatus: models.Enrolled,
+			EnrollmentStatus: programs.Enrolled,
 			EnrolledAt:       &enrollDate,
 		}
 		require.NoError(t, env.DB.Create(&enrollment4).Error)
@@ -338,11 +339,11 @@ func TestExportResidentAttendanceCSV(t *testing.T) {
 		date1 := time.Now().AddDate(0, 0, -3).Format("2006-01-02")
 		date2 := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 
-		attendances := []models.ProgramClassEventAttendance{
-			{EventID: event4.ID, UserID: studentSorting.ID, Date: date2, AttendanceStatus: models.Present, Note: models.StringPtr("Math 2")},
-			{EventID: event4.ID, UserID: studentSorting.ID, Date: date1, AttendanceStatus: models.Present, Note: models.StringPtr("Math 1")},
-			{EventID: event3.ID, UserID: studentSorting.ID, Date: date2, AttendanceStatus: models.Present, Note: models.StringPtr("Algebra 2")},
-			{EventID: event3.ID, UserID: studentSorting.ID, Date: date1, AttendanceStatus: models.Present, Note: models.StringPtr("Algebra 1")},
+		attendances := []programs.ProgramClassEventAttendance{
+			{EventID: event4.ID, UserID: studentSorting.ID, Date: date2, AttendanceStatus: programs.Present, Note: models.StringPtr("Math 2")},
+			{EventID: event4.ID, UserID: studentSorting.ID, Date: date1, AttendanceStatus: programs.Present, Note: models.StringPtr("Math 1")},
+			{EventID: event3.ID, UserID: studentSorting.ID, Date: date2, AttendanceStatus: programs.Present, Note: models.StringPtr("Algebra 2")},
+			{EventID: event3.ID, UserID: studentSorting.ID, Date: date1, AttendanceStatus: programs.Present, Note: models.StringPtr("Algebra 1")},
 		}
 
 		for _, att := range attendances {

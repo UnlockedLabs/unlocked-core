@@ -1,0 +1,11 @@
+{
+  "data": {
+    "attendance_flags": 3,
+    "classes": 2,
+    "completions": 1,
+    "enrollments": 5,
+    "events": 2,
+    "history": 0
+  },
+  "message": "cannot delete: program has child records"
+}

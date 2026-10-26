@@ -1,0 +1,17 @@
+{
+  "data": [
+    {
+      "completed": 1,
+      "enrolled": 5,
+      "program_type": "Educational",
+      "rate": 20
+    },
+    {
+      "completed": 0,
+      "enrolled": 2,
+      "program_type": "Vocational",
+      "rate": 0
+    }
+  ],
+  "message": "Data fetched successfully"
+}

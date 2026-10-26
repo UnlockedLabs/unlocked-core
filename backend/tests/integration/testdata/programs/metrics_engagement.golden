@@ -1,0 +1,17 @@
+{
+  "data": {
+    "active_residents": 5,
+    "never_engaged_residents": 0,
+    "previously_engaged_residents": 1,
+    "top_programs": [
+      {
+        "completed": 1,
+        "completion_rate": 20,
+        "enrolled": 5,
+        "program_name": "Adult Literacy"
+      }
+    ],
+    "total_residents": 6
+  },
+  "message": "Data fetched successfully"
+}

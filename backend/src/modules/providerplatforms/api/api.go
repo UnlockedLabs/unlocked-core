@@ -33,8 +33,8 @@ type ProviderPlatforms interface {
 	// api with registry.ProviderPlatforms(tx) to make it part of a transaction.
 	DeleteUserMappings(ctx context.Context, userID uint) error
 
-	// The users linked to the given accounts at a provider, for core's Canvas
-	// and Essential Education screens until EN-194 moves them here. MappedUsers
+	// The users linked to the given accounts at a provider, for Programs'
+	// Canvas and Essential Education screens. MappedUsers
 	// has only those at facilityID when it isn't zero, CountMappedAtFacility
 	// counts only those at facilityID, and CountMappedPerFacility counts them
 	// by facility ID.

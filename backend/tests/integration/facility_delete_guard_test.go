@@ -8,6 +8,7 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 
 	"github.com/stretchr/testify/suite"
 )
@@ -105,7 +106,7 @@ func (suite *FacilityDeleteGuardTestSuite) TestDelete_BlockedByRoom() {
 	admin := suite.seedAdmin()
 	facility := suite.seedFacility()
 
-	suite.env.DB.Create(&models.Room{FacilityID: facility.ID, Name: "101"})
+	suite.env.DB.Create(&programs.Room{FacilityID: facility.ID, Name: "101"})
 
 	resp := NewRequest[models.FacilityBlockingChildren](suite.env.Client, suite.T(), http.MethodDelete,
 		fmt.Sprintf("/api/facilities/%d", facility.ID), nil).
@@ -124,12 +125,12 @@ func (suite *FacilityDeleteGuardTestSuite) TestDelete_BlockedByClass() {
 	facility := suite.seedFacility()
 
 	ts := fmt.Sprintf("%d", time.Now().UnixNano())
-	program := &models.Program{Name: "Prog " + ts, IsActive: true}
+	program := &programs.Program{Name: "Prog " + ts, IsActive: true}
 	suite.env.DB.Create(program)
-	suite.env.DB.Create(&models.FacilitiesPrograms{FacilityID: facility.ID, ProgramID: program.ID})
+	suite.env.DB.Create(&programs.FacilitiesPrograms{FacilityID: facility.ID, ProgramID: program.ID})
 	// Status and Capacity are COHORT-level now -- the class tier has neither, and the
 	// facility guard counts program_classes (the class tier), so a bare class is enough.
-	suite.env.DB.Create(&models.ProgramClass{
+	suite.env.DB.Create(&programs.ProgramClass{
 		ProgramID: program.ID, FacilityID: facility.ID,
 		Name: "Class " + ts, Description: models.StringPtr("x"),
 	})

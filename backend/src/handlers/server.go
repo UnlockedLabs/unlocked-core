@@ -9,13 +9,13 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	database "github.com/UnlockedLabs/unlocked-core/backend/src/database"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
 	ocapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api"
+	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
 	ppapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/tasks"
@@ -40,10 +40,10 @@ type Server struct {
 	testingMode       bool
 	wsClient          *ClientManager
 	scheduler         *tasks.Scheduler
-	canvasInflight    sync.Map
 	modules           []module.Module
 	openContent       ocapi.OpenContent
 	providerPlatforms ppapi.ProviderPlatforms
+	programs          programsapi.Programs
 }
 
 type routeDef struct {
@@ -94,14 +94,7 @@ func (srv *Server) RegisterRoutes() {
 		srv.registerOryRoutes,
 		srv.registerFacilitiesRoutes,
 		srv.registerFacilityFeatureAccessRoutes,
-		srv.registerProgramsRoutes,
-		srv.registerClassesRoutes,
-		srv.registerProgramClassTierRoutes,
-		srv.registerClassEventsRoutes,
-		srv.registerProgramClassEnrollmentsRoutes,
-		srv.registerAttendanceRoutes,
 		srv.registerDemoSeedRoutes,
-		srv.registerReportsRoutes,
 		srv.registerLearningRecordRoutes,
 		srv.registerClientErrorRoutes,
 	} {
@@ -199,6 +192,7 @@ func newServer(ctx context.Context) *Server {
 		modules:           registry.All(),
 		openContent:       registry.OpenContent(db.DB),
 		providerPlatforms: registry.ProviderPlatforms(db.DB),
+		programs:          registry.Programs(db.DB),
 	}
 	features, err := server.Db.GetFeatureAccess()
 	if err != nil {
@@ -235,6 +229,7 @@ func newTestingServer() *Server {
 		modules:           registry.All(),
 		openContent:       registry.OpenContent(db.DB),
 		providerPlatforms: registry.ProviderPlatforms(db.DB),
+		programs:          registry.Programs(db.DB),
 	}
 }
 
@@ -267,12 +262,9 @@ func oryConfig() *ory.Configuration {
 }
 
 const (
-	CachedUsers    string = "cache_users"
-	LoginMetrics   string = "login_metrics"
-	AdminLayer2    string = "admin_layer_2"
-	CanvasPrograms string = "canvas_programs"
-	CanvasClasses  string = "canvas_classes"
-	CanvasEvents   string = "canvas_events"
+	CachedUsers  string = "cache_users"
+	LoginMetrics string = "login_metrics"
+	AdminLayer2  string = "admin_layer_2"
 )
 
 func (srv *Server) setupNatsKvBuckets() error {
@@ -282,7 +274,7 @@ func (srv *Server) setupNatsKvBuckets() error {
 		return err
 	}
 	buckets := map[string]nats.KeyValue{}
-	for _, bucket := range []string{CachedUsers, LoginMetrics, AdminLayer2, CanvasPrograms, CanvasClasses, CanvasEvents} {
+	for _, bucket := range []string{CachedUsers, LoginMetrics, AdminLayer2} {
 		kv, err := js.KeyValue(bucket)
 		if err != nil {
 			cfg := &nats.KeyValueConfig{
@@ -292,8 +284,6 @@ func (srv *Server) setupNatsKvBuckets() error {
 			switch bucket {
 			case CachedUsers:
 				cfg.TTL = time.Hour * 1
-			case CanvasPrograms, CanvasClasses, CanvasEvents:
-				cfg.TTL = time.Minute * 5
 			default:
 				cfg.TTL = time.Hour * 24
 			}
@@ -512,52 +502,6 @@ func (srv *Server) WithUserContext(r *http.Request) *database.DB {
 		return database.NewDB(srv.Db.WithContext(context.WithValue(r.Context(), models.UserIDKey, claims.UserID)))
 	}
 	return database.NewDB(srv.Db.WithContext(r.Context()))
-}
-
-func writeConflictResponse(w http.ResponseWriter, conflicts []models.RoomConflict) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusConflict)
-	resp := models.Resource[[]models.RoomConflict]{
-		Message: conflictResponseMessage(conflicts),
-		Data:    conflicts,
-	}
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		return newResponseServiceError(err)
-	}
-	return nil
-}
-
-func conflictResponseMessage(conflicts []models.RoomConflict) string {
-	var hasRoom, hasInstructor bool
-	for _, c := range conflicts {
-		switch c.ConflictType {
-		case models.ConflictTypeInstructor:
-			hasInstructor = true
-		default:
-			hasRoom = true
-		}
-	}
-	switch {
-	case hasRoom && hasInstructor:
-		return "the room and instructor are already booked during this time"
-	case hasInstructor:
-		return "the instructor is already teaching during this time"
-	default:
-		return "room is already booked during this time"
-	}
-}
-
-func writeDeleteConflictResponse(w http.ResponseWriter, message string, blockers models.DeleteBlockingChildren) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusConflict)
-	resp := models.Resource[models.DeleteBlockingChildren]{
-		Message: message,
-		Data:    blockers,
-	}
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		return newResponseServiceError(err)
-	}
-	return nil
 }
 
 func writeFacilityDeleteConflictResponse(w http.ResponseWriter, message string, blockers models.FacilityBlockingChildren) error {

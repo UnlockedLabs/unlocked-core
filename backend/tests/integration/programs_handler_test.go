@@ -8,6 +8,7 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -76,24 +77,24 @@ func (suite *ProgramsHandlerTestSuite) setupTestData() (*models.Facility, *model
 	suite.env.DB.Create(facilityAdmin)
 
 	// Create test program and data
-	program := &models.Program{
+	program := &programs.Program{
 		Name:     "Test Program",
 		IsActive: true,
 	}
 	suite.env.DB.Create(program)
 
 	// Associate program with facility
-	association := &models.FacilitiesPrograms{
+	association := &programs.FacilitiesPrograms{
 		FacilityID: facility.ID,
 		ProgramID:  program.ID,
 	}
 	suite.env.DB.Create(association)
 
 	// Create active class
-	class := &models.ProgramClassCohort{
+	class := &programs.ProgramClassCohort{
 		ProgramID:  program.ID,
 		FacilityID: facility.ID,
-		Status:     models.Active,
+		Status:     programs.Active,
 	}
 	suite.env.DB.Create(class)
 
@@ -109,10 +110,10 @@ func (suite *ProgramsHandlerTestSuite) setupTestData() (*models.Facility, *model
 	suite.env.DB.Create(student)
 
 	now := time.Now()
-	enrollment := &models.ProgramClassEnrollment{
+	enrollment := &programs.ProgramClassEnrollment{
 		CohortID:         class.ID,
 		UserID:           student.ID,
-		EnrollmentStatus: models.Enrolled,
+		EnrollmentStatus: programs.Enrolled,
 		EnrolledAt:       &now,
 	}
 	suite.env.DB.Create(enrollment)
@@ -124,7 +125,7 @@ func (suite *ProgramsHandlerTestSuite) TestProgramsStatsHandler_SystemAdmin() {
 	facility, systemAdmin, _ := suite.setupTestData()
 
 	// Make request as system admin
-	resp := NewRequest[models.ProgramsFacilitiesStats](suite.env.Client, suite.T(), http.MethodGet, "/api/programs/stats?days=all", nil).
+	resp := NewRequest[programs.ProgramsFacilitiesStats](suite.env.Client, suite.T(), http.MethodGet, "/api/programs/stats?days=all", nil).
 		WithTestClaims(&handlers.Claims{Role: models.SystemAdmin, UserID: systemAdmin.ID, FacilityID: facility.ID}).
 		Do().
 		ExpectStatus(http.StatusOK).
@@ -148,7 +149,7 @@ func (suite *ProgramsHandlerTestSuite) TestProgramsStatsHandler_FacilityAdmin() 
 	facility, _, facilityAdmin := suite.setupTestData()
 
 	// Make request as facility admin
-	resp := NewRequest[models.ProgramsFacilitiesStats](suite.env.Client, suite.T(), http.MethodGet, "/api/programs/stats?days=all", nil).
+	resp := NewRequest[programs.ProgramsFacilitiesStats](suite.env.Client, suite.T(), http.MethodGet, "/api/programs/stats?days=all", nil).
 		WithTestClaims(&handlers.Claims{Role: models.FacilityAdmin, UserID: facilityAdmin.ID, FacilityID: facility.ID}).
 		Do().
 		ExpectStatus(http.StatusOK).
@@ -190,7 +191,7 @@ func (suite *ProgramsHandlerTestSuite) TestProgramsStatsHandler_TimeFilterParsin
 				url += "?days=" + tc.daysParam
 			}
 
-			resp := NewRequest[models.ProgramsFacilitiesStats](suite.env.Client, t, http.MethodGet, url, nil).
+			resp := NewRequest[programs.ProgramsFacilitiesStats](suite.env.Client, t, http.MethodGet, url, nil).
 				WithTestClaims(&handlers.Claims{Role: models.SystemAdmin, UserID: systemAdmin.ID, FacilityID: facility.ID}).
 				Do().
 				ExpectStatus(tc.expectedCode)
@@ -205,7 +206,7 @@ func (suite *ProgramsHandlerTestSuite) TestProgramsStatsHandler_TimeFilterParsin
 // Disabled: Authentication middleware has issues in test environment
 // func (suite *ProgramsHandlerTestSuite) TestProgramsStatsHandler_Unauthorized() {
 // 	// Make request without authentication
-// 	NewRequest[models.ProgramsFacilitiesStats](suite.env.Client, suite.T(), http.MethodGet, "/api/programs/stats?days=all", nil).
+// 	NewRequest[programs.ProgramsFacilitiesStats](suite.env.Client, suite.T(), http.MethodGet, "/api/programs/stats?days=all", nil).
 // 		Do().
 // 		ExpectStatus(http.StatusUnauthorized)
 // }
@@ -227,7 +228,7 @@ func (suite *ProgramsHandlerTestSuite) TestProgramsStatsHandler_StudentRole() {
 	suite.env.DB.Create(student)
 
 	// Students should not have access to program stats
-	resp := NewRequest[models.ProgramsFacilitiesStats](suite.env.Client, suite.T(), http.MethodGet, "/api/programs/stats?days=all", nil).
+	resp := NewRequest[programs.ProgramsFacilitiesStats](suite.env.Client, suite.T(), http.MethodGet, "/api/programs/stats?days=all", nil).
 		WithTestClaims(&handlers.Claims{Role: models.Student, UserID: student.ID, FacilityID: facility.ID}).
 		Do()
 
@@ -250,7 +251,7 @@ func (suite *ProgramsHandlerTestSuite) TestProgramsStatsHandler_EmptyDatabase() 
 	suite.env.DB.Create(systemAdmin)
 
 	// Test with empty database
-	resp := NewRequest[models.ProgramsFacilitiesStats](suite.env.Client, suite.T(), http.MethodGet, "/api/programs/stats?days=all", nil).
+	resp := NewRequest[programs.ProgramsFacilitiesStats](suite.env.Client, suite.T(), http.MethodGet, "/api/programs/stats?days=all", nil).
 		WithTestClaims(&handlers.Claims{Role: models.SystemAdmin, UserID: systemAdmin.ID, FacilityID: facility.ID}).
 		Do().
 		ExpectStatus(http.StatusOK).
@@ -267,7 +268,7 @@ func (suite *ProgramsHandlerTestSuite) TestProgramsStatsHandler_ResponseStructur
 	facility, systemAdmin, _ := suite.setupTestData()
 
 	// Make request and get raw response to check structure
-	resp := NewRequest[models.ProgramsFacilitiesStats](suite.env.Client, suite.T(), http.MethodGet, "/api/programs/stats?days=all", nil).
+	resp := NewRequest[programs.ProgramsFacilitiesStats](suite.env.Client, suite.T(), http.MethodGet, "/api/programs/stats?days=all", nil).
 		WithTestClaims(&handlers.Claims{Role: models.SystemAdmin, UserID: systemAdmin.ID, FacilityID: facility.ID}).
 		AsRaw().
 		Do().

@@ -8,6 +8,7 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 
 	"github.com/stretchr/testify/require"
 )
@@ -24,13 +25,13 @@ func TestInstructorConflictDetection(t *testing.T) {
 	facilityAdmin, err := env.CreateTestUser("instconflictadmin", models.FacilityAdmin, facility.ID, "")
 	require.NoError(t, err)
 
-	program, err := env.CreateTestProgram("Instructor Conflict Program", models.FundingType(models.FederalGrants), []models.ProgramType{}, []models.ProgramCreditType{}, true, nil)
+	program, err := env.CreateTestProgram("Instructor Conflict Program", programs.FundingType(programs.FederalGrants), []programs.ProgramType{}, []programs.ProgramCreditType{}, true, nil)
 	require.NoError(t, err)
 
 	err = env.SetFacilitiesToProgram(program.ID, []uint{facility.ID})
 	require.NoError(t, err)
 
-	room := &models.Room{FacilityID: facility.ID, Name: "Instructor Conflict Room"}
+	room := &programs.Room{FacilityID: facility.ID, Name: "Instructor Conflict Room"}
 	require.NoError(t, env.DB.Create(room).Error)
 
 	t.Run("Detects overlapping instructor bookings", func(t *testing.T) {
@@ -47,9 +48,9 @@ func TestInstructorConflictDetection(t *testing.T) {
 }
 
 // helper: create a class with an instructor and a single daily event in the given window.
-func createClassWithEvent(t *testing.T, env *TestEnv, facility *models.Facility, admin *models.User, program *models.Program, name string, instructorID, roomID uint, recurrenceRule, duration string, start time.Time, end time.Time) *models.ProgramClassCohort {
+func createClassWithEvent(t *testing.T, env *TestEnv, facility *models.Facility, admin *models.User, program *programs.Program, name string, instructorID, roomID uint, recurrenceRule, duration string, start time.Time, end time.Time) *programs.ProgramClassCohort {
 	creditHours := int64(2)
-	class := models.ProgramClassCohort{
+	class := programs.ProgramClassCohort{
 		ProgramID:    program.ID,
 		FacilityID:   facility.ID,
 		Capacity:     10,
@@ -57,10 +58,10 @@ func createClassWithEvent(t *testing.T, env *TestEnv, facility *models.Facility,
 		Description:  name,
 		StartDt:      start,
 		EndDt:        &end,
-		Status:       models.Scheduled,
+		Status:       programs.Scheduled,
 		CreditHours:  &creditHours,
 	}
-	resp := NewRequest[*models.ProgramClassCohort](env.Client, t, http.MethodPost, fmt.Sprintf("/api/programs/%d/classes", program.ID), class).
+	resp := NewRequest[*programs.ProgramClassCohort](env.Client, t, http.MethodPost, fmt.Sprintf("/api/programs/%d/classes", program.ID), class).
 		WithTestClaims(&handlers.Claims{Role: models.FacilityAdmin, UserID: admin.ID, FacilityID: facility.ID}).
 		Do().
 		ExpectStatus(http.StatusCreated)
@@ -81,7 +82,7 @@ func createClassWithEvent(t *testing.T, env *TestEnv, facility *models.Facility,
 	return created
 }
 
-func testInstructorDetectsOverlap(t *testing.T, env *TestEnv, facility *models.Facility, admin *models.User, program *models.Program, roomID uint) {
+func testInstructorDetectsOverlap(t *testing.T, env *TestEnv, facility *models.Facility, admin *models.User, program *programs.Program, roomID uint) {
 	instructor, err := env.CreateTestInstructor(facility.ID, "instoverlap")
 	require.NoError(t, err)
 
@@ -91,7 +92,7 @@ func testInstructorDetectsOverlap(t *testing.T, env *TestEnv, facility *models.F
 		"DTSTART:20260302T090000Z\nRRULE:FREQ=DAILY;UNTIL=20260331T000000Z", "2h", start, end)
 
 	// Same instructor, overlapping window (9:30) -> conflict.
-	conflicts, err := env.DB.CheckConflicts(&models.ConflictCheckRequest{
+	conflicts, err := env.Programs.CheckConflicts(&programs.ConflictCheckRequest{
 		FacilityID:     facility.ID,
 		InstructorID:   instructor.ID,
 		RecurrenceRule: "DTSTART:20260302T093000Z\nRRULE:FREQ=DAILY;UNTIL=20260310T000000Z",
@@ -99,11 +100,11 @@ func testInstructorDetectsOverlap(t *testing.T, env *TestEnv, facility *models.F
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, conflicts, "should detect instructor double-booking for overlapping times")
-	require.Equal(t, models.ConflictTypeInstructor, conflicts[0].ConflictType, "conflict should be tagged as instructor")
+	require.Equal(t, programs.ConflictTypeInstructor, conflicts[0].ConflictType, "conflict should be tagged as instructor")
 	require.Equal(t, "Instructor Morning Class", conflicts[0].ClassName)
 }
 
-func testInstructorNoConflictDifferentTimes(t *testing.T, env *TestEnv, facility *models.Facility, admin *models.User, program *models.Program, roomID uint) {
+func testInstructorNoConflictDifferentTimes(t *testing.T, env *TestEnv, facility *models.Facility, admin *models.User, program *programs.Program, roomID uint) {
 	instructor, err := env.CreateTestInstructor(facility.ID, "instnoconf")
 	require.NoError(t, err)
 
@@ -113,7 +114,7 @@ func testInstructorNoConflictDifferentTimes(t *testing.T, env *TestEnv, facility
 		"DTSTART:20260504T090000Z\nRRULE:FREQ=DAILY;UNTIL=20260531T000000Z", "2h", start, end)
 
 	// Same instructor but a non-overlapping afternoon window (2-4 PM) -> no conflict.
-	conflicts, err := env.DB.CheckConflicts(&models.ConflictCheckRequest{
+	conflicts, err := env.Programs.CheckConflicts(&programs.ConflictCheckRequest{
 		FacilityID:     facility.ID,
 		InstructorID:   instructor.ID,
 		RecurrenceRule: "DTSTART:20260504T140000Z\nRRULE:FREQ=DAILY;UNTIL=20260510T000000Z",
@@ -125,7 +126,7 @@ func testInstructorNoConflictDifferentTimes(t *testing.T, env *TestEnv, facility
 
 // testHandlerReturns409OnInstructorChange reproduces the ticket scenario: change
 // class X's instructor to the instructor of overlapping class Y -> 409.
-func testHandlerReturns409OnInstructorChange(t *testing.T, env *TestEnv, facility *models.Facility, admin *models.User, program *models.Program, roomID uint) {
+func testHandlerReturns409OnInstructorChange(t *testing.T, env *TestEnv, facility *models.Facility, admin *models.User, program *programs.Program, roomID uint) {
 	instructor1, err := env.CreateTestInstructor(facility.ID, "instchangea")
 	require.NoError(t, err)
 	instructor2, err := env.CreateTestInstructor(facility.ID, "instchangeb")
@@ -139,7 +140,7 @@ func testHandlerReturns409OnInstructorChange(t *testing.T, env *TestEnv, facilit
 		"DTSTART:20260601T100000Z\nRRULE:FREQ=DAILY;UNTIL=20260630T000000Z", "2h", start, end)
 
 	// Class 2 taught by instructor2 at an overlapping 10:30 (different room avoids a room conflict).
-	room2 := &models.Room{FacilityID: facility.ID, Name: "Instructor Conflict Room 2"}
+	room2 := &programs.Room{FacilityID: facility.ID, Name: "Instructor Conflict Room 2"}
 	require.NoError(t, env.DB.Create(room2).Error)
 	class2 := createClassWithEvent(t, env, facility, admin, program, "Class X (instructor2)", instructor2.ID, room2.ID,
 		"DTSTART:20260601T103000Z\nRRULE:FREQ=DAILY;UNTIL=20260630T000000Z", "1h", start, end)

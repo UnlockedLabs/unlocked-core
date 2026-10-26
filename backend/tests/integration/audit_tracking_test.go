@@ -1,13 +1,15 @@
 package integration
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
+
+	"github.com/UnlockedLabs/unlocked-contracts/identity"
 )
 
 func TestAuditFieldPopulation(t *testing.T) {
@@ -32,11 +34,11 @@ func TestAuditFieldPopulation(t *testing.T) {
 		"description":  "Program for testing audit fields",
 		"funding_type": "Federal_Grants",
 		"is_active":    true,
-		"program_types": []models.ProgramType{
-			{ProgramType: models.Educational, ProgramID: 0},
+		"program_types": []programs.ProgramType{
+			{ProgramType: programs.Educational, ProgramID: 0},
 		},
-		"credit_types": []models.ProgramCreditType{
-			{CreditType: models.Completion, ProgramID: 0},
+		"credit_types": []programs.ProgramCreditType{
+			{CreditType: programs.Completion, ProgramID: 0},
 		},
 		"facilities": []uint{1},
 	}
@@ -57,7 +59,7 @@ func TestAuditFieldPopulation(t *testing.T) {
 	responseData := resp.GetData()
 	createdProgramID := uint(responseData["id"].(float64))
 
-	var createdProgram models.Program
+	var createdProgram programs.Program
 	if err := env.DB.First(&createdProgram, createdProgramID).Error; err != nil {
 		t.Fatalf("Failed to query created program: %v", err)
 	}
@@ -90,7 +92,7 @@ func TestAuditFieldPopulation(t *testing.T) {
 		t.Fatalf("Expected status 200, got %d", updateResp.resp.StatusCode)
 	}
 
-	var updatedProgram models.Program
+	var updatedProgram programs.Program
 	if err := env.DB.First(&updatedProgram, createdProgramID).Error; err != nil {
 		t.Fatalf("Failed to query updated program: %v", err)
 	}
@@ -144,8 +146,8 @@ func TestAuditFieldsWithDifferentUsers(t *testing.T) {
 		"description":  "Testing audit with multiple users",
 		"funding_type": "State_Grants",
 		"is_active":    true,
-		"program_types": []models.ProgramType{
-			{ProgramType: models.Vocational, ProgramID: 0},
+		"program_types": []programs.ProgramType{
+			{ProgramType: programs.Vocational, ProgramID: 0},
 		},
 		"facilities": []uint{1},
 	}
@@ -166,7 +168,7 @@ func TestAuditFieldsWithDifferentUsers(t *testing.T) {
 	createdProgramData := createResp.GetData()
 	createdProgramID := uint(createdProgramData["id"].(float64))
 
-	var createdProgram models.Program
+	var createdProgram programs.Program
 	if err := env.DB.First(&createdProgram, createdProgramID).Error; err != nil {
 		t.Fatalf("Failed to query created program: %v", err)
 	}
@@ -198,7 +200,7 @@ func TestAuditFieldsWithDifferentUsers(t *testing.T) {
 	updatedProgramData := updateResp.GetData()
 	updatedProgramID := uint(updatedProgramData["id"].(float64))
 
-	var updatedProgram models.Program
+	var updatedProgram programs.Program
 	if err := env.DB.First(&updatedProgram, updatedProgramID).Error; err != nil {
 		t.Fatalf("Failed to query updated program: %v", err)
 	}
@@ -260,12 +262,12 @@ func TestAuditFieldConstraints(t *testing.T) {
 		t.Skip("sqlite tests do not enforce foreign key constraints in this setup")
 	}
 
-	invalidUserProgram := models.Program{
+	invalidUserProgram := programs.Program{
 		Name:        "Invalid User Program",
 		Description: "This should fail due to foreign key constraint",
-		FundingType: models.Other,
+		FundingType: programs.Other,
 		IsActive:    true,
-		DatabaseFields: models.DatabaseFields{
+		DatabaseFields: programs.DatabaseFields{
 			CreateUserID: models.UintPtr(999999),
 			UpdateUserID: models.UintPtr(999999),
 		},
@@ -276,10 +278,10 @@ func TestAuditFieldConstraints(t *testing.T) {
 		t.Error("Expected foreign key constraint violation when using non-existent user ID")
 	}
 
-	nullAuditProgram := models.Program{
+	nullAuditProgram := programs.Program{
 		Name:        "System Operation Program",
 		Description: "Created by system operations",
-		FundingType: models.Other,
+		FundingType: programs.Other,
 		IsActive:    true,
 	}
 
@@ -305,13 +307,15 @@ func TestAuditFieldsPerformance(t *testing.T) {
 	if err := env.DB.Create(&testUser).Error; err != nil {
 		t.Fatalf("Failed to create test user: %v", err)
 	}
-	env.Context = context.WithValue(env.Context, models.UserIDKey, testUser.ID)
+	// Programs' models take the audit user from the caller's claims, as its
+	// routes have them.
+	env.Context = identity.NewContext(env.Context, &identity.Claims{UserID: testUser.ID})
 
 	for i := 0; i < 10; i++ {
-		program := models.Program{
+		program := programs.Program{
 			Name:        fmt.Sprintf("Performance Test Program %d", i),
 			Description: fmt.Sprintf("Testing performance of audit fields %d", i),
-			FundingType: models.Other,
+			FundingType: programs.Other,
 			IsActive:    true,
 		}
 
@@ -328,17 +332,17 @@ func TestAuditFieldsPerformance(t *testing.T) {
 		}
 	}
 
-	var programs []models.Program
+	var created []programs.Program
 	start := time.Now()
-	err := env.DB.Where("create_user_id = ?", testUser.ID).Find(&programs).Error
+	err := env.DB.Where("create_user_id = ?", testUser.ID).Find(&created).Error
 	duration := time.Since(start)
 
 	if err != nil {
 		t.Fatalf("Failed to query programs by audit field: %v", err)
 	}
 
-	if len(programs) != 10 {
-		t.Errorf("Expected 10 programs, got %d", len(programs))
+	if len(created) != 10 {
+		t.Errorf("Expected 10 programs, got %d", len(created))
 	}
 
 	if duration > 100*time.Millisecond {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 
 	"github.com/stretchr/testify/require"
 )
@@ -22,15 +23,15 @@ func TestEnrollmentByProgramType(t *testing.T) {
 	facility, err := env.CreateTestFacility("Type Facility")
 	require.NoError(t, err)
 
-	progA, err := env.CreateTestProgram("GED Prep", models.StateGrants,
-		[]models.ProgramType{{ProgramType: models.Educational}}, nil, true, nil)
+	progA, err := env.CreateTestProgram("GED Prep", programs.StateGrants,
+		[]programs.ProgramType{{ProgramType: programs.Educational}}, nil, true, nil)
 	require.NoError(t, err)
-	progB, err := env.CreateTestProgram("Welding", models.StateGrants,
-		[]models.ProgramType{{ProgramType: models.Vocational}}, nil, true, nil)
+	progB, err := env.CreateTestProgram("Welding", programs.StateGrants,
+		[]programs.ProgramType{{ProgramType: programs.Vocational}}, nil, true, nil)
 	require.NoError(t, err)
-	classA, err := env.CreateTestClass(progA, facility, models.Active, nil)
+	classA, err := env.CreateTestClass(progA, facility, programs.Active, nil)
 	require.NoError(t, err)
-	classB, err := env.CreateTestClass(progB, facility, models.Active, nil)
+	classB, err := env.CreateTestClass(progB, facility, programs.Active, nil)
 	require.NoError(t, err)
 
 	u1, err := env.CreateTestUser("typeres1", models.Student, facility.ID, "")
@@ -38,21 +39,21 @@ func TestEnrollmentByProgramType(t *testing.T) {
 	u2, err := env.CreateTestUser("typeres2", models.Student, facility.ID, "")
 	require.NoError(t, err)
 
-	_, err = env.CreateTestEnrollment(classA.ID, u1.ID, models.EnrollmentCompleted)
+	_, err = env.CreateTestEnrollment(classA.ID, u1.ID, programs.EnrollmentCompleted)
 	require.NoError(t, err)
-	_, err = env.CreateTestEnrollment(classA.ID, u2.ID, models.Enrolled)
+	_, err = env.CreateTestEnrollment(classA.ID, u2.ID, programs.Enrolled)
 	require.NoError(t, err)
-	_, err = env.CreateTestEnrollment(classB.ID, u1.ID, models.Enrolled)
+	_, err = env.CreateTestEnrollment(classB.ID, u1.ID, programs.Enrolled)
 	require.NoError(t, err)
 
-	rows := NewRequest[[]models.ProgramTypeEnrollment](env.Client, t, http.MethodGet,
+	rows := NewRequest[[]programs.ProgramTypeEnrollment](env.Client, t, http.MethodGet,
 		"/api/department-metrics/programs/enrollment-by-type?facility="+strconv.Itoa(int(facility.ID)), nil).
 		WithTestClaims(&handlers.Claims{Role: models.SystemAdmin, FacilityID: facility.ID}).
 		Do().
 		ExpectStatus(http.StatusOK).
 		GetData()
 
-	byType := map[string]models.ProgramTypeEnrollment{}
+	byType := map[string]programs.ProgramTypeEnrollment{}
 	for _, row := range rows {
 		byType[row.ProgramType] = row
 	}
@@ -74,12 +75,12 @@ func TestEnrollmentByProgramTypeAllFacilities(t *testing.T) {
 	facilityTwo, err := env.CreateTestFacility("Type Facility Two")
 	require.NoError(t, err)
 
-	prog, err := env.CreateTestProgram("GED Prep", models.StateGrants,
-		[]models.ProgramType{{ProgramType: models.Educational}}, nil, true, nil)
+	prog, err := env.CreateTestProgram("GED Prep", programs.StateGrants,
+		[]programs.ProgramType{{ProgramType: programs.Educational}}, nil, true, nil)
 	require.NoError(t, err)
-	classOne, err := env.CreateTestClass(prog, facilityOne, models.Active, nil)
+	classOne, err := env.CreateTestClass(prog, facilityOne, programs.Active, nil)
 	require.NoError(t, err)
-	classTwo, err := env.CreateTestClass(prog, facilityTwo, models.Active, nil)
+	classTwo, err := env.CreateTestClass(prog, facilityTwo, programs.Active, nil)
 	require.NoError(t, err)
 
 	u1, err := env.CreateTestUser("alltyperes1", models.Student, facilityOne.ID, "")
@@ -87,12 +88,12 @@ func TestEnrollmentByProgramTypeAllFacilities(t *testing.T) {
 	u2, err := env.CreateTestUser("alltyperes2", models.Student, facilityTwo.ID, "")
 	require.NoError(t, err)
 
-	_, err = env.CreateTestEnrollment(classOne.ID, u1.ID, models.EnrollmentCompleted)
+	_, err = env.CreateTestEnrollment(classOne.ID, u1.ID, programs.EnrollmentCompleted)
 	require.NoError(t, err)
-	_, err = env.CreateTestEnrollment(classTwo.ID, u2.ID, models.Enrolled)
+	_, err = env.CreateTestEnrollment(classTwo.ID, u2.ID, programs.Enrolled)
 	require.NoError(t, err)
 
-	rows := NewRequest[[]models.ProgramTypeEnrollment](env.Client, t, http.MethodGet,
+	rows := NewRequest[[]programs.ProgramTypeEnrollment](env.Client, t, http.MethodGet,
 		"/api/department-metrics/programs/enrollment-by-type?facility=all", nil).
 		WithTestClaims(&handlers.Claims{Role: models.SystemAdmin, FacilityID: facilityOne.ID}).
 		Do().
@@ -118,13 +119,13 @@ func TestEnrollmentByProgramTypeCapping(t *testing.T) {
 	facility, err := env.CreateTestFacility("Capping Facility")
 	require.NoError(t, err)
 
-	allTypes := []models.ProgType{
-		models.Educational, models.Vocational, models.MentalHealth,
-		models.Religious, models.ReEntry, models.Therapeutic,
+	allTypes := []programs.ProgType{
+		programs.Educational, programs.Vocational, programs.MentalHealth,
+		programs.Religious, programs.ReEntry, programs.Therapeutic,
 	}
 
 	type classInfo struct {
-		class     *models.ProgramClassCohort
+		class     *programs.ProgramClassCohort
 		enrollees int
 		completes int
 	}
@@ -140,10 +141,10 @@ func TestEnrollmentByProgramTypeCapping(t *testing.T) {
 
 	classes := make([]classInfo, 0, len(allTypes))
 	for i, pt := range allTypes {
-		prog, err := env.CreateTestProgram(string(pt)+" Program", models.StateGrants,
-			[]models.ProgramType{{ProgramType: pt}}, nil, true, nil)
+		prog, err := env.CreateTestProgram(string(pt)+" Program", programs.StateGrants,
+			[]programs.ProgramType{{ProgramType: pt}}, nil, true, nil)
 		require.NoError(t, err)
-		class, err := env.CreateTestClass(prog, facility, models.Active, nil)
+		class, err := env.CreateTestClass(prog, facility, programs.Active, nil)
 		require.NoError(t, err)
 		classes = append(classes, classInfo{class: class, enrollees: counts[i], completes: completes[i]})
 	}
@@ -154,16 +155,16 @@ func TestEnrollmentByProgramTypeCapping(t *testing.T) {
 			userN++
 			user, err := env.CreateTestUser("capres"+strconv.Itoa(userN), models.Student, facility.ID, "")
 			require.NoError(t, err)
-			status := models.Enrolled
+			status := programs.Enrolled
 			if i < ci.completes {
-				status = models.EnrollmentCompleted
+				status = programs.EnrollmentCompleted
 			}
 			_, err = env.CreateTestEnrollment(ci.class.ID, user.ID, status)
 			require.NoError(t, err)
 		}
 	}
 
-	rows := NewRequest[[]models.ProgramTypeEnrollment](env.Client, t, http.MethodGet,
+	rows := NewRequest[[]programs.ProgramTypeEnrollment](env.Client, t, http.MethodGet,
 		"/api/department-metrics/programs/enrollment-by-type?facility="+strconv.Itoa(int(facility.ID)), nil).
 		WithTestClaims(&handlers.Claims{Role: models.SystemAdmin, FacilityID: facility.ID}).
 		Do().
@@ -172,7 +173,7 @@ func TestEnrollmentByProgramTypeCapping(t *testing.T) {
 
 	require.Len(t, rows, 5)
 
-	byType := map[string]models.ProgramTypeEnrollment{}
+	byType := map[string]programs.ProgramTypeEnrollment{}
 	for _, row := range rows {
 		byType[row.ProgramType] = row
 	}
@@ -203,22 +204,22 @@ func TestEnrollmentByProgramTypeNoCappingAtBoundary(t *testing.T) {
 	facility, err := env.CreateTestFacility("Boundary Facility")
 	require.NoError(t, err)
 
-	fourTypes := []models.ProgType{
-		models.Educational, models.Vocational, models.MentalHealth, models.Religious,
+	fourTypes := []programs.ProgType{
+		programs.Educational, programs.Vocational, programs.MentalHealth, programs.Religious,
 	}
 	for i, pt := range fourTypes {
-		prog, err := env.CreateTestProgram(string(pt)+" Program", models.StateGrants,
-			[]models.ProgramType{{ProgramType: pt}}, nil, true, nil)
+		prog, err := env.CreateTestProgram(string(pt)+" Program", programs.StateGrants,
+			[]programs.ProgramType{{ProgramType: pt}}, nil, true, nil)
 		require.NoError(t, err)
-		class, err := env.CreateTestClass(prog, facility, models.Active, nil)
+		class, err := env.CreateTestClass(prog, facility, programs.Active, nil)
 		require.NoError(t, err)
 		user, err := env.CreateTestUser("boundres"+strconv.Itoa(i), models.Student, facility.ID, "")
 		require.NoError(t, err)
-		_, err = env.CreateTestEnrollment(class.ID, user.ID, models.Enrolled)
+		_, err = env.CreateTestEnrollment(class.ID, user.ID, programs.Enrolled)
 		require.NoError(t, err)
 	}
 
-	rows := NewRequest[[]models.ProgramTypeEnrollment](env.Client, t, http.MethodGet,
+	rows := NewRequest[[]programs.ProgramTypeEnrollment](env.Client, t, http.MethodGet,
 		"/api/department-metrics/programs/enrollment-by-type?facility="+strconv.Itoa(int(facility.ID)), nil).
 		WithTestClaims(&handlers.Claims{Role: models.SystemAdmin, FacilityID: facility.ID}).
 		Do().

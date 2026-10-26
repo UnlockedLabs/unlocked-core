@@ -56,10 +56,6 @@ func newInvalidQueryParamServiceError(err error, paramName string) serviceError 
 	return NewServiceError(err, http.StatusBadRequest, fmt.Sprintf("invalid %s parameter", paramName))
 }
 
-func newForbiddenServiceError(err error, msg string) serviceError {
-	return NewServiceError(err, http.StatusForbidden, msg)
-}
-
 func newCreateRequestServiceError(err error) serviceError {
 	return NewServiceError(err, http.StatusInternalServerError, "error creating request")
 }

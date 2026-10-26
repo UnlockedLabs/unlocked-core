@@ -131,6 +131,68 @@ func TestModuleRouterUserParamPanics(t *testing.T) {
 	}
 }
 
+// A route's Allow sees the request and the caller, and the caller must pass it
+// as well as the route's access level, UserParam and features.
+func TestModuleRouterAllow(t *testing.T) {
+	srv := newTestingServer()
+	ok := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	north, south := createTestFacility(t, srv, "North"), createTestFacility(t, srv, "South")
+	allow := func(r *http.Request, c *identity.Claims) bool {
+		return r.PathValue("class") == "open" && c.FacilityID == north
+	}
+	router := moduleRouter{srv}
+	router.Handle(module.Route{Pattern: "GET /api/test-module/classes/{class}", Handler: ok, Allow: allow})
+	router.Handle(module.Route{Pattern: "GET /api/test-module/users/{id}/classes/{class}", Handler: ok, UserParam: "id", Allow: allow})
+	router.Handle(module.Route{Pattern: "GET /api/test-module/dept-admin/classes/{class}", Handler: ok, Access: module.DeptAdmin, Allow: allow})
+	router.Handle(module.Route{Pattern: "GET /api/test-module/feature/classes/{class}", Handler: ok, Allow: allow, Features: []models.FeatureAccess{models.OpenContentAccess}})
+
+	resident := createTestUser(t, srv, "resident", models.Student, north)
+	neighbor := createTestUser(t, srv, "neighbor", models.Student, north)
+	southResident := createTestUser(t, srv, "southres", models.Student, south)
+	as := func(u *models.User) Claims { return Claims{UserID: u.ID, Role: u.Role, FacilityID: u.FacilityID} }
+	facAdmin := as(createTestUser(t, srv, "facadmin", models.FacilityAdmin, north))
+	deptAdmin := as(createTestUser(t, srv, "deptadmin", models.DepartmentAdmin, north))
+	// The testing server reads nil FeatureAccess as every feature.
+	withFeatures := func(c Claims, fs ...models.FeatureAccess) Claims {
+		c.FeatureAccess = append([]models.FeatureAccess{}, fs...)
+		return c
+	}
+
+	allowed, denied := http.StatusOK, http.StatusUnauthorized
+	tests := []struct {
+		name   string
+		path   string
+		caller Claims
+		want   int
+	}{
+		{"allowed", "/api/test-module/classes/open", as(resident), allowed},
+		{"denied by the path", "/api/test-module/classes/closed", as(resident), denied},
+		{"denied by the caller", "/api/test-module/classes/open", as(southResident), denied},
+		{"user param and allow pass", fmt.Sprintf("/api/test-module/users/%d/classes/open", resident.ID), as(resident), allowed},
+		{"user param fails", fmt.Sprintf("/api/test-module/users/%d/classes/open", neighbor.ID), as(resident), denied},
+		{"user param passes, allow fails", fmt.Sprintf("/api/test-module/users/%d/classes/closed", resident.ID), as(resident), denied},
+		{"department admin and allow pass", "/api/test-module/dept-admin/classes/open", deptAdmin, allowed},
+		{"access level fails", "/api/test-module/dept-admin/classes/open", facAdmin, denied},
+		{"access level passes, allow fails", "/api/test-module/dept-admin/classes/closed", deptAdmin, denied},
+		{"feature and allow pass", "/api/test-module/feature/classes/open", withFeatures(as(resident), models.OpenContentAccess), allowed},
+		{"feature off", "/api/test-module/feature/classes/open", withFeatures(as(resident)), denied},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			srv.Mux.ServeHTTP(w, requestAs(t, tt.path, tt.caller))
+			assert.Equal(t, tt.want, w.Code, w.Body.String())
+		})
+	}
+
+	t.Run("denied with core's response", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		srv.Mux.ServeHTTP(w, requestAs(t, "/api/test-module/classes/closed", as(resident)))
+		assert.Equal(t, denied, w.Code)
+		assert.Equal(t, "User is not allowed to view this resource\n", w.Body.String())
+	})
+}
+
 // An access level core doesn't know stops startup rather than leaving the
 // route open.
 func TestModuleRouterUnknownAccessPanics(t *testing.T) {
@@ -242,50 +304,61 @@ func TestModuleDeps(t *testing.T) {
 	require.NotNil(t, deps.LiveProviders)
 	// The testing server has no Canvas cache, so there is nothing to clear.
 	assert.NotPanics(t, func() { deps.LiveProviders.MappingsChanged(1, 1) })
+	assert.NotNil(t, deps.HTTP)
+	assert.NotNil(t, deps.Features)
+	assert.NotNil(t, deps.Reports)
 }
 
-// Only a provider that lists its own users (Essential Ed) answers; the rest
-// fall back to provider-middleware.
-func TestLiveProvidersUsers(t *testing.T) {
+// A module request goes out with the client the server has when it is sent,
+// so a client set after startup, such as a test's fake, is the one used.
+func TestHTTPClient(t *testing.T) {
 	srv := newTestingServer()
-	status := http.StatusOK
+	client := srv.moduleDeps().HTTP
 	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(envelope([]map[string]interface{}{
-			{"id": float64(4329946), "first_name": "Jane", "last_name": "Smith", "username": "jsmith", "email_address": "jane@example.com"},
-		}, true))
+		w.WriteHeader(http.StatusTeapot)
 	}))
 	defer ts.Close()
+	// Only the fake's own client trusts its certificate.
 	srv.Client = ts.Client()
-	const essentialEd, kolibri = 1, 2
-	require.NoError(t, srv.Db.Exec(`INSERT INTO provider_platforms (id, type, name, account_id, access_key, base_url, state) VALUES
-		(?, 'essential_ed', 'Essential Ed', '303', 'token', ?, 'enabled'), (?, 'kolibri', 'Kolibri', '', '', ?, 'enabled')`,
-		essentialEd, ts.URL, kolibri, ts.URL).Error)
-	live := liveProviders{srv}
 
-	t.Run("essential ed lists its users", func(t *testing.T) {
-		users, ok, err := live.Users(context.Background(), essentialEd)
-		require.NoError(t, err)
-		assert.True(t, ok)
-		assert.Equal(t, []module.ProviderUser{{
-			Username: "jsmith", NameFirst: "Jane", NameLast: "Smith", Email: "jane@example.com",
-			ExternalUserID: "4329946", ExternalUsername: "jsmith",
-		}}, users)
-	})
+	req, err := http.NewRequest(http.MethodGet, ts.URL, nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	assert.Equal(t, http.StatusTeapot, resp.StatusCode)
+}
 
-	t.Run("kolibri goes through provider-middleware", func(t *testing.T) {
-		users, ok, err := live.Users(context.Background(), kolibri)
-		require.NoError(t, err)
-		assert.False(t, ok)
-		assert.Nil(t, users)
-	})
+// A module sees a facility's features as core resolves them: the facility's
+// own settings over the statewide ones, without sub-features of a feature
+// that is off.
+func TestFacilityFeatures(t *testing.T) {
+	srv := newTestingServer()
+	srv.features = []models.FeatureAccess{models.OpenContentAccess, models.HelpfulLinksAccess, models.ProviderAccess}
+	features := srv.moduleDeps().Features
 
-	t.Run("a failed listing is an error", func(t *testing.T) {
-		status = http.StatusBadGateway
-		_, ok, err := live.Users(context.Background(), essentialEd)
-		assert.Error(t, err)
-		assert.True(t, ok)
-	})
+	tests := []struct {
+		name      string
+		overrides map[models.FeatureAccess]bool
+		want      []models.FeatureAccess
+	}{
+		{"statewide", nil, srv.features},
+		{"turned on at the facility", map[models.FeatureAccess]bool{models.ProgramAccess: true}, append([]models.FeatureAccess{models.ProgramAccess}, srv.features...)},
+		{"turned off at the facility", map[models.FeatureAccess]bool{models.ProviderAccess: false}, []models.FeatureAccess{models.OpenContentAccess, models.HelpfulLinksAccess}},
+		{"parent turned off", map[models.FeatureAccess]bool{models.OpenContentAccess: false}, []models.FeatureAccess{models.ProviderAccess}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			facility := createTestFacility(t, srv, tt.name)
+			args := models.QueryContext{Ctx: context.Background()}
+			for feature, enabled := range tt.overrides {
+				require.NoError(t, srv.Db.UpsertFacilityFeatureFlag(&args, facility, feature, enabled, srv.features))
+			}
+			got, err := features.FacilityFeatures(context.Background(), facility)
+			require.NoError(t, err)
+			assert.ElementsMatch(t, tt.want, got)
+		})
+	}
 }
 
 func TestModuleUsers(t *testing.T) {

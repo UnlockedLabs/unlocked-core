@@ -1,0 +1,49 @@
+{
+  "data": {
+    "archived_at": null,
+    "capacity": 3,
+    "class_name": "",
+    "completed": 0,
+    "create_user_id": null,
+    "created_at": "0001-01-01T00:00:00Z",
+    "credit_hours": 3,
+    "description": "Weekend cohort, small",
+    "end_dt": "2099-03-01T00:00:00Z",
+    "enrolled": 0,
+    "enrollments": null,
+    "events": [
+      {
+        "attendees": null,
+        "cohort": null,
+        "cohort_id": 4,
+        "create_user_id": 8,
+        "created_at": "<time>",
+        "duration": "1h",
+        "id": 4,
+        "instructor_id": 11,
+        "is_cancelled": false,
+        "overrides": null,
+        "reason": null,
+        "recurrence_rule": "DTSTART;TZID=America/Chicago:20990206T090000\nRRULE:FREQ=WEEKLY;BYDAY=SA;COUNT=3",
+        "room_id": 2,
+        "update_user_id": null,
+        "updated_at": "<time>"
+      }
+    ],
+    "facility": null,
+    "facility_id": 2,
+    "facility_program": null,
+    "id": 4,
+    "instructor_id": null,
+    "is_canvas": false,
+    "program": null,
+    "program_class": null,
+    "program_class_id": 2,
+    "program_id": 2,
+    "start_dt": "2099-02-01T00:00:00Z",
+    "status": "Scheduled",
+    "update_user_id": 8,
+    "updated_at": "0001-01-01T00:00:00Z"
+  },
+  "message": "Data fetched successfully"
+}

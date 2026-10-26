@@ -7,6 +7,7 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 
 	"github.com/stretchr/testify/require"
 )
@@ -26,7 +27,7 @@ func TestProgramCompletionFlag(t *testing.T) {
 	body := map[string]any{
 		"name":                   "Flag Program",
 		"description":            "program with its own completion",
-		"funding_type":           models.FederalGrants,
+		"funding_type":           programs.FederalGrants,
 		"is_active":              true,
 		"has_program_completion": true,
 		"program_types":          []map[string]any{{"program_type": "Educational"}},
@@ -34,7 +35,7 @@ func TestProgramCompletionFlag(t *testing.T) {
 		"facilities":             []uint{facility.ID},
 	}
 
-	created := NewRequest[models.Program](env.Client, t, http.MethodPost, "/api/programs", body).
+	created := NewRequest[programs.Program](env.Client, t, http.MethodPost, "/api/programs", body).
 		WithTestClaims(claims).
 		Do().
 		ExpectStatus(http.StatusCreated).
@@ -42,7 +43,7 @@ func TestProgramCompletionFlag(t *testing.T) {
 
 	require.True(t, created.HasProgramCompletion, "flag must survive create")
 
-	var stored models.Program
+	var stored programs.Program
 	require.NoError(t, env.DB.First(&stored, created.ID).Error)
 	require.True(t, stored.HasProgramCompletion, "flag must be persisted, not just echoed back")
 
@@ -50,13 +51,13 @@ func TestProgramCompletionFlag(t *testing.T) {
 		plain := map[string]any{
 			"name":          "Plain Program",
 			"description":   "no program-level completion",
-			"funding_type":  models.FederalGrants,
+			"funding_type":  programs.FederalGrants,
 			"is_active":     true,
 			"program_types": []map[string]any{{"program_type": "Educational"}},
 			"credit_types":  []map[string]any{{"credit_type": "Completion"}},
 			"facilities":    []uint{facility.ID},
 		}
-		p := NewRequest[models.Program](env.Client, t, http.MethodPost, "/api/programs", plain).
+		p := NewRequest[programs.Program](env.Client, t, http.MethodPost, "/api/programs", plain).
 			WithTestClaims(claims).
 			Do().
 			ExpectStatus(http.StatusCreated).
@@ -70,20 +71,20 @@ func TestProgramCompletionFlag(t *testing.T) {
 		update := map[string]any{
 			"name":                   "Flag Program",
 			"description":            "program with its own completion",
-			"funding_type":           models.FederalGrants,
+			"funding_type":           programs.FederalGrants,
 			"is_active":              true,
 			"has_program_completion": false,
 			"program_types":          []map[string]any{{"program_type": "Educational"}},
 			"credit_types":           []map[string]any{{"credit_type": "Completion"}},
 			"facilities":             []uint{facility.ID},
 		}
-		NewRequest[models.Program](env.Client, t, http.MethodPatch,
+		NewRequest[programs.Program](env.Client, t, http.MethodPatch,
 			fmt.Sprintf("/api/programs/%d", created.ID), update).
 			WithTestClaims(claims).
 			Do().
 			ExpectStatus(http.StatusOK)
 
-		var after models.Program
+		var after programs.Program
 		require.NoError(t, env.DB.First(&after, created.ID).Error)
 		require.False(t, after.HasProgramCompletion,
 			"clearing the flag must persist -- if this fails, HasProgramCompletion is missing "+
@@ -94,26 +95,26 @@ func TestProgramCompletionFlag(t *testing.T) {
 	// column IS in UpdateProgram's Select list, a plain bool would decode to false and clear
 	// the flag on every such edit -- silently, with a 200 response. Hence the *bool.
 	t.Run("an update that omits the field leaves it alone", func(t *testing.T) {
-		require.NoError(t, env.DB.Model(&models.Program{}).
+		require.NoError(t, env.DB.Model(&programs.Program{}).
 			Where("id = ?", created.ID).
 			Update("has_program_completion", true).Error)
 
 		withoutField := map[string]any{
 			"name":          "Flag Program",
 			"description":   "edited without touching the flag",
-			"funding_type":  models.FederalGrants,
+			"funding_type":  programs.FederalGrants,
 			"is_active":     true,
 			"program_types": []map[string]any{{"program_type": "Educational"}},
 			"credit_types":  []map[string]any{{"credit_type": "Completion"}},
 			"facilities":    []uint{facility.ID},
 		}
-		NewRequest[models.Program](env.Client, t, http.MethodPatch,
+		NewRequest[programs.Program](env.Client, t, http.MethodPatch,
 			fmt.Sprintf("/api/programs/%d", created.ID), withoutField).
 			WithTestClaims(claims).
 			Do().
 			ExpectStatus(http.StatusOK)
 
-		var after models.Program
+		var after programs.Program
 		require.NoError(t, env.DB.First(&after, created.ID).Error)
 		require.True(t, after.HasProgramCompletion,
 			"omitting has_program_completion must PRESERVE it, not clear it -- if this fails, "+
@@ -125,20 +126,20 @@ func TestProgramCompletionFlag(t *testing.T) {
 		update := map[string]any{
 			"name":                   "Flag Program",
 			"description":            "program with its own completion",
-			"funding_type":           models.FederalGrants,
+			"funding_type":           programs.FederalGrants,
 			"is_active":              true,
 			"has_program_completion": true,
 			"program_types":          []map[string]any{{"program_type": "Educational"}},
 			"credit_types":           []map[string]any{{"credit_type": "Completion"}},
 			"facilities":             []uint{facility.ID},
 		}
-		NewRequest[models.Program](env.Client, t, http.MethodPatch,
+		NewRequest[programs.Program](env.Client, t, http.MethodPatch,
 			fmt.Sprintf("/api/programs/%d", created.ID), update).
 			WithTestClaims(claims).
 			Do().
 			ExpectStatus(http.StatusOK)
 
-		var after models.Program
+		var after programs.Program
 		require.NoError(t, env.DB.First(&after, created.ID).Error)
 		require.True(t, after.HasProgramCompletion, "setting the flag must persist")
 	})

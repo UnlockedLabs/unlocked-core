@@ -15,6 +15,7 @@ import (
 	"slices"
 
 	"github.com/UnlockedLabs/unlocked-contracts/features"
+	"github.com/UnlockedLabs/unlocked-contracts/identity"
 	"github.com/UnlockedLabs/unlocked-contracts/users"
 
 	"github.com/nats-io/nats.go"
@@ -49,6 +50,11 @@ type Route struct {
 	// everyone, facility admins their own facility's users. With AnyUser, the
 	// user themself may too. It works only with AnyUser and Admin.
 	UserParam string
+	// Allow is the module's own access check, for checks Access and UserParam
+	// can't express, such as a class in the caller's facility. It runs after
+	// them, and the caller needs to pass every check. A caller it denies gets
+	// the same 401 as core's own checks give.
+	Allow func(r *http.Request, c *identity.Claims) bool
 	// Features turns the route off unless every listed feature is enabled.
 	Features []features.Access
 }
@@ -101,10 +107,18 @@ type Deps struct {
 	// Users is core's user accounts. Only routes get it: it is nil in
 	// RegisterJobs.
 	Users Users
-	// LiveProviders is core's Canvas and Essential Education code, for
-	// Provider Platforms. Only routes get it. It goes away when EN-194 moves
-	// that code into Provider Platforms.
+	// LiveProviders is Programs' Canvas and Essential Education code, for
+	// Provider Platforms. Only routes get it. It goes away when Provider
+	// Platforms fetches and caches those providers' data itself.
 	LiveProviders LiveProviders
+	// HTTP is core's HTTP client, for calls to services outside Unlocked,
+	// such as an LMS. Only routes get it.
+	HTTP HTTPClient
+	// Features is core's feature flags for each facility. Only routes get it.
+	Features Features
+	// Reports renders reports as PDFs with core's report templates. Only
+	// routes get it.
+	Reports Reports
 }
 
 // Notifier sends a message to a user over core's websocket. A user with no
@@ -139,14 +153,52 @@ type Users interface {
 	Delete(ctx context.Context, id uint) error
 }
 
-// LiveProviders is what Provider Platforms needs from the Canvas and Essential
-// Education code that stays in core until EN-194.
+// HTTPClient sends a request with core's HTTP client. *http.Client is one.
+type HTTPClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
+// Features is core's feature flags.
+type Features interface {
+	// FacilityFeatures is the features turned on at a facility: its own
+	// settings, else the statewide ones, leaving out a sub-feature whose
+	// parent is off.
+	FacilityFeatures(ctx context.Context, facilityID uint) ([]features.Access, error)
+}
+
+// Reports renders reports with core's PDF report templates.
+type Reports interface {
+	// PDF is report rendered with the named template, such as
+	// "attendance_report".
+	PDF(template string, report Report) ([]byte, error)
+}
+
+// Report is the table a PDF report shows.
+type Report struct {
+	Title   string
+	Rows    [][]string
+	SubRows [][]string
+	// Params are extra template parameters, such as which columns to show.
+	// Set only those the template declares.
+	Params map[string]string
+	// Filters are the filters the report was run with, shown in its header.
+	Filters []ReportFilter
+}
+
+// ReportFilter is one filter in a report's header, such as "Facility".
+type ReportFilter struct {
+	Label string
+	Value string
+}
+
+// LiveProviders is what Provider Platforms needs from Programs' Canvas and
+// Essential Education code.
 type LiveProviders interface {
 	// Users is every user a provider's own API lists. ok is false for a
 	// provider that can't list them; its users come from provider-middleware.
 	Users(ctx context.Context, providerID uint) (users []ProviderUser, ok bool, err error)
-	// MappingsChanged tells core that a user's account at a provider was
-	// linked or unlinked, so core can clear its cached Canvas programs.
+	// MappingsChanged tells Programs that a user's account at a provider was
+	// linked or unlinked, so it can clear its cached Canvas programs.
 	MappingsChanged(providerID, userID uint)
 }
 

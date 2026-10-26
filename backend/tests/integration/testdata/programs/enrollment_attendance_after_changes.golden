@@ -1,0 +1,25 @@
+{
+  "data": [
+    {
+      "attendance_status": "partial",
+      "date": "2026-01-26",
+      "marked_by": "Test User",
+      "note": "",
+      "user_id": 3
+    },
+    {
+      "attendance_status": "present",
+      "date": "2026-01-05",
+      "marked_by": "Test User",
+      "note": "",
+      "user_id": 3
+    }
+  ],
+  "message": "",
+  "meta": {
+    "current_page": 1,
+    "last_page": 1,
+    "per_page": 20,
+    "total": 2
+  }
+}

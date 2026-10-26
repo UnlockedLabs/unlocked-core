@@ -1,6 +1,7 @@
 package jasper
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -13,6 +14,8 @@ import (
 	"github.com/UnlockedLabs/unlocked-core/backend/src"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
+	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 
 	"github.com/evertonvps/go-jasper"
@@ -21,15 +24,15 @@ import (
 )
 
 type jasperService struct {
+	ctx              context.Context
 	db               *database.DB
-	queryCtx         *models.QueryContext
 	hasProgramAccess bool
 }
 
-func newJasperServiceWithContext(db *database.DB, queryCtx *models.QueryContext, hasProgramAccess bool) *jasperService {
+func newJasperServiceWithContext(ctx context.Context, db *database.DB, hasProgramAccess bool) *jasperService {
 	return &jasperService{
+		ctx:              ctx,
 		db:               db,
-		queryCtx:         queryCtx,
 		hasProgramAccess: hasProgramAccess,
 	}
 }
@@ -40,13 +43,9 @@ func (js *jasperService) generateUsageReportPDF(userID int) ([]byte, error) {
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
-	userPrograms, err := js.db.GetUserProgramInfo(js.queryCtx, userID)
+	userPrograms, err := registry.Programs(js.db.DB).ResidentPrograms(js.ctx, uint(userID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user programs: %w", err)
-	}
-
-	for i := range userPrograms {
-		userPrograms[i].CalculateAttendancePercentage()
 	}
 
 	sessionEngagements, err := js.db.GetUserSessionEngagement(userID, -1)
@@ -54,13 +53,13 @@ func (js *jasperService) generateUsageReportPDF(userID int) ([]byte, error) {
 		return nil, fmt.Errorf("failed to get user engagements: %w", err)
 	}
 
-	resourcesAccessed, err := registry.OpenContent(js.db.DB).ResourcesAccessed(js.queryCtx.Ctx, uint(userID))
+	resourcesAccessed, err := registry.OpenContent(js.db.DB).ResourcesAccessed(js.ctx, uint(userID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get resource count: %w", err)
 	}
 
 	type JasperReportData struct {
-		Programs []models.ResidentProgramClassInfo `json:"programs"`
+		Programs []programsapi.ResidentProgramClassInfo `json:"programs"`
 	}
 	reportData := JasperReportData{
 		Programs: userPrograms,
@@ -181,8 +180,8 @@ func (js *jasperService) calculateTotalLogins(user *models.User) string {
 	return fmt.Sprintf("%d", user.LoginMetrics.Total)
 }
 
-func GenerateUsageReportPDF(db *database.DB, queryCtx *models.QueryContext, hasProgramAccess bool, userID int) ([]byte, error) {
-	service := newJasperServiceWithContext(db, queryCtx, hasProgramAccess)
+func GenerateUsageReportPDF(ctx context.Context, db *database.DB, hasProgramAccess bool, userID int) ([]byte, error) {
+	service := newJasperServiceWithContext(ctx, db, hasProgramAccess)
 	return service.generateUsageReportPDF(userID)
 }
 
@@ -215,13 +214,13 @@ func recompileTemplate(templateDir, baseTemplateName string) error {
 	return nil
 }
 
-func GenerateReportPDF(config models.PDFConfig, filterSummary []models.PDFFilterLine, templateName string) ([]byte, error) {
+func GenerateReportPDF(templateName string, config module.Report) ([]byte, error) {
 	type ReportData struct {
 		Rows    [][]string `json:"rows"`
 		SubRows [][]string `json:"subrows"`
 	}
 
-	rows := config.Data
+	rows := config.Rows
 	if len(rows) == 0 {
 		rows = [][]string{}
 	}
@@ -259,7 +258,7 @@ func GenerateReportPDF(config models.PDFConfig, filterSummary []models.PDFFilter
 
 	// Build individual filter label/value parameters for proper spacing in JRXML.
 	// Each filter line is passed as FilterLabelN and FilterValueN pairs.
-	filterCount := len(filterSummary)
+	filterCount := len(config.Filters)
 	maxFilters := 6
 
 	params := []jasper.Parameter{
@@ -284,8 +283,8 @@ func GenerateReportPDF(config models.PDFConfig, filterSummary []models.PDFFilter
 
 	for i := 0; i < filterCount && i < maxFilters; i++ {
 		params = append(params,
-			jasper.Parameter{Key: fmt.Sprintf("FilterLabel%d", i+1), Value: filterSummary[i].Label},
-			jasper.Parameter{Key: fmt.Sprintf("FilterValue%d", i+1), Value: filterSummary[i].Value},
+			jasper.Parameter{Key: fmt.Sprintf("FilterLabel%d", i+1), Value: config.Filters[i].Label},
+			jasper.Parameter{Key: fmt.Sprintf("FilterValue%d", i+1), Value: config.Filters[i].Value},
 		)
 	}
 

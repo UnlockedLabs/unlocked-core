@@ -2,13 +2,10 @@ package handlers
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 
 	"github.com/sirupsen/logrus"
@@ -36,10 +33,6 @@ func (slog sLog) debug(args ...any) {
 
 func (slog sLog) warn(args ...any) {
 	logrus.WithFields(slog.f).Warn(args...)
-}
-
-func (slog sLog) warnf(format string, args ...any) {
-	logrus.WithFields(slog.f).Warnf(format, args...)
 }
 
 func (slog sLog) error(args ...any) {
@@ -136,44 +129,6 @@ func (srv *Server) requireFacilityID(r *http.Request) (uint, error) {
 	return facilityID, nil
 }
 
-func getDateRange(r *http.Request) (*models.DateRange, error) {
-	tz, err := time.LoadLocation(r.Context().Value(ClaimsKey).(*Claims).TimeZone)
-	if err != nil {
-		tz = time.UTC
-	}
-
-	parseDate := func(dateStr string) (time.Time, error) {
-		formats := []string{"02-01-2006", "2006-01-02", "2006-01-02T15:04:05Z07:00"}
-		for _, format := range formats {
-			if t, err := time.Parse(format, dateStr); err == nil {
-				return t, nil
-			}
-		}
-		return time.Time{}, errors.New("invalid date format")
-	}
-
-	start, err := parseDate(r.URL.Query().Get("start_dt"))
-	if err != nil {
-		// if start is not provided, use two weeks ago
-		start = time.Now().Add(-14 * 24 * time.Hour)
-	}
-	start = start.In(tz)
-	end, err := parseDate(r.URL.Query().Get("end_dt"))
-	if err != nil {
-		// if end is not provided, use two weeks from now
-		end = time.Now().Add(14 * 24 * time.Hour)
-	}
-	end = end.In(tz)
-	if start.After(end) {
-		return nil, errors.New("start date cannot be after end date")
-	}
-	return &models.DateRange{
-		Start: start,
-		End:   end,
-		Tzone: tz,
-	}, nil
-}
-
 func newRoute(method string, handler HttpFunc) routeDef {
 	return routeDef{
 		routeMethod: method,
@@ -239,43 +194,4 @@ func featureRoute(method string, handler HttpFunc, features ...models.FeatureAcc
 		admin:       false,
 		features:    features,
 	}
-}
-
-func adminFeatureRoute(method string, handler HttpFunc, features ...models.FeatureAccess) routeDef {
-	return routeDef{
-		routeMethod: method,
-		handler:     handler,
-		admin:       true,
-		features:    features,
-		resolver:    nil,
-	}
-}
-
-func validatedFeatureRoute(method string, handler HttpFunc, feature models.FeatureAccess, resolver RouteResolver) routeDef {
-	return routeDef{
-		routeMethod: method,
-		handler:     handler,
-		admin:       false,
-		features:    []models.FeatureAccess{feature},
-		resolver:    resolver,
-	}
-}
-
-func adminValidatedFeatureRoute(method string, handler HttpFunc, features models.FeatureAccess, validate RouteResolver) routeDef {
-	return routeDef{
-		routeMethod: method,
-		handler:     handler,
-		admin:       true,
-		features:    []models.FeatureAccess{features},
-		resolver:    validate,
-	}
-}
-
-func enforceDeptAdminForAllQuery(tx *database.DB, r *http.Request) bool {
-	claims := r.Context().Value(ClaimsKey).(*Claims)
-	all := r.URL.Query().Get("all") == "true"
-	if all && !claims.canSwitchFacility() {
-		return false
-	}
-	return claims.isAdmin()
 }

@@ -1,0 +1,4 @@
+{
+  "data": null,
+  "message": "bulk cancel sessions validation error failed: Key: 'BulkCancelSessionsRequest.Reason' Error:Field validation for 'Reason' failed on the 'min' tag"
+}

@@ -22,58 +22,13 @@ type Facility struct {
 	Name     string `gorm:"size:255;not null" json:"name"`
 	Timezone string `gorm:"size:255;not null" json:"timezone" validate:"required,timezone"`
 
-	Users              []User               `gorm:"foreignKey:FacilityID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"-"`
-	Programs           []Program            `json:"programs" gorm:"-"`
-	FacilitiesPrograms []FacilitiesPrograms `json:"-" gorm:"foreignKey:FacilityID;references:ID"`
-	LoginActivity      []LoginActivity      `json:"login_activity" gorm:"foreignKey:FacilityID;constraint:OnDelete CASCADE"`
-	Rooms              []Room               `json:"rooms,omitempty" gorm:"foreignKey:FacilityID;references:ID"`
+	Users []User `gorm:"foreignKey:FacilityID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"-"`
+	// Programs is always null. It keeps the JSON a facility had before
+	// Programs moved into its module (EN-194).
+	Programs      []struct{}      `json:"programs" gorm:"-"`
+	LoginActivity []LoginActivity `json:"login_activity" gorm:"foreignKey:FacilityID;constraint:OnDelete CASCADE"`
 }
 
 func (Facility) TableName() string {
 	return "facilities"
-}
-
-type Room struct {
-	DatabaseFields
-	FacilityID uint   `json:"facility_id" gorm:"not null"`
-	Name       string `json:"name" gorm:"size:255;not null" validate:"required,max=255"`
-
-	Facility *Facility `json:"facility,omitempty" gorm:"foreignKey:FacilityID;references:ID"`
-}
-
-func (Room) TableName() string {
-	return "rooms"
-}
-
-type RoomBooking struct {
-	RoomID     uint
-	EventID    uint
-	ClassID    uint
-	StartTime  time.Time
-	EndTime    time.Time
-	IsOverride bool
-}
-
-type ConflictCheckRequest struct {
-	FacilityID     uint
-	RoomID         uint
-	InstructorID   uint
-	RecurrenceRule string
-	Duration       string
-	ExcludeEventID *uint
-	ExcludeClassID *uint
-}
-
-const (
-	ConflictTypeRoom       = "room"
-	ConflictTypeInstructor = "instructor"
-)
-
-type RoomConflict struct {
-	ConflictingEventID uint      `json:"conflicting_event_id"`
-	ConflictingClassID uint      `json:"conflicting_class_id"`
-	ClassName          string    `json:"class_name"`
-	StartTime          time.Time `json:"start_time"`
-	EndTime            time.Time `json:"end_time"`
-	ConflictType       string    `json:"conflict_type"`
 }

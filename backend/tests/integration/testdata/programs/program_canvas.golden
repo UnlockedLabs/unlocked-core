@@ -1,0 +1,29 @@
+{
+  "data": {
+    "active_class_facility_ids": [],
+    "active_enrollments": 0,
+    "active_residents": 0,
+    "archived_at": null,
+    "attendance_rate": null,
+    "completion_rate": null,
+    "completions": 0,
+    "create_user_id": null,
+    "created_at": "0001-01-01T00:00:00Z",
+    "credit_types": [],
+    "description": "",
+    "facilities": [],
+    "funding_type": "",
+    "has_program_completion": false,
+    "id": 100000010,
+    "is_active": true,
+    "is_favorited": false,
+    "loading": true,
+    "name": "College - Canvas College",
+    "program_types": [],
+    "source": "canvas",
+    "total_enrollments": 0,
+    "update_user_id": null,
+    "updated_at": "0001-01-01T00:00:00Z"
+  },
+  "message": "Data fetched successfully"
+}

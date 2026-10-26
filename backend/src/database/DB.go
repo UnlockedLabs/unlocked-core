@@ -233,26 +233,11 @@ func MigrateTesting(db *gorm.DB) {
 		&models.LoginMetrics{},
 		&models.LoginActivity{},
 		&models.FailedLoginAttempts{},
-		&models.Facility{},
-		&models.Program{},
-		&models.ProgramCreditType{},
-		&models.ProgramType{},
 		// ⚠️  Hand-maintained. An omission here fails at RUNTIME (missing table in the
-		//     in-memory SQLite test DB), not at compile time. Class must precede Cohort
-		//     so the cohort's FK target exists.
-		&models.ProgramClass{},
-		&models.ProgramClassCreditType{},
-		&models.ProgramClassCohort{},
-		&models.FacilitiesPrograms{},
-		&models.ProgramClassEvent{},
-		&models.ProgramClassEnrollment{},
-		&models.ClassCompletion{},
-		&models.ProgramClassEventOverride{},
-		&models.ProgramClassEventAttendance{},
-		&models.ChangeLogEntry{},
+		//     in-memory SQLite test DB), not at compile time.
+		&models.Facility{},
 		&models.CronJob{},
 		&models.RunnableTask{},
-		&models.ProgramClassesHistory{},
 		&models.UserAccountHistory{},
 		&models.FeatureFlags{},
 		&models.PageFeatureFlags{},

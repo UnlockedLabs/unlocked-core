@@ -7,6 +7,7 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 
 	"github.com/stretchr/testify/require"
 )
@@ -28,8 +29,8 @@ func TestChangeInstructorOnlyIsNotARoomConflict(t *testing.T) {
 	admin, err := env.CreateTestUser("conflictadmin", models.FacilityAdmin, facility.ID, "")
 	require.NoError(t, err)
 
-	program, err := env.CreateTestProgram("Conflict Program", models.FundingType(models.FederalGrants),
-		[]models.ProgramType{}, []models.ProgramCreditType{}, true, nil)
+	program, err := env.CreateTestProgram("Conflict Program", programs.FundingType(programs.FederalGrants),
+		[]programs.ProgramType{}, []programs.ProgramCreditType{}, true, nil)
 	require.NoError(t, err)
 	require.NoError(t, env.SetFacilitiesToProgram(program.ID, []uint{facility.ID}))
 
@@ -38,15 +39,15 @@ func TestChangeInstructorOnlyIsNotARoomConflict(t *testing.T) {
 	instructorB, err := env.CreateTestInstructor(facility.ID, "conflictb")
 	require.NoError(t, err)
 
-	cohort, err := env.CreateTestClass(program, facility, models.Active, &instructorA.ID)
+	cohort, err := env.CreateTestClass(program, facility, programs.Active, &instructorA.ID)
 	require.NoError(t, err)
 
 	event, err := env.CreateTestEvent(cohort.ID, "", instructorA.ID)
 	require.NoError(t, err)
 
-	room := models.Room{FacilityID: facility.ID, Name: "Conflict Room"}
+	room := programs.Room{FacilityID: facility.ID, Name: "Conflict Room"}
 	require.NoError(t, env.DB.Create(&room).Error)
-	require.NoError(t, env.DB.Model(&models.ProgramClassEvent{}).
+	require.NoError(t, env.DB.Model(&programs.ProgramClassEvent{}).
 		Where("id = ?", event.ID).
 		Update("room_id", room.ID).Error)
 
@@ -54,11 +55,11 @@ func TestChangeInstructorOnlyIsNotARoomConflict(t *testing.T) {
 	// that made the old code 409: the event's own bookings are excluded by event/cohort id,
 	// so without a competing booking there is nothing to conflict with and the test would
 	// pass either way. The clash is pre-existing and the instructor edit does not touch it.
-	otherCohort, err := env.CreateTestClass(program, facility, models.Active, &instructorA.ID)
+	otherCohort, err := env.CreateTestClass(program, facility, programs.Active, &instructorA.ID)
 	require.NoError(t, err)
 	otherEvent, err := env.CreateTestEvent(otherCohort.ID, "DTSTART;TZID=UTC:20260901T090000\nRRULE:FREQ=DAILY", instructorA.ID)
 	require.NoError(t, err)
-	require.NoError(t, env.DB.Model(&models.ProgramClassEvent{}).
+	require.NoError(t, env.DB.Model(&programs.ProgramClassEvent{}).
 		Where("id = ?", otherEvent.ID).
 		Update("room_id", room.ID).Error)
 

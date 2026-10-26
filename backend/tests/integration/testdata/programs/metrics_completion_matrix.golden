@@ -1,0 +1,35 @@
+{
+  "data": [
+    {
+      "completed": 0,
+      "completion_rate": 0,
+      "delta_from_facility_average": 0,
+      "enrolled": 1,
+      "facility_id": 3,
+      "facility_name": "South",
+      "insufficient": true,
+      "program_name": "Adult Literacy"
+    },
+    {
+      "completed": 0,
+      "completion_rate": 0,
+      "delta_from_facility_average": 0,
+      "enrolled": 2,
+      "facility_id": 2,
+      "facility_name": "North",
+      "insufficient": true,
+      "program_name": "Welding"
+    },
+    {
+      "completed": 1,
+      "completion_rate": 25,
+      "delta_from_facility_average": 8.333333333333336,
+      "enrolled": 4,
+      "facility_id": 2,
+      "facility_name": "North",
+      "insufficient": false,
+      "program_name": "Adult Literacy"
+    }
+  ],
+  "message": "Data fetched successfully"
+}

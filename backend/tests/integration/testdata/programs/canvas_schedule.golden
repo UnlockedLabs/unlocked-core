@@ -1,0 +1,19 @@
+{
+  "data": [
+    {
+      "end_at": "<time>",
+      "id": 110007001,
+      "is_cancelled": false,
+      "start_at": "<time>",
+      "timezone": "America/Chicago",
+      "title": "Week 1"
+    }
+  ],
+  "message": "",
+  "meta": {
+    "current_page": 1,
+    "last_page": 1,
+    "per_page": 20,
+    "total": 1
+  }
+}

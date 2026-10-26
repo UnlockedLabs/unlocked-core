@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,9 +18,7 @@ import (
 	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/jasper"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
-	ppapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/services"
-	log "github.com/sirupsen/logrus"
+	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
 )
 
 // maxDocIDLen matches the users.doc_id column (VARCHAR(32), migration 00042).
@@ -33,9 +30,6 @@ func (srv *Server) registerUserRoutes() []routeDef {
 	resolver := UserRoleResolver("id")
 	return []routeDef{
 		validatedRoute("GET /api/users/{id}", srv.handleShowUser, resolver),
-		validatedRoute("GET /api/users/{id}/programs", srv.handleGetUserPrograms,
-			AllResolvers(resolver, ResidentFeatureResolver(models.ResidentProgramsAccess))),
-		validatedRoute("GET /api/users/{id}/attendance-trend", srv.handleGetUserAttendanceTrend, resolver),
 		validatedRoute("GET /api/users/{id}/notes", srv.handleGetUserNotes, resolver),
 		validatedAdminRoute("POST /api/users/{id}/notes", srv.handleCreateUserNote, FacilityAdminResolver("users", "id")),
 		/* admin */
@@ -58,7 +52,6 @@ func (srv *Server) registerUserRoutes() []routeDef {
 		newAdminRoute("POST /api/users/bulk/delete", srv.handleBulkDeleteUsers),
 		validatedAdminRoute("POST /api/users/{id}/deactivate", srv.handleDeactivateUser, FacilityAdminResolver("users", "id")),
 		validatedAdminRoute("GET /api/users/{id}/usage-report", srv.handleGenerateUsageReportPDF, FacilityAdminResolver("users", "id")),
-		validatedAdminRoute("GET /api/users/{id}/attendance-export", srv.handleExportResidentAttendanceCSV, UserRoleResolver("id")),
 	}
 }
 
@@ -80,7 +73,7 @@ func (srv *Server) handleIndexUsers(w http.ResponseWriter, r *http.Request, log 
 		if err != nil {
 			return newInvalidIdServiceError(err, "class ID")
 		}
-		users, err = srv.Db.GetEligibleResidentsForClass(&args, classID)
+		users, err = srv.residentsForClassFilter(&args, srv.programs.EligibleUserIDs, classID, "users.created_at desc")
 		if err != nil {
 			log.add("facility_id", args.FacilityID)
 			log.add("search", args.Search)
@@ -91,7 +84,7 @@ func (srv *Server) handleIndexUsers(w http.ResponseWriter, r *http.Request, log 
 		if err != nil {
 			return newInvalidIdServiceError(err, "class ID")
 		}
-		users, err = srv.Db.GetEnrolledResidentsForClass(&args, classID)
+		users, err = srv.residentsForClassFilter(&args, srv.programs.EnrolledUserIDs, classID, "users.name_last asc")
 		if err != nil {
 			log.add("facility_id", args.FacilityID)
 			log.add("search", args.Search)
@@ -152,6 +145,16 @@ func (srv *Server) handleGetUnmappedUsers(w http.ResponseWriter, r *http.Request
 		return newDatabaseServiceError(err)
 	}
 	return writePaginatedResponse(w, http.StatusOK, users, args.IntoMeta())
+}
+
+// residentsForClassFilter is a page of the users list's residents for one of
+// Programs' class filters, which answers with the residents' IDs.
+func (srv *Server) residentsForClassFilter(args *models.QueryContext, userIDs func(context.Context, uint) ([]uint, error), classID int, defaultOrder string) ([]models.User, error) {
+	ids, err := userIDs(args.Ctx, uint(classID))
+	if err != nil {
+		return nil, database.NewDBError(err, "error getting users")
+	}
+	return srv.Db.GetResidentsByIDs(args, ids, defaultOrder)
 }
 
 /**
@@ -534,14 +537,14 @@ func (srv *Server) handleResidentVerification(w http.ResponseWriter, r *http.Req
 		return writeJsonResponse(w, http.StatusNotFound, "Resident not found")
 	}
 	log.add("doc_id", docID)
-	programNames, err := srv.Db.GetTransferProgramConflicts(ctx, user.ID, transferFacilityId)
+	programNames, err := srv.programs.TransferConflicts(ctx, user.ID, uint(transferFacilityId))
 	if err != nil {
 		return writeJsonResponse(w, http.StatusNotFound, "Resident not found")
 	}
 	transferNotes := struct {
-		User            models.User                               `json:"user"`
-		ProgramNames    []models.ResidentTransferProgramConflicts `json:"program_names"`
-		TransFacilityID int                                       `json:"trans_facility_id"`
+		User            models.User                                    `json:"user"`
+		ProgramNames    []programsapi.ResidentTransferProgramConflicts `json:"program_names"`
+		TransFacilityID int                                            `json:"trans_facility_id"`
 	}{
 		User:            *user,
 		ProgramNames:    programNames,
@@ -596,184 +599,6 @@ func (srv *Server) handleResidentTransfer(w http.ResponseWriter, r *http.Request
 		return newDatabaseServiceError(err)
 	}
 	return writeJsonResponse(w, http.StatusOK, "successfully transferred resident")
-}
-
-func (srv *Server) handleGetUserPrograms(w http.ResponseWriter, r *http.Request, log sLog) error {
-	id := r.PathValue("id")
-	userId, err := strconv.Atoi(id)
-	if err != nil {
-		return newInvalidIdServiceError(err, "error converting user_id")
-	}
-	queryCtx := srv.getQueryContext(r)
-	// The resident profile builds its active / completed / incomplete cards from
-	// the full enrollment set, so return all of them rather than a single page
-	// (otherwise residents with >per_page enrollments lose rows, e.g. completed
-	// programs falling off page 1).
-	queryCtx.All = true
-	userPrograms, err := srv.Db.GetUserProgramInfo(&queryCtx, userId)
-	if err != nil {
-		return newDatabaseServiceError(err)
-	}
-	for i := range userPrograms {
-		userPrograms[i].CalculateAttendancePercentage()
-		userPrograms[i].Schedule = models.FormatScheduleFromRRule(userPrograms[i].RecurrenceRule)
-	}
-	claims := r.Context().Value(ClaimsKey).(*Claims)
-	if claims.hasFeatureAccess(models.ProviderAccess) {
-		canvasPrograms := srv.fetchCanvasUserPrograms(userId)
-		userPrograms = append(userPrograms, canvasPrograms...)
-		queryCtx.Total += int64(len(canvasPrograms))
-	}
-	return writePaginatedResponse(w, http.StatusOK, userPrograms, queryCtx.IntoMeta())
-}
-
-func (srv *Server) fetchCanvasUserPrograms(userID int) []models.ResidentProgramClassInfo {
-	ctx := context.Background()
-	mappings, err := srv.providerPlatforms.UserMappings(ctx, uint(userID))
-	if err != nil || len(mappings) == 0 {
-		return nil
-	}
-	providers, err := srv.activeProviders(ctx)
-	if err != nil {
-		return nil
-	}
-	providerMap := make(map[uint]ppapi.Provider, len(providers))
-	for _, p := range providers {
-		providerMap[p.ID] = p
-	}
-	var result []models.ResidentProgramClassInfo
-	for _, mapping := range mappings {
-		provider, ok := providerMap[mapping.ProviderID]
-		if !ok || !isLiveProgramProvider(&provider) {
-			continue
-		}
-		if isCanvasProvider(&provider) {
-			result = append(result, srv.fetchCanvasCoursesForUser(&provider, mapping.ExternalUserID)...)
-			continue
-		}
-		result = append(result, srv.fetchLiveCoursesForUser(&provider, mapping.ExternalUserID)...)
-	}
-	return result
-}
-
-// fetchLiveCoursesForUser builds a resident's program rows for a live provider
-// that reports its own per-user enrollments. Canvas has a dedicated endpoint and
-// is handled by fetchCanvasCoursesForUser instead.
-func (srv *Server) fetchLiveCoursesForUser(provider *ppapi.Provider, externalUserID string) []models.ResidentProgramClassInfo {
-	reader, err := srv.newLiveProgramProvider(provider)
-	if err != nil {
-		return nil
-	}
-	lister, ok := reader.(liveUserCourseLister)
-	if !ok {
-		return nil
-	}
-	courses, err := lister.ListUserCourses(context.Background(), externalUserID)
-	if err != nil {
-		log.WithError(err).Warnf("failed to fetch courses for user %s on provider %d", externalUserID, provider.ID)
-		return nil
-	}
-	programID := models.CanvasProgramIDOffset + provider.ID
-	result := make([]models.ResidentProgramClassInfo, 0, len(courses))
-	for _, course := range courses {
-		enrollment := models.Enrolled
-		endDate := ""
-		if course.endDt != nil {
-			endDate = course.endDt.Format(time.RFC3339)
-			if !course.endDt.After(time.Now()) {
-				enrollment = models.EnrollmentCompleted
-			}
-		}
-		// A provider can mark a class finished without giving it an end date --
-		// Essential Ed does exactly that when active is 0 -- so the status wins.
-		if course.status == models.Completed {
-			enrollment = models.EnrollmentCompleted
-		}
-		startDate := ""
-		if !course.startDt.IsZero() {
-			startDate = course.startDt.Format(time.RFC3339)
-		}
-		result = append(result, models.ResidentProgramClassInfo{
-			ProgramName:          provider.Name,
-			ClassName:            course.name,
-			ProgramID:            programID,
-			EnrollmentStatus:     enrollment,
-			StartDate:            startDate,
-			EndDate:              endDate,
-			AttendancePercentage: "--",
-			IsCanvas:             true,
-			Source:               providerSourceLabel(provider),
-		})
-	}
-	return result
-}
-
-func (srv *Server) fetchCanvasCoursesForUser(provider *ppapi.Provider, canvasUserID string) []models.ResidentProgramClassInfo {
-	apiURL := fmt.Sprintf("%s/api/v1/users/%s/courses?enrollment_state=active&per_page=100", provider.BaseURL, canvasUserID)
-	var result []models.ResidentProgramClassInfo
-	for apiURL != "" {
-		req, err := http.NewRequest("GET", apiURL, nil)
-		if err != nil {
-			return result
-		}
-		req.Header.Add("Authorization", "Bearer "+provider.AccessKey)
-		req.Header.Add("Accept", "application/json")
-		resp, err := srv.Client.Do(req)
-		if err != nil {
-			return result
-		}
-		var courses []map[string]interface{}
-		if err := json.NewDecoder(resp.Body).Decode(&courses); err != nil {
-			_ = resp.Body.Close()
-			return result
-		}
-		_ = resp.Body.Close()
-		programID := models.CanvasProgramIDOffset + provider.ID
-		for _, course := range courses {
-			name, _ := course["name"].(string)
-			startAt, _ := course["start_at"].(string)
-			endAt, _ := course["end_at"].(string)
-			enrollment := models.EnrollmentCompleted
-			if endAt == "" {
-				enrollment = models.Enrolled
-			} else if t, err := time.Parse(time.RFC3339, endAt); err == nil && t.After(time.Now()) {
-				enrollment = models.Enrolled
-			}
-			result = append(result, models.ResidentProgramClassInfo{
-				ProgramName:          provider.Name,
-				ClassName:            name,
-				ProgramID:            programID,
-				EnrollmentStatus:     enrollment,
-				StartDate:            startAt,
-				EndDate:              endAt,
-				AttendancePercentage: "--",
-				IsCanvas:             true,
-				Source:               providerSourceLabel(provider),
-			})
-		}
-		apiURL = NextPageURL(resp.Header.Get("Link"))
-	}
-	return result
-}
-
-func (srv *Server) handleGetUserAttendanceTrend(w http.ResponseWriter, r *http.Request, log sLog) error {
-	id := r.PathValue("id")
-	userId, err := strconv.Atoi(id)
-	if err != nil {
-		return newInvalidIdServiceError(err, "error converting user_id")
-	}
-	weeks := 8
-	if wk := r.URL.Query().Get("weeks"); wk != "" {
-		if parsed, err := strconv.Atoi(wk); err == nil && parsed > 0 {
-			weeks = parsed
-		}
-	}
-	service := services.NewUsersService(srv.Db)
-	trends, err := service.GetWeeklyAttendanceTrend(r.Context(), userId, weeks)
-	if err != nil {
-		return newDatabaseServiceError(err)
-	}
-	return writeJsonResponse(w, http.StatusOK, trends)
 }
 
 func (srv *Server) handleGetUserNotes(w http.ResponseWriter, r *http.Request, log sLog) error {
@@ -990,10 +815,6 @@ func (srv *Server) handleGenerateUsageReportPDF(w http.ResponseWriter, r *http.R
 		return newInvalidIdServiceError(err, "error converting user_id")
 	}
 
-	queryCtx := srv.getQueryContext(r)
-	queryCtx.All = true
-	queryCtx.OrderBy, queryCtx.Order = "start_dt", "DESC"
-
 	subject, err := srv.Db.GetUserByID(uint(userID))
 	if err != nil {
 		return newDatabaseServiceError(err)
@@ -1004,7 +825,7 @@ func (srv *Server) handleGenerateUsageReportPDF(w http.ResponseWriter, r *http.R
 	}
 	hasProgramAccess := slices.Contains(subjectFeatures, models.ProgramAccess)
 
-	pdfBytes, err := jasper.GenerateUsageReportPDF(srv.Db, &queryCtx, hasProgramAccess, userID)
+	pdfBytes, err := jasper.GenerateUsageReportPDF(r.Context(), srv.Db, hasProgramAccess, userID)
 	if err != nil {
 		log.errorf("jasper service error: %v", err)
 		return newInternalServerServiceError(err, "failed to generate PDF report")
@@ -1015,69 +836,6 @@ func (srv *Server) handleGenerateUsageReportPDF(w http.ResponseWriter, r *http.R
 
 	_, err = w.Write(pdfBytes)
 	return err
-}
-
-func (srv *Server) handleExportResidentAttendanceCSV(w http.ResponseWriter, r *http.Request, log sLog) error {
-	userID, err := strconv.Atoi(r.PathValue("id"))
-	if err != nil {
-		return newInvalidIdServiceError(err, "user ID")
-	}
-
-	claims := r.Context().Value(ClaimsKey).(*Claims)
-	queryCtx := srv.getQueryContext(r)
-
-	user, err := srv.Db.GetUserByID(uint(userID))
-	if err != nil {
-		log.add("user_id", userID)
-		return newDatabaseServiceError(err)
-	}
-
-	if claims.Role == models.FacilityAdmin && user.FacilityID != claims.FacilityID {
-		return newUnauthorizedServiceError()
-	}
-
-	allFacilities := claims.canSwitchFacility() || queryCtx.All
-	var classID *uint
-	if cid := r.URL.Query().Get("cohort_id"); cid != "" {
-		parsed, err := strconv.Atoi(cid)
-		if err != nil {
-			return newInvalidIdServiceError(err, "class_id")
-		}
-		ref := uint(parsed)
-		classID = &ref
-	}
-	csvData, err := srv.Db.GetResidentAttendanceCSVData(r.Context(), uint(userID), claims.FacilityID, allFacilities, classID)
-	if err != nil {
-		log.add("user_id", userID)
-		return newDatabaseServiceError(err)
-	}
-
-	toCSV, err := models.ResidentAttendanceToCSVFormat(csvData)
-	if err != nil {
-		return newInternalServerServiceError(err, "Failed to convert attendance data to CSV format")
-	}
-
-	docLabel := strings.TrimSpace(models.FormatNullableString(user.DocID))
-	if docLabel == "" {
-		docLabel = fmt.Sprintf("User%d", userID)
-	}
-	date := time.Now().Format("2006-01-02")
-	filename := fmt.Sprintf("Attendance-%s-%s.csv", docLabel, date)
-
-	w.Header().Set("Content-Type", "text/csv")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
-	w.WriteHeader(http.StatusOK)
-
-	writer := csv.NewWriter(w)
-	if err := writer.WriteAll(toCSV); err != nil {
-		return newInternalServerServiceError(err, "Failed to write CSV data")
-	}
-
-	log.add("user_id", userID)
-	log.add("rows_exported", len(csvData))
-	log.info("Exported resident attendance CSV")
-
-	return nil
 }
 
 func (srv *Server) handleBulkResetPassword(w http.ResponseWriter, r *http.Request, log sLog) error {

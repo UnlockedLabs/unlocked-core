@@ -1,0 +1,11 @@
+{
+  "data": {
+    "alreadyCancelledCount": 0,
+    "classCount": 0,
+    "classes": [],
+    "sessionCount": 0,
+    "studentCount": 0,
+    "success": false
+  },
+  "message": "Data fetched successfully"
+}

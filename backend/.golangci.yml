@@ -16,10 +16,12 @@ linters:
       # its api package to the core rule.
       rules:
         # Core asks a module through its api package and never reaches into
-        # its internals (EN-186: ask, don't reach in).
+        # its internals (EN-186: ask, don't reach in). The integration tests
+        # are exempt: they build their test data with the modules' own types
+        # (EN-194).
         core:
           list-mode: lax
-          files: ["$all", "!**/src/modules/**"]
+          files: ["$all", "!**/src/modules/**", "!**/tests/integration/**"]
           deny:
             - pkg: github.com/UnlockedLabs/unlocked-core/backend/src/modules/
               desc: core asks a feature module through its api package, never its internals (EN-186)

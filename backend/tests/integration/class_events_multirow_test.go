@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 
 	"github.com/stretchr/testify/require"
 )
@@ -24,11 +25,11 @@ func TestMultiRowEventSessionsAllSurface(t *testing.T) {
 	admin, err := env.CreateTestUser("multirowadmin", models.FacilityAdmin, facility.ID, "")
 	require.NoError(t, err)
 
-	program, err := env.CreateTestProgram("Multi-Row Program", models.FundingType(models.FederalGrants), []models.ProgramType{}, []models.ProgramCreditType{}, true, nil)
+	program, err := env.CreateTestProgram("Multi-Row Program", programs.FundingType(programs.FederalGrants), []programs.ProgramType{}, []programs.ProgramCreditType{}, true, nil)
 	require.NoError(t, err)
 	require.NoError(t, env.SetFacilitiesToProgram(program.ID, []uint{facility.ID}))
 
-	class, err := env.CreateTestClass(program, facility, models.Active, &admin.ID)
+	class, err := env.CreateTestClass(program, facility, programs.Active, &admin.ID)
 	require.NoError(t, err)
 
 	now := time.Now().UTC()
@@ -49,13 +50,13 @@ func TestMultiRowEventSessionsAllSurface(t *testing.T) {
 	_, err = env.CreateTestEventWithRRule(class.ID, newRule, admin.ID)
 	require.NoError(t, err)
 
-	qryCtx := &models.QueryContext{
+	qryCtx := &programs.QueryContext{
 		Ctx:      env.Context,
 		Timezone: "UTC",
 		All:      true,
 	}
 
-	instances, err := env.DB.GetClassEventInstancesWithAttendanceForRecurrence(int(class.ID), qryCtx, "", "", nil, true)
+	instances, err := env.Programs.GetClassEventInstancesWithAttendanceForRecurrence(int(class.ID), qryCtx, "", "", nil, true)
 	require.NoError(t, err)
 	require.NotEmpty(t, instances, "expected sessions from both event rows")
 
@@ -95,11 +96,11 @@ func TestCancelAllFutureSessionsAcrossMultipleRows(t *testing.T) {
 	admin, err := env.CreateTestUser("cancelfutureadmin", models.FacilityAdmin, facility.ID, "")
 	require.NoError(t, err)
 
-	program, err := env.CreateTestProgram("Cancel-Future Program", models.FundingType(models.FederalGrants), []models.ProgramType{}, []models.ProgramCreditType{}, true, nil)
+	program, err := env.CreateTestProgram("Cancel-Future Program", programs.FundingType(programs.FederalGrants), []programs.ProgramType{}, []programs.ProgramCreditType{}, true, nil)
 	require.NoError(t, err)
 	require.NoError(t, env.SetFacilitiesToProgram(program.ID, []uint{facility.ID}))
 
-	class, err := env.CreateTestClass(program, facility, models.Active, &admin.ID)
+	class, err := env.CreateTestClass(program, facility, programs.Active, &admin.ID)
 	require.NoError(t, err)
 
 	now := time.Now().UTC()
@@ -120,22 +121,22 @@ func TestCancelAllFutureSessionsAcrossMultipleRows(t *testing.T) {
 
 	// "Cancel all future sessions" from today: a cancelled series from today onward,
 	// and a closed series whose UNTIL marks the cut (today - 1).
-	newSeries := models.ProgramClassEvent{
+	newSeries := programs.ProgramClassEvent{
 		Duration:       "2h",
 		RecurrenceRule: fmt.Sprintf("DTSTART:%s\nRRULE:FREQ=WEEKLY;UNTIL=%s", dstart(today), until(today.AddDate(0, 0, 28))),
 		RoomID:         rowA.RoomID,
 		InstructorID:   rowA.InstructorID,
 		IsCancelled:    true,
 	}
-	closedSeries := models.ProgramClassEvent{
+	closedSeries := programs.ProgramClassEvent{
 		RecurrenceRule: fmt.Sprintf("DTSTART:%s\nRRULE:FREQ=WEEKLY;UNTIL=%s", dstart(today.AddDate(0, 0, -28)), until(today.AddDate(0, 0, -1))),
 	}
 
-	writeCtx := &models.QueryContext{Ctx: env.Context, Timezone: "UTC", UserID: admin.ID}
-	require.NoError(t, env.DB.CreateRescheduleEventSeries(writeCtx, class.ID, newSeries, closedSeries))
+	writeCtx := &programs.QueryContext{Ctx: env.Context, Timezone: "UTC", UserID: admin.ID}
+	require.NoError(t, env.Programs.CreateRescheduleEventSeries(writeCtx, class.ID, newSeries, closedSeries))
 
-	readCtx := &models.QueryContext{Ctx: env.Context, Timezone: "UTC", All: true}
-	instances, err := env.DB.GetClassEventInstancesWithAttendanceForRecurrence(int(class.ID), readCtx, "", "", nil, true)
+	readCtx := &programs.QueryContext{Ctx: env.Context, Timezone: "UTC", All: true}
+	instances, err := env.Programs.GetClassEventInstancesWithAttendanceForRecurrence(int(class.ID), readCtx, "", "", nil, true)
 	require.NoError(t, err)
 	require.NotEmpty(t, instances)
 
@@ -155,7 +156,7 @@ func TestCancelAllFutureSessionsAcrossMultipleRows(t *testing.T) {
 
 	// The stray future-only row (B) must be soft-deleted, not left generating sessions.
 	var activeRows int64
-	require.NoError(t, env.DB.Model(&models.ProgramClassEvent{}).
+	require.NoError(t, env.DB.Model(&programs.ProgramClassEvent{}).
 		Where("cohort_id = ? AND is_cancelled = ?", class.ID, false).
 		Count(&activeRows).Error)
 	require.Equal(t, int64(1), activeRows, "only the capped original row should remain active")
@@ -174,11 +175,11 @@ func TestUncancelSeriesRestoresFutureSessions(t *testing.T) {
 	admin, err := env.CreateTestUser("uncanceladmin", models.FacilityAdmin, facility.ID, "")
 	require.NoError(t, err)
 
-	program, err := env.CreateTestProgram("Uncancel Program", models.FundingType(models.FederalGrants), []models.ProgramType{}, []models.ProgramCreditType{}, true, nil)
+	program, err := env.CreateTestProgram("Uncancel Program", programs.FundingType(programs.FederalGrants), []programs.ProgramType{}, []programs.ProgramCreditType{}, true, nil)
 	require.NoError(t, err)
 	require.NoError(t, env.SetFacilitiesToProgram(program.ID, []uint{facility.ID}))
 
-	class, err := env.CreateTestClass(program, facility, models.Active, &admin.ID)
+	class, err := env.CreateTestClass(program, facility, programs.Active, &admin.ID)
 	require.NoError(t, err)
 
 	now := time.Now().UTC()
@@ -190,30 +191,30 @@ func TestUncancelSeriesRestoresFutureSessions(t *testing.T) {
 		fmt.Sprintf("DTSTART:%s\nRRULE:FREQ=WEEKLY;UNTIL=%s", dstart(today.AddDate(0, 0, -28)), until(today.AddDate(0, 0, 28))), admin.ID)
 	require.NoError(t, err)
 
-	writeCtx := &models.QueryContext{Ctx: env.Context, Timezone: "UTC", UserID: admin.ID}
-	require.NoError(t, env.DB.CreateRescheduleEventSeries(writeCtx, class.ID,
-		models.ProgramClassEvent{
+	writeCtx := &programs.QueryContext{Ctx: env.Context, Timezone: "UTC", UserID: admin.ID}
+	require.NoError(t, env.Programs.CreateRescheduleEventSeries(writeCtx, class.ID,
+		programs.ProgramClassEvent{
 			Duration:       "2h",
 			RecurrenceRule: fmt.Sprintf("DTSTART:%s\nRRULE:FREQ=WEEKLY;UNTIL=%s", dstart(today), until(today.AddDate(0, 0, 28))),
 			RoomID:         rowA.RoomID,
 			InstructorID:   rowA.InstructorID,
 			IsCancelled:    true,
 		},
-		models.ProgramClassEvent{
+		programs.ProgramClassEvent{
 			RecurrenceRule: fmt.Sprintf("DTSTART:%s\nRRULE:FREQ=WEEKLY;UNTIL=%s", dstart(today.AddDate(0, 0, -28)), until(today.AddDate(0, 0, -1))),
 		}))
 
 	// Locate the cancelled series row created by the cancel.
-	var cancelledSeries models.ProgramClassEvent
+	var cancelledSeries programs.ProgramClassEvent
 	require.NoError(t, env.DB.Where("cohort_id = ? AND is_cancelled = ?", class.ID, true).
 		Order("created_at DESC").First(&cancelledSeries).Error)
 
 	// Undo: restore the series from today onward.
 	todayStr := today.Format("2006-01-02")
-	require.NoError(t, env.DB.UncancelEventSeries(writeCtx, cancelledSeries.ID, todayStr))
+	require.NoError(t, env.Programs.UncancelEventSeries(writeCtx, cancelledSeries.ID, todayStr))
 
-	readCtx := &models.QueryContext{Ctx: env.Context, Timezone: "UTC", All: true}
-	instances, err := env.DB.GetClassEventInstancesWithAttendanceForRecurrence(int(class.ID), readCtx, "", "", nil, true)
+	readCtx := &programs.QueryContext{Ctx: env.Context, Timezone: "UTC", All: true}
+	instances, err := env.Programs.GetClassEventInstancesWithAttendanceForRecurrence(int(class.ID), readCtx, "", "", nil, true)
 	require.NoError(t, err)
 
 	var restoredFuture int

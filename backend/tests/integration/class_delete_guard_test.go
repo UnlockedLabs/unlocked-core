@@ -8,6 +8,7 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 
 	"github.com/stretchr/testify/suite"
 )
@@ -43,7 +44,7 @@ func (suite *ClassDeleteGuardTestSuite) SetupTest() {
 }
 
 // seedEmptyClass returns (admin, class) with an empty program_class — no children.
-func (suite *ClassDeleteGuardTestSuite) seedEmptyClass() (*models.User, *models.ProgramClassCohort) {
+func (suite *ClassDeleteGuardTestSuite) seedEmptyClass() (*models.User, *programs.ProgramClassCohort) {
 	timestamp := fmt.Sprintf("%d", time.Now().UnixNano())
 	facility := &models.Facility{Name: "Test Facility " + timestamp}
 	suite.env.DB.Create(facility)
@@ -55,13 +56,13 @@ func (suite *ClassDeleteGuardTestSuite) seedEmptyClass() (*models.User, *models.
 	}
 	suite.env.DB.Create(admin)
 
-	program := &models.Program{Name: "Prog " + timestamp, IsActive: true}
+	program := &programs.Program{Name: "Prog " + timestamp, IsActive: true}
 	suite.env.DB.Create(program)
-	suite.env.DB.Create(&models.FacilitiesPrograms{FacilityID: facility.ID, ProgramID: program.ID})
+	suite.env.DB.Create(&programs.FacilitiesPrograms{FacilityID: facility.ID, ProgramID: program.ID})
 
-	class := &models.ProgramClassCohort{
+	class := &programs.ProgramClassCohort{
 		ProgramID: program.ID, FacilityID: facility.ID,
-		Status: models.Scheduled, Capacity: 10, Description: "x",
+		Status: programs.Scheduled, Capacity: 10, Description: "x",
 	}
 	suite.env.DB.Create(class)
 	return admin, class
@@ -88,14 +89,14 @@ func (suite *ClassDeleteGuardTestSuite) TestDelete_BlockedByEnrollment() {
 	}
 	suite.env.DB.Create(student)
 
-	enrollment := &models.ProgramClassEnrollment{
+	enrollment := &programs.ProgramClassEnrollment{
 		CohortID:         class.ID,
 		UserID:           student.ID,
-		EnrollmentStatus: models.Enrolled,
+		EnrollmentStatus: programs.Enrolled,
 	}
 	suite.env.DB.Create(enrollment)
 
-	resp := NewRequest[models.DeleteBlockingChildren](suite.env.Client, suite.T(), http.MethodDelete,
+	resp := NewRequest[programs.DeleteBlockingChildren](suite.env.Client, suite.T(), http.MethodDelete,
 		fmt.Sprintf("/api/program-classes/%d", class.ID), nil).
 		WithTestClaims(&handlers.Claims{Role: models.SystemAdmin, UserID: admin.ID, FacilityID: 0}).
 		Do().
@@ -108,7 +109,7 @@ func (suite *ClassDeleteGuardTestSuite) TestDelete_BlockedByEnrollment() {
 
 	// Verify the class was NOT deleted.
 	var count int64
-	suite.env.DB.Model(&models.ProgramClassCohort{}).Where("id = ?", class.ID).Count(&count)
+	suite.env.DB.Model(&programs.ProgramClassCohort{}).Where("id = ?", class.ID).Count(&count)
 	suite.Equal(int64(1), count, "class should still exist after blocked delete")
 }
 
@@ -117,14 +118,14 @@ func (suite *ClassDeleteGuardTestSuite) TestDelete_BlockedByCompletedEnrollment(
 	student := suite.makeStudent(class.FacilityID)
 
 	now := time.Now()
-	suite.env.DB.Create(&models.ProgramClassEnrollment{
+	suite.env.DB.Create(&programs.ProgramClassEnrollment{
 		CohortID:          class.ID,
 		UserID:            student.ID,
-		EnrollmentStatus:  models.EnrollmentCompleted,
+		EnrollmentStatus:  programs.EnrollmentCompleted,
 		EnrollmentEndedAt: &now,
 	})
 
-	resp := NewRequest[models.DeleteBlockingChildren](suite.env.Client, suite.T(), http.MethodDelete,
+	resp := NewRequest[programs.DeleteBlockingChildren](suite.env.Client, suite.T(), http.MethodDelete,
 		fmt.Sprintf("/api/program-classes/%d", class.ID), nil).
 		WithTestClaims(&handlers.Claims{Role: models.SystemAdmin, UserID: admin.ID, FacilityID: 0}).
 		Do().
@@ -136,7 +137,7 @@ func (suite *ClassDeleteGuardTestSuite) TestDelete_BlockedByCompletedEnrollment(
 	suite.Equal(int64(0), got.Completions)
 
 	var count int64
-	suite.env.DB.Model(&models.ProgramClassCohort{}).Where("id = ?", class.ID).Count(&count)
+	suite.env.DB.Model(&programs.ProgramClassCohort{}).Where("id = ?", class.ID).Count(&count)
 	suite.Equal(int64(1), count, "class should still exist after blocked delete")
 }
 
@@ -145,14 +146,14 @@ func (suite *ClassDeleteGuardTestSuite) TestDelete_BlockedByCancelledEnrollment(
 	student := suite.makeStudent(class.FacilityID)
 
 	now := time.Now()
-	suite.env.DB.Create(&models.ProgramClassEnrollment{
+	suite.env.DB.Create(&programs.ProgramClassEnrollment{
 		CohortID:          class.ID,
 		UserID:            student.ID,
-		EnrollmentStatus:  models.EnrollmentCancelled,
+		EnrollmentStatus:  programs.EnrollmentCancelled,
 		EnrollmentEndedAt: &now,
 	})
 
-	resp := NewRequest[models.DeleteBlockingChildren](suite.env.Client, suite.T(), http.MethodDelete,
+	resp := NewRequest[programs.DeleteBlockingChildren](suite.env.Client, suite.T(), http.MethodDelete,
 		fmt.Sprintf("/api/program-classes/%d", class.ID), nil).
 		WithTestClaims(&handlers.Claims{Role: models.SystemAdmin, UserID: admin.ID, FacilityID: 0}).
 		Do().
@@ -164,14 +165,14 @@ func (suite *ClassDeleteGuardTestSuite) TestDelete_BlockedByCancelledEnrollment(
 	suite.Equal(int64(0), got.Completions)
 
 	var count int64
-	suite.env.DB.Model(&models.ProgramClassCohort{}).Where("id = ?", class.ID).Count(&count)
+	suite.env.DB.Model(&programs.ProgramClassCohort{}).Where("id = ?", class.ID).Count(&count)
 	suite.Equal(int64(1), count, "class should still exist after blocked delete")
 }
 
 func (suite *ClassDeleteGuardTestSuite) TestDelete_EventsOnly_Succeeds() {
 	admin, class := suite.seedEmptyClass()
 
-	room := &models.Room{FacilityID: class.FacilityID, Name: "101"}
+	room := &programs.Room{FacilityID: class.FacilityID, Name: "101"}
 	suite.env.DB.Create(room)
 	instructor := &models.User{
 		NameFirst: "Inst", NameLast: "Ructor",
@@ -180,7 +181,7 @@ func (suite *ClassDeleteGuardTestSuite) TestDelete_EventsOnly_Succeeds() {
 		Role:     models.FacilityAdmin, FacilityID: class.FacilityID,
 	}
 	suite.env.DB.Create(instructor)
-	suite.env.DB.Create(&models.ProgramClassEvent{
+	suite.env.DB.Create(&programs.ProgramClassEvent{
 		CohortID:       class.ID,
 		Duration:       "1h0m0s",
 		RecurrenceRule: "DTSTART:20260302T093000Z\nRRULE:FREQ=WEEKLY;COUNT=1",
@@ -195,7 +196,7 @@ func (suite *ClassDeleteGuardTestSuite) TestDelete_EventsOnly_Succeeds() {
 		ExpectStatus(http.StatusNoContent)
 
 	var liveEvents int64
-	suite.env.DB.Model(&models.ProgramClassEvent{}).
+	suite.env.DB.Model(&programs.ProgramClassEvent{}).
 		Where("cohort_id = ? AND deleted_at IS NULL", class.ID).
 		Count(&liveEvents)
 	suite.Equal(int64(0), liveEvents, "events should be soft-deleted alongside the class")
@@ -206,7 +207,7 @@ func (suite *ClassDeleteGuardTestSuite) TestDelete_BlockedByCompletion() {
 	student := suite.makeStudent(class.FacilityID)
 
 	cohortID, classID, programID := class.ID, class.ClassID, class.ProgramID
-	suite.env.DB.Create(&models.ClassCompletion{
+	suite.env.DB.Create(&programs.ClassCompletion{
 		UserID:       student.ID,
 		CohortID:     &cohortID,
 		ClassID:      &classID,
@@ -218,7 +219,7 @@ func (suite *ClassDeleteGuardTestSuite) TestDelete_BlockedByCompletion() {
 		ProgramName:  "Prog",
 	})
 
-	resp := NewRequest[models.DeleteBlockingChildren](suite.env.Client, suite.T(), http.MethodDelete,
+	resp := NewRequest[programs.DeleteBlockingChildren](suite.env.Client, suite.T(), http.MethodDelete,
 		fmt.Sprintf("/api/program-classes/%d", class.ID), nil).
 		WithTestClaims(&handlers.Claims{Role: models.SystemAdmin, UserID: admin.ID, FacilityID: 0}).
 		Do().
@@ -230,16 +231,16 @@ func (suite *ClassDeleteGuardTestSuite) TestDelete_BlockedByCompletion() {
 	suite.Equal(int64(1), got.Completions, "should report 1 blocking completion")
 
 	var count int64
-	suite.env.DB.Model(&models.ProgramClassCohort{}).Where("id = ?", class.ID).Count(&count)
+	suite.env.DB.Model(&programs.ProgramClassCohort{}).Where("id = ?", class.ID).Count(&count)
 	suite.Equal(int64(1), count, "class should still exist after blocked delete")
 }
 
 func (suite *ClassDeleteGuardTestSuite) TestDelete_NonScheduledStatus_Blocked() {
-	for _, status := range []models.ClassStatus{models.Active, models.Completed, models.Cancelled, models.Paused} {
+	for _, status := range []programs.ClassStatus{programs.Active, programs.Completed, programs.Cancelled, programs.Paused} {
 		admin, class := suite.seedEmptyClass()
-		suite.env.DB.Model(&models.ProgramClassCohort{}).Where("id = ?", class.ID).Update("status", status)
+		suite.env.DB.Model(&programs.ProgramClassCohort{}).Where("id = ?", class.ID).Update("status", status)
 
-		resp := NewRequest[models.DeleteBlockingChildren](suite.env.Client, suite.T(), http.MethodDelete,
+		resp := NewRequest[programs.DeleteBlockingChildren](suite.env.Client, suite.T(), http.MethodDelete,
 			fmt.Sprintf("/api/program-classes/%d", class.ID), nil).
 			WithTestClaims(&handlers.Claims{Role: models.SystemAdmin, UserID: admin.ID, FacilityID: 0}).
 			Do().
@@ -249,7 +250,7 @@ func (suite *ClassDeleteGuardTestSuite) TestDelete_NonScheduledStatus_Blocked() 
 		suite.Equal(string(status), got.NonDeletableStatus, "blocker should report the class status")
 
 		var count int64
-		suite.env.DB.Model(&models.ProgramClassCohort{}).Where("id = ?", class.ID).Count(&count)
+		suite.env.DB.Model(&programs.ProgramClassCohort{}).Where("id = ?", class.ID).Count(&count)
 		suite.Equal(int64(1), count, "class with status %s should still exist after blocked delete", status)
 	}
 }
@@ -257,8 +258,8 @@ func (suite *ClassDeleteGuardTestSuite) TestDelete_NonScheduledStatus_Blocked() 
 func (suite *ClassDeleteGuardTestSuite) TestDelete_HistoryOnly_Succeeds() {
 	admin, class := suite.seedEmptyClass()
 
-	suite.env.DB.Create(models.NewChangeLogEntry(
-		models.TableNameCohort, "name",
+	suite.env.DB.Create(programs.NewChangeLogEntry(
+		programs.TableNameCohort, "name",
 		models.StringPtr("old"), models.StringPtr("new"),
 		class.ID, admin.ID,
 	))

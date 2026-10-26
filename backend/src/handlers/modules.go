@@ -8,8 +8,10 @@ import (
 	"strings"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/jasper"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 
 	"github.com/UnlockedLabs/unlocked-contracts/identity"
 )
@@ -29,23 +31,30 @@ func (mr moduleRouter) Handle(rt module.Route) {
 		return nil
 	}
 	def := routeDef{routeMethod: rt.Pattern, handler: h, features: rt.Features}
+	var checks []RouteResolver
 	switch rt.Access {
 	case module.AnyUser:
 	case module.Admin:
 		def.admin = true
 	case module.DeptAdmin:
 		def.admin = true
-		def.resolver = DeptAdminResolver
+		checks = append(checks, DeptAdminResolver)
 	case module.SystemAdmin:
 		def.admin = true
-		def.resolver = SystemAdminResolver
+		checks = append(checks, SystemAdminResolver)
 	default:
 		// Registration runs once at startup, so an unknown level stops the
 		// server instead of leaving a route open.
 		panic(fmt.Sprintf("module route %q: unknown access level %d", rt.Pattern, rt.Access))
 	}
 	if rt.UserParam != "" {
-		def.resolver = userResolver(rt)
+		checks = append(checks, userResolver(rt))
+	}
+	if rt.Allow != nil {
+		checks = append(checks, allowResolver(rt.Allow))
+	}
+	if len(checks) > 0 {
+		def.resolver = AllResolvers(checks...)
 	}
 	mr.srv.register(func() []routeDef { return []routeDef{def} })
 }
@@ -64,6 +73,14 @@ func userResolver(rt module.Route) RouteResolver {
 		return FacilityAdminResolver("users", rt.UserParam)
 	default:
 		panic(fmt.Sprintf("module route %q: UserParam works only with AnyUser and Admin", rt.Pattern))
+	}
+}
+
+// allowResolver runs a module's own access check with the caller's
+// identity.Claims.
+func allowResolver(allow func(*http.Request, *identity.Claims) bool) RouteResolver {
+	return func(_ *database.DB, r *http.Request) bool {
+		return allow(r, r.Context().Value(ClaimsKey).(*Claims).identityClaims())
 	}
 }
 
@@ -152,28 +169,30 @@ func (u moduleUsers) Delete(ctx context.Context, id uint) error {
 	return nil
 }
 
-// liveProviders gives Provider Platforms core's Canvas and Essential Education
-// code until EN-194 moves it there.
-type liveProviders struct{ srv *Server }
+// httpClient sends module requests with srv.Client. It reads srv.Client on
+// each call, like wsNotifier, so a client set after startup is the one used.
+type httpClient struct{ srv *Server }
 
-func (l liveProviders) Users(ctx context.Context, providerID uint) ([]module.ProviderUser, bool, error) {
-	provider, err := l.srv.providerByID(ctx, providerID)
-	if err != nil {
-		return nil, false, err
-	}
-	lister, ok := l.srv.liveUserListerFor(provider)
-	if !ok {
-		return nil, false, nil
-	}
-	users, err := lister.ListUsers(ctx)
-	if err != nil {
-		return nil, true, err
-	}
-	return users, true, nil
+func (c httpClient) Do(req *http.Request) (*http.Response, error) {
+	return c.srv.Client.Do(req)
 }
 
-func (l liveProviders) MappingsChanged(providerID, userID uint) {
-	l.srv.invalidateCanvasProgramCache(providerID, int(userID))
+// facilityFeatures gives modules core's feature flags for each facility.
+type facilityFeatures struct{ srv *Server }
+
+func (f facilityFeatures) FacilityFeatures(ctx context.Context, facilityID uint) ([]models.FeatureAccess, error) {
+	access, err := database.NewDB(f.srv.Db.WithContext(ctx)).GetFacilityFeatureAccess(facilityID, f.srv.features)
+	if err != nil {
+		return nil, fmt.Errorf("get features for facility %d: %w", facilityID, dbCause(err))
+	}
+	return access, nil
+}
+
+// pdfReports renders module reports with core's Jasper report templates.
+type pdfReports struct{}
+
+func (pdfReports) PDF(template string, report module.Report) ([]byte, error) {
+	return jasper.GenerateReportPDF(template, report)
 }
 
 func toModuleUser(u *models.User) module.User {
@@ -198,17 +217,22 @@ func dbCause(err error) error {
 }
 
 func (srv *Server) moduleDeps() module.Deps {
-	return module.Deps{
-		DB:            srv.Db.DB,
-		NATS:          srv.nats,
-		Notify:        wsNotifier{srv},
-		Users:         moduleUsers{srv},
-		LiveProviders: liveProviders{srv},
+	deps := module.Deps{
+		DB:       srv.Db.DB,
+		NATS:     srv.nats,
+		Notify:   wsNotifier{srv},
+		Users:    moduleUsers{srv},
+		HTTP:     httpClient{srv},
+		Features: facilityFeatures{srv},
+		Reports:  pdfReports{},
 	}
+	deps.LiveProviders = registry.LiveProviders(deps)
+	return deps
 }
 
 func (srv *Server) registerModuleRoutes() {
+	deps := srv.moduleDeps()
 	for _, m := range srv.modules {
-		m.Register(moduleRouter{srv}, srv.moduleDeps())
+		m.Register(moduleRouter{srv}, deps)
 	}
 }

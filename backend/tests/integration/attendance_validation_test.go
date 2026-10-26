@@ -9,6 +9,7 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 
 	"github.com/stretchr/testify/require"
 )
@@ -31,7 +32,7 @@ func TestAttendanceValidation(t *testing.T) {
 	unenrolledStudent, err := env.CreateTestUser("unenrolledstudent", models.Student, facility.ID, "STU002")
 	require.NoError(t, err)
 
-	program, err := env.CreateTestProgram("Test Program", models.FundingType(models.FederalGrants), []models.ProgramType{}, []models.ProgramCreditType{}, true, nil)
+	program, err := env.CreateTestProgram("Test Program", programs.FundingType(programs.FederalGrants), []programs.ProgramType{}, []programs.ProgramCreditType{}, true, nil)
 	require.NoError(t, err)
 
 	err = env.SetFacilitiesToProgram(program.ID, []uint{facility.ID})
@@ -40,13 +41,13 @@ func TestAttendanceValidation(t *testing.T) {
 	instructor, err := env.CreateTestInstructor(facility.ID, "validation")
 	require.NoError(t, err)
 
-	class, err := env.CreateTestClass(program, facility, models.Active, &instructor.ID)
+	class, err := env.CreateTestClass(program, facility, programs.Active, &instructor.ID)
 	require.NoError(t, err)
 
 	event, err := env.CreateTestEvent(class.ID, "", instructor.ID)
 	require.NoError(t, err)
 
-	_, err = env.CreateTestEnrollment(class.ID, enrolledStudent.ID, models.Enrolled)
+	_, err = env.CreateTestEnrollment(class.ID, enrolledStudent.ID, programs.Enrolled)
 	require.NoError(t, err)
 
 	cancelledDate := time.Now().AddDate(0, 0, -1).Format("2006-01-02") // yesterday (past date)
@@ -62,15 +63,15 @@ func TestAttendanceValidation(t *testing.T) {
 	})
 }
 
-func testPOSTAttendanceValidation(t *testing.T, env *TestEnv, admin *models.User, class *models.ProgramClassCohort, event *models.ProgramClassEvent, enrolledStudent, unenrolledStudent *models.User, cancelledDate string) {
+func testPOSTAttendanceValidation(t *testing.T, env *TestEnv, admin *models.User, class *programs.ProgramClassCohort, event *programs.ProgramClassEvent, enrolledStudent, unenrolledStudent *models.User, cancelledDate string) {
 	validDate := time.Now().AddDate(0, 0, -2).Format("2006-01-02") // day before yesterday
 
 	t.Run("Reject attendance for cancelled date", func(t *testing.T) {
-		attendanceData := []models.ProgramClassEventAttendance{
+		attendanceData := []programs.ProgramClassEventAttendance{
 			{
 				UserID:           enrolledStudent.ID,
 				Date:             cancelledDate,
-				AttendanceStatus: models.Present,
+				AttendanceStatus: programs.Present,
 				Note:             models.StringPtr("Test attendance"),
 			},
 		}
@@ -88,11 +89,11 @@ func testPOSTAttendanceValidation(t *testing.T, env *TestEnv, admin *models.User
 	})
 
 	t.Run("Allow attendance for historically enrolled user", func(t *testing.T) {
-		attendanceData := []models.ProgramClassEventAttendance{
+		attendanceData := []programs.ProgramClassEventAttendance{
 			{
 				UserID:           unenrolledStudent.ID,
 				Date:             validDate,
-				AttendanceStatus: models.Present,
+				AttendanceStatus: programs.Present,
 				Note:             models.StringPtr("Test attendance"),
 			},
 		}
@@ -110,11 +111,11 @@ func testPOSTAttendanceValidation(t *testing.T, env *TestEnv, admin *models.User
 	})
 
 	t.Run("Accept valid attendance for enrolled user on valid date", func(t *testing.T) {
-		attendanceData := []models.ProgramClassEventAttendance{
+		attendanceData := []programs.ProgramClassEventAttendance{
 			{
 				UserID:           enrolledStudent.ID,
 				Date:             validDate,
-				AttendanceStatus: models.Present,
+				AttendanceStatus: programs.Present,
 				Note:             models.StringPtr("Valid attendance"),
 			},
 		}
@@ -132,17 +133,17 @@ func testPOSTAttendanceValidation(t *testing.T, env *TestEnv, admin *models.User
 	})
 
 	t.Run("Reject multiple users with mixed enrollment status", func(t *testing.T) {
-		attendanceData := []models.ProgramClassEventAttendance{
+		attendanceData := []programs.ProgramClassEventAttendance{
 			{
 				UserID:           enrolledStudent.ID,
 				Date:             validDate,
-				AttendanceStatus: models.Present,
+				AttendanceStatus: programs.Present,
 				Note:             models.StringPtr("Enrolled student"),
 			},
 			{
 				UserID:           unenrolledStudent.ID,
 				Date:             validDate,
-				AttendanceStatus: models.Present,
+				AttendanceStatus: programs.Present,
 				Note:             models.StringPtr("Unenrolled student"),
 			},
 		}
@@ -160,19 +161,19 @@ func testPOSTAttendanceValidation(t *testing.T, env *TestEnv, admin *models.User
 	})
 }
 
-func testDELETEAttendanceValidation(t *testing.T, env *TestEnv, admin *models.User, class *models.ProgramClassCohort, event *models.ProgramClassEvent, enrolledStudent, unenrolledStudent *models.User, cancelledDate string) {
+func testDELETEAttendanceValidation(t *testing.T, env *TestEnv, admin *models.User, class *programs.ProgramClassCohort, event *programs.ProgramClassEvent, enrolledStudent, unenrolledStudent *models.User, cancelledDate string) {
 	validDate := time.Now().AddDate(0, 0, -2).Format("2006-01-02") // day before yesterday
 
-	attendanceData := []models.ProgramClassEventAttendance{
+	attendanceData := []programs.ProgramClassEventAttendance{
 		{
 			EventID:          event.ID,
 			UserID:           enrolledStudent.ID,
 			Date:             validDate,
-			AttendanceStatus: models.Present,
+			AttendanceStatus: programs.Present,
 			Note:             models.StringPtr("To be deleted"),
 		},
 	}
-	err := env.DB.LogUserAttendance(attendanceData, context.Background(), &admin.ID, class.ClassName)
+	err := env.Programs.LogUserAttendance(attendanceData, context.Background(), &admin.ID, class.ClassName)
 	require.NoError(t, err)
 
 	t.Run("Reject delete attendance for cancelled date", func(t *testing.T) {

@@ -1,0 +1,15 @@
+{
+  "data": {
+    "blockers": {
+      "attendance_flags": 3,
+      "classes": 0,
+      "completions": 1,
+      "enrollments": 4,
+      "events": 1,
+      "history": 0,
+      "non_deletable_status": "Active"
+    },
+    "can_delete": false
+  },
+  "message": "Data fetched successfully"
+}

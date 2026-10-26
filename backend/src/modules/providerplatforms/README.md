@@ -15,18 +15,19 @@ let residents log in to them. It moved here from core in EN-193.
 - **It reaches core through `Deps`:**
   - `Deps.Users` gets, creates and deletes users and gives them a Kratos
     login;
-  - `Deps.LiveProviders` lists an Essential Education provider's users and
-    clears core's cached Canvas programs when a mapping changes. It goes away
-    in EN-194.
+  - `Deps.LiveProviders`, which Programs answers (EN-194), lists an Essential
+    Education provider's users and clears Programs' cached Canvas programs
+    when a mapping changes. It goes away when this module fetches and caches
+    those providers' data itself.
 - **It reads core's `users` table** to match and list the users linked to a
   provider (the `user` type in `models.go`).
 - **Two places still import its insides, until EN-197:** provider-middleware
   (8 files) and `backend/seeder`. depguard doesn't check either one:
   provider-middleware has no `.golangci.yml`, and `golint.yml` skips the
   seeder.
+- **Programs shows the Canvas and Essential Education live data** on its
+  screens, asking `api/` about providers and the users linked to them.
 - **Core still owns:**
-  - the Canvas and Essential Education live data on the Programs screens,
-    until EN-194;
   - the provider jobs (`get_courses`, `get_milestones`, `get_activity`) in
     core's scheduler and provider-middleware, until EN-197, along with their
     `cron_jobs`/`runnable_tasks` rows and the

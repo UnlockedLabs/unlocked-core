@@ -1,0 +1,32 @@
+{
+  "data": [
+    {
+      "active_classes": 0,
+      "attendance_concerns": 0,
+      "enrollment": 0,
+      "facility_id": 1,
+      "facility_name": "Default",
+      "missing_attendance": 0,
+      "programs": 0
+    },
+    {
+      "active_classes": 1,
+      "attendance_concerns": 0,
+      "enrollment": 1,
+      "facility_id": 3,
+      "facility_name": "South",
+      "missing_attendance": 0,
+      "programs": 2
+    },
+    {
+      "active_classes": 1,
+      "attendance_concerns": 0,
+      "enrollment": 3,
+      "facility_id": 2,
+      "facility_name": "North",
+      "missing_attendance": 0,
+      "programs": 2
+    }
+  ],
+  "message": "Data fetched successfully"
+}

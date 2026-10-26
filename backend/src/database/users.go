@@ -136,42 +136,12 @@ func (db *DB) GetUsersByIDs(ctx context.Context, userIDs []uint, facID uint, rol
 	return users, nil
 }
 
-func (db *DB) GetTransferProgramConflicts(ctx context.Context, id uint, transferFacilityId int) ([]models.ResidentTransferProgramConflicts, error) {
-	var programNames []models.ResidentTransferProgramConflicts
-	query := `with transfer_facility_programs as (
-			select name from programs p
-			inner join facilities_programs fp on fp.program_id = p.id
-					and fp.facility_id = ?
-			where p.is_active = true
-		)
-		select cl.name as class_name, p.name as program_name from program_class_enrollments pce
-		inner join users u on u.id = pce.user_id
-			and u.id = ?
-		inner join program_class_cohorts pc on pc.id = pce.cohort_id
-			and pc.facility_id = u.facility_id
-		inner join program_classes cl on cl.id = pc.class_id
-		inner join programs p on p.id = pc.program_id
-		where enrollment_status = 'Enrolled'
-			and p.name not in (select name from transfer_facility_programs)`
-	if err := db.WithContext(ctx).Raw(query, transferFacilityId, id).Scan(&programNames).Error; err != nil {
-		return nil, err
-	}
-	return programNames, nil
-}
-
 func (db *DB) TransferResident(ctx *models.QueryContext, userID int, currFacilityID int, transFacilityID int) (*gorm.DB, error) {
 	trans := db.Begin()
 	if trans.Error != nil {
 		return nil, NewDBError(trans.Error, "unable to start DB transaction")
 	}
-	updateQuery := `UPDATE program_class_enrollments AS pce SET enrollment_status = ?
-		FROM program_class_cohorts pc
-		WHERE pce.cohort_id = pc.id
-			AND pce.user_id = ?
-			AND pc.facility_id = ?
-			AND pce.enrollment_status = 'Enrolled'`
-
-	if err := trans.Exec(updateQuery, "Incomplete: Transferred", userID, currFacilityID).Error; err != nil {
+	if err := registry.Programs(trans).EndEnrollmentsForTransfer(trans.Statement.Context, uint(userID), uint(currFacilityID)); err != nil {
 		trans.Rollback()
 		return nil, newUpdateDBError(err, "program_class_enrollments")
 	}
@@ -184,37 +154,11 @@ func (db *DB) TransferResident(ctx *models.QueryContext, userID int, currFacilit
 	return trans, nil
 }
 
-func (db *DB) GetEligibleResidentsForClass(args *models.QueryContext, classId int) ([]models.User, error) {
+// GetResidentsByIDs is a page of the residents with the given IDs, searched
+// and ordered as the users list is, by defaultOrder when the request has none.
+func (db *DB) GetResidentsByIDs(args *models.QueryContext, ids []uint, defaultOrder string) ([]models.User, error) {
 	tx := db.WithContext(args.Ctx).Model(&models.User{}).
-		Joins("LEFT JOIN program_class_enrollments pse ON users.id = pse.user_id AND pse.cohort_id = ?", classId).
-		Joins("JOIN facilities_programs fp ON users.facility_id = fp.facility_id").
-		Joins("JOIN program_class_cohorts c ON c.program_id = fp.program_id AND c.id = ?", classId).
-		Where("pse.user_id IS NULL"). //not enrolled in class
-		Where("users.role = 'student'").
-		Where("users.facility_id = c.facility_id").
-		Where("users.deactivated_at IS NULL")
-
-	if args.SearchQuery() != "" {
-		tx = fuzzySearchUsers(tx, args)
-	}
-	if err := tx.Count(&args.Total).Error; err != nil {
-		return nil, newGetRecordsDBError(err, "users")
-	}
-	users := make([]models.User, 0, args.PerPage)
-	if err := tx.Order(adjustUserOrderBy(args.OrderClause("users.created_at desc"))).
-		Offset(args.CalcOffset()).
-		Limit(args.PerPage).
-		Find(&users).
-		Error; err != nil {
-		return nil, newGetRecordsDBError(err, "users")
-	}
-	return users, nil
-}
-
-func (db *DB) GetEnrolledResidentsForClass(args *models.QueryContext, classId int) ([]models.User, error) {
-	tx := db.WithContext(args.Ctx).Model(&models.User{}).
-		Joins("JOIN program_class_enrollments pce ON users.id = pce.user_id AND pce.cohort_id = ?", classId).
-		Where("pce.enrollment_status = 'Enrolled'").
+		Where("users.id IN ?", ids).
 		Where("users.role = 'student'")
 
 	if args.SearchQuery() != "" {
@@ -224,7 +168,7 @@ func (db *DB) GetEnrolledResidentsForClass(args *models.QueryContext, classId in
 		return nil, newGetRecordsDBError(err, "users")
 	}
 	users := make([]models.User, 0, args.PerPage)
-	if err := tx.Order(adjustUserOrderBy(args.OrderClause("users.name_last asc"))).
+	if err := tx.Order(adjustUserOrderBy(args.OrderClause(defaultOrder))).
 		Offset(args.CalcOffset()).
 		Limit(args.PerPage).
 		Find(&users).
@@ -763,152 +707,6 @@ func (db *DB) GetUserAccountHistory(args *models.QueryContext, userID uint, cate
 	return history, nil
 }
 
-func (db *DB) GetChangeLogEntries(args *models.QueryContext, tableName string, refID int, categories []string) ([]models.ActivityHistoryResponse, error) {
-	history := make([]models.ActivityHistoryResponse, 0, args.PerPage)
-
-	programCategoryFields := map[string][]string{
-		"info":     {"name", "description", "program"},
-		"status":   {"status", "is_active", "archived_at"},
-		"settings": {"credit_type", "credit_hours", "funding_type", "program_type"},
-	}
-
-	classCategoryFields := map[string][]string{
-		"info":     {"name", "description", "instructor_name", "class"},
-		"status":   {"status", "archived_at"},
-		"schedule": {"start_date", "end_date", "start_dt", "end_dt", "meeting_days", "meeting_times", "event_rescheduled_series", "event_rescheduled", "event_cancelled", "event_restored", "event_substitute_instructor", "event_room_changed"},
-		"settings": {"capacity", "location", "credit_hours"},
-	}
-
-	//added criteria field_name != 'facility_id to skip these records from being a part of the result set, this may be temporary?
-	tx := db.WithContext(args.Ctx).
-		Table("change_log_entries cle").
-		Select(`cle.created_at, cle.user_id,
-				users.username AS admin_username,
-				'progclass_history' AS action,
-				cle.*`).
-		Joins("inner join users on cle.user_id = users.id").
-		Where("cle.table_name = ? and cle.parent_ref_id = ? and field_name != 'facility_id'", tableName, refID)
-
-	if len(categories) > 0 {
-		var fields []string
-		var categoryFields map[string][]string
-
-		if tableName == "programs" {
-			categoryFields = programCategoryFields
-		} else {
-			categoryFields = classCategoryFields
-		}
-
-		for _, category := range categories {
-			if categoryFields[category] != nil {
-				fields = append(fields, categoryFields[category]...)
-			}
-		}
-		if len(fields) > 0 {
-			tx = tx.Where("cle.field_name IN ?", fields)
-		}
-	}
-
-	if err := tx.Count(&args.Total).Error; err != nil {
-		return nil, newGetRecordsDBError(err, "change_log_entries")
-	}
-	if err := tx.Order("cle.created_at desc").
-		Offset(args.CalcOffset()).
-		Limit(args.PerPage).
-		Scan(&history).Error; err != nil {
-		return nil, newGetRecordsDBError(err, "change_log_entries")
-	}
-	return history, nil
-}
-
-func (db *DB) GetUserProgramInfo(args *models.QueryContext, userId int) ([]models.ResidentProgramClassInfo, error) {
-	userEnrollments := make([]models.ResidentProgramClassInfo, 0, args.PerPage)
-	base := db.WithContext(args.Ctx).
-		Table("program_class_enrollments AS pce").
-		Select(`
-            pce.id                   AS enrollment_id,
-            pce.enrollment_status   AS enrollment_status,
-            p.name                   AS program_name,
-            p.id                     AS program_id,
-            cl.name                  AS class_name,
-            pc.status                AS status,
-			pc.start_dt AS start_date,
-			pc.end_dt AS end_date,
-            pc.id                    AS cohort_id,
-			pce.updated_at,
-			pce.created_at,
-			(SELECT ARRAY_TO_STRING(ARRAY_AGG(DISTINCT pct.credit_type), ', ')
-			 FROM program_credit_types pct WHERE pct.program_id = p.id) AS credit_types,
-
-            ROUND(COALESCE(SUM(
-              CASE
-                WHEN pcea.attendance_status = 'present' THEN 1
-                WHEN pcea.attendance_status = 'partial' THEN LEAST(
-					COALESCE(pcea.minutes_attended, pcea.scheduled_minutes, 0)::numeric /
-					NULLIF(COALESCE(pcea.scheduled_minutes, pcea.minutes_attended, 0), 0),
-					1
-				)
-                ELSE 0
-              END
-            ), 0))::int AS present_attendance,
-
-            COALESCE(SUM(
-              CASE WHEN pcea.attendance_status NOT IN ('present','partial') THEN 1 ELSE 0 END
-            ), 0)  AS absent_attendance, pce.change_reason,
-			STRING_AGG(DISTINCT e.recurrence_rule, '|') AS recurrence_rule
-        `).
-		Joins("INNER JOIN program_class_cohorts pc ON pc.id = pce.cohort_id").
-		// A cohort has no name; every displayed class name comes from the class tier, so
-		// this join is required for cl.name in the SELECT -- not optional enrichment.
-		Joins("INNER JOIN program_classes cl ON cl.id = pc.class_id").
-		Joins("INNER JOIN programs p ON p.id = pc.program_id").
-		Joins("INNER JOIN program_class_events e ON e.cohort_id = pc.id").
-		Joins(
-			`LEFT JOIN program_class_event_attendance pcea
-            ON pcea.event_id = e.id
-           AND pcea.user_id = ?
-           AND pcea.deleted_at IS NULL`,
-			userId,
-		).
-		Where("pce.user_id = ?", userId).
-		Group(`
-            pce.id, pce.enrollment_status,
-            p.name, p.id,
-            cl.name, pc.status, pc.start_dt, pc.end_dt, pc.id, pce.updated_at,
-			pce.created_at, pce.change_reason`).Order(args.OrderClause("pce.created_at desc"))
-
-	if !args.All {
-		if err := base.Count(&args.Total).Error; err != nil {
-			return nil, NewDBError(err, "program_class_enrollments")
-		}
-		if err := base.Limit(args.PerPage).Offset(args.CalcOffset()).Scan(&userEnrollments).Error; err != nil {
-			return nil, NewDBError(err, "program_class_enrollments apply pagination")
-		}
-	} else {
-		if err := base.Find(&userEnrollments).Error; err != nil {
-			return nil, NewDBError(err, "program_class_enrollments")
-		}
-
-	}
-	return userEnrollments, nil
-}
-
-func (db *DB) GetUserWeeklyAttendanceRows(ctx context.Context, userID, weeks int) ([]models.WeeklyAttendanceRow, error) {
-	var rows []models.WeeklyAttendanceRow
-	query := `
-		SELECT DATE_TRUNC('week', date::date) AS week_start,
-			COALESCE(SUM(CASE WHEN attendance_status IN ('present','partial') THEN 1 ELSE 0 END), 0) AS present_count,
-			COUNT(*) AS total_count
-		FROM program_class_event_attendance
-		WHERE user_id = ? AND date::date >= NOW() - INTERVAL '1 week' * ? AND deleted_at IS NULL
-		GROUP BY week_start
-		ORDER BY week_start ASC`
-	if err := db.WithContext(ctx).Raw(query, userID, weeks).Scan(&rows).Error; err != nil {
-		return nil, newGetRecordsDBError(err, "weekly_attendance_trend")
-	}
-	return rows, nil
-}
-
 func (db *DB) GetUserNotes(ctx context.Context, userID uint) ([]models.UserNoteResponse, error) {
 	var notes []models.UserNoteResponse
 	if err := db.WithContext(ctx).
@@ -1076,11 +874,7 @@ func (db *DB) DeactivateUser(ctx context.Context, userID uint, adminID *uint) er
 	if err := tx.Model(&models.User{}).Where("id = ?", userID).Update("deactivated_at", now).Error; err != nil {
 		return newUpdateDBError(err, "users")
 	}
-	updateData := map[string]any{
-		"enrollment_status": models.EnrollmentIncompleteWithdrawn,
-		"change_reason":     "Account deactivated",
-	}
-	if err := tx.Model(&models.ProgramClassEnrollment{}).Where("user_id = ? AND enrollment_status = ?", userID, models.Enrolled).Updates(updateData).Error; err != nil {
+	if err := registry.Programs(tx).WithdrawEnrollments(ctx, userID); err != nil {
 		return newUpdateDBError(err, "program_class_enrollments")
 	}
 	history := models.NewUserAccountHistory(userID, models.UserDeactivated, adminID, nil, nil)
@@ -1104,50 +898,6 @@ func (db *DB) DeactivatedUsersPresent(userIDs []int) (bool, error) {
 		return false, newGetRecordsDBError(err, "users")
 	}
 	return count > 0, nil
-}
-
-func (db *DB) GetResidentAttendanceCSVData(ctx context.Context, userID uint, facilityID uint, all bool, classID *uint) ([]models.ResidentAttendanceCSVData, error) {
-	var csvData []models.ResidentAttendanceCSVData
-
-	query := `
-		SELECT
-			p.name AS program_name,
-			cl.name AS class_name,
-			pcea.date AS session_date,
-			pcea.attendance_status,
-			COALESCE(pcea.note, '') AS note
-		FROM program_class_event_attendance pcea
-		JOIN program_class_events pce ON pce.id = pcea.event_id
-		JOIN program_class_cohorts pc ON pc.id = pce.cohort_id
-		JOIN program_classes cl ON cl.id = pc.class_id
-		JOIN programs p ON p.id = pc.program_id
-		JOIN program_class_enrollments e ON e.cohort_id = pc.id AND e.user_id = pcea.user_id
-		JOIN users u ON u.id = pcea.user_id
-		WHERE pcea.user_id = ?
-			AND pcea.deleted_at IS NULL
-			AND (e.enrolled_at IS NULL OR CAST(DATE(e.enrolled_at) AS TEXT) <= pcea.date)
-			AND (e.enrollment_ended_at IS NULL OR CAST(DATE(e.enrollment_ended_at) AS TEXT) >= pcea.date)
-	`
-
-	args := []any{userID}
-
-	if !all {
-		query += " AND u.facility_id = ?"
-		args = append(args, facilityID)
-	}
-
-	if classID != nil {
-		query += " AND pc.id = ?"
-		args = append(args, *classID)
-	}
-
-	query += " ORDER BY p.name ASC, cl.name ASC, pcea.date ASC"
-
-	if err := db.WithContext(ctx).Raw(query, args...).Scan(&csvData).Error; err != nil {
-		return nil, newGetRecordsDBError(err, "resident attendance CSV data")
-	}
-
-	return csvData, nil
 }
 
 // GetUnmappedUsers is the residents not linked to an account at a provider:

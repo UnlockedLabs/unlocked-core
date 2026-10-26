@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 
 	"github.com/stretchr/testify/require"
 )
@@ -27,15 +28,15 @@ func TestBatchEnrollmentDenormalizesClassID(t *testing.T) {
 	facility, err := env.CreateTestFacility("Rollup Facility")
 	require.NoError(t, err)
 
-	program, err := env.CreateTestProgram("Rollup Program", models.FundingType(models.FederalGrants),
-		[]models.ProgramType{}, []models.ProgramCreditType{}, true, nil)
+	program, err := env.CreateTestProgram("Rollup Program", programs.FundingType(programs.FederalGrants),
+		[]programs.ProgramType{}, []programs.ProgramCreditType{}, true, nil)
 	require.NoError(t, err)
 	require.NoError(t, env.SetFacilitiesToProgram(program.ID, []uint{facility.ID}))
 
 	instructor, err := env.CreateTestInstructor(facility.ID, "rollup")
 	require.NoError(t, err)
 
-	cohort, err := env.CreateTestClass(program, facility, models.Active, &instructor.ID)
+	cohort, err := env.CreateTestClass(program, facility, programs.Active, &instructor.ID)
 	require.NoError(t, err)
 	require.NotZero(t, cohort.ClassID, "the auto-parent hook should have created a class")
 
@@ -45,12 +46,12 @@ func TestBatchEnrollmentDenormalizesClassID(t *testing.T) {
 	require.NoError(t, err)
 
 	// the handler path: one call, many users, a single batch INSERT
-	skipped, err := env.DB.CreateProgramClassEnrollments(int(cohort.ID), []int{int(residentA.ID), int(residentB.ID)})
+	skipped, err := env.Programs.CreateProgramClassEnrollments(int(cohort.ID), []int{int(residentA.ID), int(residentB.ID)})
 	require.NoError(t, err)
 	require.Zero(t, skipped, "capacity is 10, neither resident should be skipped")
 
 	t.Run("class_id is denormalized on every batch-inserted row", func(t *testing.T) {
-		var enrollments []models.ProgramClassEnrollment
+		var enrollments []programs.ProgramClassEnrollment
 		require.NoError(t, env.DB.Where("cohort_id = ?", cohort.ID).Find(&enrollments).Error)
 		require.Len(t, enrollments, 2)
 
@@ -64,8 +65,8 @@ func TestBatchEnrollmentDenormalizesClassID(t *testing.T) {
 	})
 
 	t.Run("the class rollup the UI reads counts them", func(t *testing.T) {
-		args := &models.QueryContext{Ctx: context.Background()}
-		class, err := env.DB.GetClassByID(int(cohort.ClassID), args)
+		args := &programs.QueryContext{Ctx: context.Background()}
+		class, err := env.Programs.GetClassByID(int(cohort.ClassID), args)
 		require.NoError(t, err)
 		require.Equal(t, int64(2), class.Enrolled,
 			"classRollupsFor keys on e.class_id; a 0 here means the denormalization was lost")

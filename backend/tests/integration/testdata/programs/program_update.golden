@@ -1,0 +1,44 @@
+{
+  "data": {
+    "archived_at": null,
+    "create_user_id": null,
+    "created_at": "0001-01-01T00:00:00Z",
+    "credit_types": [
+      {
+        "credit_type": "Participation",
+        "program": null,
+        "program_id": 0
+      }
+    ],
+    "description": "Everyday skills for re-entry",
+    "facilities": [
+      {
+        "create_user_id": null,
+        "created_at": "<time>",
+        "id": 2,
+        "login_activity": null,
+        "name": "North",
+        "programs": null,
+        "timezone": "America/Chicago",
+        "update_user_id": null,
+        "updated_at": "<time>"
+      }
+    ],
+    "funding_type": "Other",
+    "has_program_completion": false,
+    "id": 5,
+    "is_active": true,
+    "is_favorited": false,
+    "name": "Life Skills",
+    "program_types": [
+      {
+        "program": null,
+        "program_id": 0,
+        "program_type": "Re-Entry"
+      }
+    ],
+    "update_user_id": 8,
+    "updated_at": "<time>"
+  },
+  "message": "Data fetched successfully"
+}

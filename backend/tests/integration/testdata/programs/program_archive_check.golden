@@ -1,0 +1,9 @@
+{
+  "data": {
+    "facilities": [
+      "North",
+      "South"
+    ]
+  },
+  "message": "Data fetched successfully"
+}

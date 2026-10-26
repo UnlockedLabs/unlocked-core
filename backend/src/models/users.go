@@ -2,7 +2,6 @@ package models
 
 import (
 	"crypto/rand"
-	"fmt"
 	"math/big"
 	"slices"
 	"time"
@@ -127,14 +126,13 @@ type UserAccountHistory struct {
 	ProgramClassesHistoryID *uint                 `json:"program_classes_history_id"`
 	FacilityID              *uint                 `json:"facility_id"`
 	CreatedAt               time.Time             `json:"created_at" gorm:"primaryKey"`
-	AttendanceStatus        Attendance            `json:"attendance_status" gorm:"size:27"`
+	AttendanceStatus        string                `json:"attendance_status" gorm:"size:27"`
 	ClassName               *string               `json:"class_name" gorm:"size:255"`
 	SessionDate             *time.Time            `json:"session_date" gorm:"type:date"`
 
-	User                  *User                  `json:"user,omitempty" gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
-	Admin                 *User                  `json:"admin,omitempty" gorm:"foreignKey:AdminID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
-	ProgramClassesHistory *ProgramClassesHistory `json:"program_classes_history,omitempty" gorm:"foreignKey:ProgramClassesHistoryID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
-	Facility              *Facility              `json:"facility,omitempty" gorm:"foreignKey:FacilityID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
+	User     *User     `json:"user,omitempty" gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
+	Admin    *User     `json:"admin,omitempty" gorm:"foreignKey:AdminID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
+	Facility *Facility `json:"facility,omitempty" gorm:"foreignKey:FacilityID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
 }
 
 func (UserAccountHistory) TableName() string {
@@ -168,8 +166,6 @@ type ActivityHistoryResponse struct {
 	AttendanceStatus        *string               `json:"attendance_status"`
 	ClassName               *string               `json:"class_name"`
 	SessionDate             *time.Time            `json:"session_date"`
-
-	ProgramClassesHistory *ProgramClassesHistory `json:"program_classes_history,omitempty" gorm:"foreignKey:ProgramClassesHistoryID;constraint:OnDelete:SET NULL"`
 }
 
 func NewUserAccountHistory(userID uint, action ActivityHistoryAction, adminID *uint, programClassesHistoryID *uint, facilityID *uint) *UserAccountHistory {
@@ -181,43 +177,6 @@ func NewUserAccountHistory(userID uint, action ActivityHistoryAction, adminID *u
 		FacilityID:              facilityID,
 		CreatedAt:               time.Now(),
 	}
-}
-
-type ResidentProgramClassInfo struct {
-	ProgramName          string                  `json:"program_name"`
-	ClassName            string                  `json:"class_name"`
-	Status               ClassStatus             `json:"status"`
-	EnrollmentStatus     ProgramEnrollmentStatus `json:"enrollment_status"`
-	StartDate            string                  `json:"start_date"`
-	EndDate              string                  `json:"end_date"`
-	AttendancePercentage string                  `json:"attendance_percentage"`
-	CohortID             uint                    `json:"cohort_id"`
-	ProgramID            uint                    `json:"program_id"`
-	EnrollmentID         uint                    `json:"enrollment_id"`
-	PresentAttendance    int                     `json:"present_attendance"`
-	AbsentAttendance     int                     `json:"absent_attendance"`
-	CreditTypes          string                  `json:"credit_types"`
-	UpdatedAt            string                  `json:"updated_at"`
-	ChangeReason         string                  `json:"change_reason"`
-	Schedule             string                  `json:"schedule"`
-	RecurrenceRule       string                  `json:"-"`
-	IsCanvas             bool                    `json:"is_canvas"`
-	Source               string                  `json:"source,omitempty"`
-}
-
-// calculates the attendance percentage, sets the feild AttendancePercentage and returns it's value
-func (rpc *ResidentProgramClassInfo) CalculateAttendancePercentage() string {
-	present := rpc.PresentAttendance
-	absent := rpc.AbsentAttendance
-	total := present + absent
-
-	if total == 0 {
-		rpc.AttendancePercentage = "--"
-	} else {
-		pct := float64(present) / float64(total) * 100
-		rpc.AttendancePercentage = fmt.Sprintf("%.0f%%", pct)
-	}
-	return rpc.AttendancePercentage
 }
 
 type UserNote struct {
@@ -235,22 +194,6 @@ type UserNoteResponse struct {
 	Date  time.Time `json:"date"`
 	Admin string    `json:"admin"`
 	Note  string    `json:"note"`
-}
-
-type WeeklyAttendanceTrend struct {
-	Week string  `json:"week"`
-	Rate float64 `json:"rate"`
-}
-
-type WeeklyAttendanceRow struct {
-	WeekStart    time.Time
-	PresentCount float64
-	TotalCount   float64
-}
-
-type ResidentTransferProgramConflicts struct {
-	ProgramName string `json:"program_name"`
-	ClassName   string `json:"class_name"`
 }
 
 type ValidatedUserRow struct {
@@ -272,40 +215,4 @@ type BulkUploadResponse struct {
 	ValidRows    []ValidatedUserRow `json:"valid_rows"`
 	InvalidRows  []InvalidUserRow   `json:"invalid_rows"`
 	ErrorCSVData []byte             `json:"error_csv_data,omitempty"`
-}
-
-type ResidentAttendanceCSVData struct {
-	ProgramName      string `json:"program_name" gorm:"column:program_name"`
-	ClassName        string `json:"class_name" gorm:"column:class_name"`
-	SessionDate      string `json:"session_date" gorm:"column:session_date"`
-	AttendanceStatus string `json:"attendance_status" gorm:"column:attendance_status"`
-	Note             string `json:"note" gorm:"column:note"`
-}
-
-func ResidentAttendanceToCSVFormat(data []ResidentAttendanceCSVData) ([][]string, error) {
-	csvData := [][]string{{"Program Name", "Class Name", "Session Date", "Attendance Status", "Note"}}
-
-	for _, record := range data {
-		statusDisplay := ""
-		switch record.AttendanceStatus {
-		case "present":
-			statusDisplay = "Present"
-		case "absent_excused":
-			statusDisplay = "Absent Excused"
-		case "absent_unexcused":
-			statusDisplay = "Absent Unexcused"
-		default:
-			statusDisplay = "No Record"
-		}
-
-		row := []string{
-			record.ProgramName,
-			record.ClassName,
-			record.SessionDate,
-			statusDisplay,
-			record.Note,
-		}
-		csvData = append(csvData, row)
-	}
-	return csvData, nil
 }
