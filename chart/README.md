@@ -11,8 +11,13 @@ Core's own Helm chart (EN-183). Standalone and self-contained: it has its own
   ported from `unlocked-platform`'s `charts/unlocked/templates/{server,frontend}-deployment.yaml`.
 - `scheduler-deployment.yaml` — runs background jobs (EN-191: same backend
   image, `args: ["scheduler"]`). Always `replicas: 1` and `strategy: Recreate`,
-  not a values knob — `tasks.Start()` has no leader election, so two
-  scheduler pods running at once would double-publish every job to NATS.
+  not a values knob. `tasks.Start()` has no leader election, so two scheduler
+  pods running at once would double-publish every job to NATS; `Recreate`
+  only closes that window during a rollout (a template change), not a node
+  failure or drain — on those, Kubernetes can start a replacement pod while
+  the original's status is still unknown. That gap is a known risk, not yet
+  closed; closing it for real means leader election in `tasks.Start()` or a
+  NATS dedupe ID, not a chart-side setting.
   `server-deployment.yaml` always sets `RUN_SCHEDULER=false` to match: this
   chart never runs jobs in both places.
 - `frontend-config.yaml` / `nginx-config.yaml` — the frontend's runtime config
