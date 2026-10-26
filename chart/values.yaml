@@ -106,6 +106,12 @@ migrations:
   # psql image for the migrate Job's wait-for-postgres initContainer. Pinned
   # by digest for the same reason as waitForNats.image above.
   waitForPostgresImage: postgres@sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97
+  # Upper bound on the whole Job, including the wait-for-postgres loop above
+  # (which has no retry cap of its own). Without this, a misconfigured DB
+  # host/secret hangs the Job forever instead of failing: backoffLimit only
+  # counts pod failures, and a pod stuck in an initContainer never fails.
+  # Must exceed the worst-case fresh-install migration time.
+  activeDeadlineSeconds: 1800
 
 volumeDefaults:
   accessMode: ReadWriteMany

@@ -18,7 +18,11 @@ metadata:
 spec:
   ttlSecondsAfterFinished: {{ .Values.migrations.ttlSecondsAfterFinished }}
   backoffLimit: 4
+  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}
   template:
+    metadata:
+      labels:
+        app: core-migrate
     spec:
       initContainers:
       - name: wait-for-postgres
@@ -26,11 +30,7 @@ spec:
         {{- if .Values.database.useAppDsn }}
         command: ["sh", "-c", "until psql \"$APP_DSN\" -tAc 'SELECT 1' >/dev/null 2>&1; do echo waiting for postgres; sleep 2; done"]
         env:
-        - name: APP_DSN
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.secretName }}
-              key: APP_DSN
+        {{- include "unlocked-core.dbEnv" . | nindent 8 }}
         {{- else }}
         command: ["sh", "-c", "until psql -tAc 'SELECT 1' >/dev/null 2>&1; do echo waiting for postgres; sleep 2; done"]
         env:

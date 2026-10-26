@@ -48,8 +48,8 @@ Usage: {{- include "unlocked-core.pullPolicy" (list . "server") | nindent 8 }}
 {{/*
 DB connection env vars: APP_DSN (external RDS) or DB_HOST/PORT/USER/NAME/
 PASSWORD (in-cluster), chosen by database.useAppDsn. Shared by every
-workload that talks to Postgres (server, scheduler, and eventually the
-migrate Job) so the connection contract only has one place to change.
+workload that talks to Postgres (server, scheduler, and the migrate Job)
+so the connection contract only has one place to change.
 Usage: {{- include "unlocked-core.dbEnv" . | nindent 8 }}
 */}}
 {{- define "unlocked-core.dbEnv" -}}
