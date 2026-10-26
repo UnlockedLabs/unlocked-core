@@ -17,10 +17,30 @@ activity and the content proxies. It moved here from core in EN-192.
   routes publish (`add_videos`, `retry_manual_download`). The worker needs
   yt-dlp (with node as its JavaScript runtime) and ffmpeg, which the backend
   image ships.
-- **Core still owns:**
-  - the websocket, which Open Content messages through `Deps.Notify`;
-  - three plain SQL reads of Open Content's tables (facility list, facility
-    delete check, user engagement), until EN-198.
+- **Core still owns** the websocket, which Open Content messages through
+  `Deps.Notify`.
+
+## Database
+
+- **Its tables live in the `open_content` schema** (EN-198). Its first
+  migration moved all 11 there from `public`; its rollback moves them back.
+- **Its connection runs as the `open_content` role**, which can read and write
+  only this schema and read only core's `users` and `facilities`. Postgres
+  refuses anything else, so Open Content can't reach into core's tables, and
+  core asks for Open Content's numbers through `api/` instead of reading its
+  tables.
+- **The role can't log in.** `Schema()` in `module.go` names the schema, and
+  core opens this module its own pool as the app's usual database user
+  (`database.OpenModuleDBs`). Each connection switches with
+  `SET ROLE open_content` and `search_path = open_content, public`, so queries
+  stay unqualified and no site needs a new password.
+- **Tables a later migration adds here** get the role's grants automatically.
+- **On SQLite** (the tests) there are no schemas or roles, so Open Content
+  uses core's connection.
+
+Provider Platforms (EN-199) and Programs (EN-200) follow the same pattern:
+return the schema's name from `Schema()`, and have the module's first
+migration create the schema and its role and move the tables.
 
 ## Files
 
@@ -38,7 +58,7 @@ activity and the content proxies. It moved here from core in EN-192.
 | `kiwix.go`, `kiwix_data.go` | The Kiwix scrape: reads the catalog, saves each library and its thumbnail |
 | `video_dl.go` | Video downloads with yt-dlp, retries, and the metadata sync with the videos folder |
 | `http.go` | Responses, errors, paging and request helpers, matching core's JSON |
-| `migrations/` | This module's own migrations (none yet; its tables come from core's) |
+| `migrations/` | This module's own migrations. The first moves its tables into the `open_content` schema and creates its role |
 
 ## Tests
 
@@ -57,5 +77,6 @@ activity and the content proxies. It moved here from core in EN-192.
   `PATH`, so they need no network.
 - The tests run on SQLite without Kiwix, NATS or AWS, so they can't run
   search (Postgres full-text search and Kiwix), the library proxy forwarding
-  to Kiwix, the content-request email (SES) or the jobs going through
-  NATS. Check those with `make dev`.
+  to Kiwix, the content-request email (SES), the jobs going through NATS, or
+  the schema move and the role (`TestAllModulesMigrate` only checks that its
+  migrations load). Check those with `make dev`.
