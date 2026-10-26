@@ -39,7 +39,7 @@ func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "scheduler":
-			runScheduler(ctx, env == "dev")
+			runScheduler(ctx)
 			return
 		case "worker":
 			name := ""
@@ -64,11 +64,11 @@ func cancelOnSignal(shutdown <-chan os.Signal, cancel context.CancelFunc) {
 	cancel()
 }
 
-// runScheduler schedules every background job and publishes each one to NATS
-// when it's due; provider-middleware and the module workers do the work. It
-// runs until ctx is canceled. It doesn't migrate: it waits until the database
+// runScheduler runs every feature module's background jobs on their
+// schedules; a job that needs a worker is published to NATS for it. It runs
+// until ctx is canceled. It doesn't migrate: it waits until the database
 // is migrated.
-func runScheduler(ctx context.Context, dev bool) {
+func runScheduler(ctx context.Context) {
 	mods := registry.All()
 	nc, db, ok := connectMigrated(ctx)
 	defer nc.Close()
@@ -76,7 +76,7 @@ func runScheduler(ctx context.Context, dev bool) {
 		log.Info("Scheduler stopped before migrations finished")
 		return
 	}
-	s := tasks.Start(dev, nc, db, mods, database.OpenModuleDBs(db, mods))
+	s := tasks.Start(nc, mods, database.OpenModuleDBs(db, mods))
 	log.Info("Scheduler started")
 	<-ctx.Done()
 	if err := s.Stop(); err != nil {

@@ -141,7 +141,6 @@ define canvas_bootstrap
 endef
 SEED_MAIN=backend/seeder/main.go
 BINARY_NAME=server
-MIDDLEWARE=provider-middleware
 GOARCH=$(shell go env GOARCH)
 GOOS=$(shell go env GOOS)
 ACCOUNT_ID=$(AWS_ACCOUNT_ID)
@@ -252,7 +251,7 @@ build: ascii_art
 		echo "Error: ACCOUNT_ID is not set, you must set AWS_ACCOUNT_ID env var, or pass ACCOUNT_ID=value in order to tag builds"; \
 		exit 1; \
 	fi
-	docker buildx build . -f backend/Dockerfile --tag=$(ACCOUNT_ID)$(REPO)/unlockedv2:latest  && docker buildx build frontend -f frontend/Dockerfile --tag=$(ACCOUNT_ID)$(REPO)/frontend:latest && docker buildx build . -f provider-middleware/Dockerfile --tag=$(ACCOUNT_ID)$(REPO)/provider_middleware:latest
+	docker buildx build . -f backend/Dockerfile --tag=$(ACCOUNT_ID)$(REPO)/unlockedv2:latest  && docker buildx build frontend -f frontend/Dockerfile --tag=$(ACCOUNT_ID)$(REPO)/frontend:latest
 
 migration: ascii_art
 	@if [ -z "$(NAME)" ]; then \

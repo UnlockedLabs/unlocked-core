@@ -10,10 +10,6 @@ CronTasks:
   - changed-files:
       - any-glob-to-any-file: 'backend/tasks/*.go'
 
-ProviderMiddleware:
-  - changed-files:
-      - any-glob-to-any-file: 'provider-middleware/*.go'
-
 Documentation:
 - changed-files:
   - any-glob-to-any-file: '**/*.md'

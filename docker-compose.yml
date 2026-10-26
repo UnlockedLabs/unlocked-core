@@ -121,9 +121,9 @@ services:
         condition: service_completed_successfully
 
   # Background jobs (EN-191): the server's own code, run as `backend scheduler`.
-  # It schedules each job and publishes it to NATS for provider-service or a
-  # module's worker. It doesn't migrate: it waits until server-migrate has
-  # applied every migration.
+  # It runs each module's jobs on their schedules, publishing to NATS the ones
+  # a module's worker runs. It doesn't migrate: it waits until server-migrate
+  # has applied every migration.
   # No hot reload: restart it after changing job code.
   scheduler:
     build:
@@ -184,6 +184,10 @@ services:
     command: ["go", "run", "./backend/cmd/main.go", "worker", "providerplatforms"]
     networks:
       - intranet
+    # The provider user lists, as provider-service published them (.env.example
+    # points a server run outside compose here).
+    ports:
+      - 8081:8081
     volumes:
       - ./:/app
       - csvs:/csvs
@@ -261,36 +265,6 @@ services:
         condition: service_healthy
       kratos:
         condition: service_started
-
-  # Provider middleware: the class-activation job, until it moves to Programs.
-  provider-service:
-    build:
-      context: .
-      dockerfile: provider-middleware/dev.Dockerfile
-    environment:
-      - APP_ENV=dev
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=unlocked
-      - DB_PASSWORD=dev
-      - KOLIBRI_DB_PASSWORD=dev
-      - DB_NAME=unlocked
-      - NATS_URL=nats:4222
-      - NATS_USER=unlocked
-      - NATS_PASSWORD=dev
-      - APP_URL=http://server:8080
-      - APP_KEY=base64:NTQxODNmNDMyM2YzNzdiNzM3NDMzYTFlOTgyMjllYWQwZmRjNjg2ZjkzYmFiMDU3ZWNiNjEyZGFhOTQwMDJiNSAgLQo=
-      - BRIGHTSPACE_TEMP_DIR=/csvs
-    networks:
-      - intranet
-    volumes:
-      - logs:/logs
-      - ./:/app
-      - csvs:/csvs
-    ports:
-      - 8081:8081
-    restart: unless-stopped
-    depends_on: [server]
 
   nats:
     image: nats:latest

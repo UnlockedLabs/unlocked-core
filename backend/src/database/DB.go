@@ -307,8 +307,6 @@ func MigrateTesting(db *gorm.DB) {
 		// ⚠️  Hand-maintained. An omission here fails at RUNTIME (missing table in the
 		//     in-memory SQLite test DB), not at compile time.
 		&models.Facility{},
-		&models.CronJob{},
-		&models.RunnableTask{},
 		&models.UserAccountHistory{},
 		&models.FeatureFlags{},
 		&models.PageFeatureFlags{},

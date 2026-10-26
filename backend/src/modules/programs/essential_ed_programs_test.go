@@ -701,7 +701,8 @@ func TestWeeklyScheduleFacilityEvents(t *testing.T) {
 }
 
 // Only Essential Ed lists its own users. Canvas deliberately does not -- it
-// keeps going through provider-middleware, so the user screens fall back for it.
+// keeps going through Provider Platforms' worker, so the user screens fall back
+// for it.
 func TestLiveUserListerFor(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -709,8 +710,8 @@ func TestLiveUserListerFor(t *testing.T) {
 		isLister     bool
 	}{
 		{"essential ed lists its own users", ppapi.EssentialEd, true},
-		{"canvas oss goes through provider-middleware", ppapi.CanvasOSS, false},
-		{"canvas cloud goes through provider-middleware", ppapi.CanvasCloud, false},
+		{"canvas oss goes through the worker", ppapi.CanvasOSS, false},
+		{"canvas cloud goes through the worker", ppapi.CanvasCloud, false},
 		{"a non-live provider has no lister", ppapi.Kolibri, false},
 	}
 	srv := &server{}
@@ -865,7 +866,7 @@ func (f fakeProviders) Provider(_ context.Context, id uint) (ppapi.Provider, err
 }
 
 // Only a provider that lists its own users (Essential Ed) answers; the rest
-// fall back to provider-middleware.
+// fall back to Provider Platforms' worker.
 func TestLiveProvidersUsers(t *testing.T) {
 	status := http.StatusOK
 	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -894,7 +895,7 @@ func TestLiveProvidersUsers(t *testing.T) {
 		}}, users)
 	})
 
-	t.Run("kolibri goes through provider-middleware", func(t *testing.T) {
+	t.Run("kolibri goes through the worker", func(t *testing.T) {
 		users, ok, err := live.Users(context.Background(), kolibri)
 		require.NoError(t, err)
 		assert.False(t, ok)

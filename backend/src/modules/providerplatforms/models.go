@@ -573,8 +573,8 @@ type DailyActivity struct {
 	Activities []Activity `json:"activities"`
 }
 
-// ImportUser is a user account at a provider platform, as provider-middleware
-// and the live providers report it.
+// ImportUser is a user account at a provider platform, as the worker
+// (worker.go) and the live providers report it.
 type ImportUser struct {
 	Username         string `json:"username"`
 	NameFirst        string `json:"name_first"`

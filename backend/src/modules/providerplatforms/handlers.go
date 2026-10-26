@@ -42,7 +42,7 @@ func (srv *server) routes() []module.Route {
 		{Pattern: "DELETE /api/users/{userId}/logins/{providerId}", Handler: handle(srv.handleDeleteProviderUserMapping), Access: module.Admin, Features: pp},
 		{Pattern: "GET /api/provider-platforms/{id}/mapped-users", Handler: handle(srv.handleGetMappedUsers), Access: module.Admin, Features: pp},
 
-		// Actions: provider-middleware's users and matching them to residents
+		// Actions: the worker's provider users and matching them to residents
 		{Pattern: "GET /api/actions/provider-platforms/{id}/get-users", Handler: handle(srv.handleGetUsers), Access: module.Admin, Features: pp},
 		{Pattern: "POST /api/actions/provider-platforms/{id}/import-users", Handler: handle(srv.handleImportUsers), Access: module.Admin, Features: pp},
 		{Pattern: "GET /api/actions/provider-platforms/{id}/match-users", Handler: handle(srv.handleMatchUsers), Access: module.Admin, Features: pp},

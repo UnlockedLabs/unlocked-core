@@ -1327,3 +1327,59 @@ func replaceClassCreditTypes(tx *gorm.DB, classID uint, creditTypes []CreditType
 	}
 	return nil
 }
+
+// Class activation (jobs.go)
+
+// SystemBatchUserID is the id of the system_batch user, which the scheduled
+// jobs make their changes as.
+func (db *Store) SystemBatchUserID(ctx context.Context) (uint, error) {
+	var user User
+	if err := db.WithContext(ctx).
+		Where("username = ?", "system_batch").
+		First(&user).Error; err != nil {
+		return 0, fmt.Errorf("system_batch user not found: %w", err)
+	}
+	return user.ID, nil
+}
+
+// ScheduledCohortsDue is the ids of the Scheduled, unarchived classes whose
+// start date has come in their facility's time zone.
+func (db *Store) ScheduledCohortsDue(ctx context.Context) ([]int, error) {
+	var cohortIDs []int
+	if err := db.WithContext(ctx).
+		Model(&ProgramClassCohort{}).
+		Joins("JOIN facilities f ON f.id = program_class_cohorts.facility_id").
+		Where("program_class_cohorts.status = ?", Scheduled).
+		Where("program_class_cohorts.archived_at IS NULL").
+		Where("program_class_cohorts.start_dt <= (now() AT TIME ZONE f.timezone)::date").
+		Pluck("program_class_cohorts.id", &cohortIDs).Error; err != nil {
+		return nil, newGetRecordsDBError(err, "program_class_cohorts")
+	}
+	return cohortIDs, nil
+}
+
+// ActivateCohorts makes the classes Active and gives their Enrolled
+// enrollments that have no enrolled date enrolledAt, in one transaction. ctx
+// carries the user the changes are recorded as, who is also batchUserID.
+func (db *Store) ActivateCohorts(ctx context.Context, cohortIDs []int, batchUserID uint, enrolledAt time.Time) error {
+	if err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.
+			Model(&ProgramClassCohort{}).
+			Where("id IN ?", cohortIDs).
+			Updates(map[string]any{"status": Active}).Error; err != nil {
+			return err
+		}
+		return tx.
+			Model(&ProgramClassEnrollment{}).
+			Where("cohort_id IN ?", cohortIDs).
+			Where("enrollment_status = ?", Enrolled).
+			Where("enrolled_at IS NULL").
+			Updates(map[string]any{
+				"enrolled_at":    enrolledAt,
+				"update_user_id": batchUserID,
+			}).Error
+	}); err != nil {
+		return newUpdateDBError(err, "program_class_cohorts")
+	}
+	return nil
+}

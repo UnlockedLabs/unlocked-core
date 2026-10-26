@@ -3,13 +3,11 @@ package tasks
 import (
 	"context"
 	"io/fs"
-	"slices"
 	"testing"
 	"testing/fstest"
 	"time"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
 
 	"github.com/go-co-op/gocron/v2"
@@ -55,37 +53,25 @@ func (m jobModule) RegisterJobs(s module.Scheduler, deps module.Deps) {
 	}
 }
 
+// Start gives each module the scheduler's deps and schedules only the jobs
+// the modules register: core has none of its own since EN-197.
 func TestStart(t *testing.T) {
-	t.Setenv("MIDDLEWARE_CRON_SCHEDULE", "0 22 * * *")
 	db := database.InitDB(context.Background(), true)
-	// An LMS provider's jobs are Provider Platforms' own (EN-197), so core
-	// doesn't schedule them.
+	// An enabled LMS provider: its jobs are Provider Platforms', not core's.
 	if err := db.Exec(`INSERT INTO provider_platforms (type, name, state) VALUES ('canvas_cloud', 'Canvas', 'enabled')`).Error; err != nil {
 		t.Fatal(err)
 	}
 
 	var got module.Deps
-	// dev skips the run-everything-at-start, which needs NATS.
 	mods := []module.Module{jobModule{deps: &got}}
-	s := Start(true, nil, db.DB, mods, database.OpenModuleDBs(db.DB, mods))
+	s := Start(nil, mods, database.OpenModuleDBs(db.DB, mods))
 	t.Cleanup(func() { _ = s.Shutdown() })
 
 	if got.DB != db.DB {
 		t.Errorf("the module got DB %p, want the scheduler's %p", got.DB, db.DB)
 	}
-
-	// Core schedules only the class-activation job; the module adds its cron
-	// and at-start jobs.
-	var names []string
-	if err := db.Model(&models.CronJob{}).Pluck("name", &names).Error; err != nil {
-		t.Fatal(err)
-	}
-	wantNames := []string{string(models.ActivateScheduledClassesJob)}
-	if !slices.Equal(names, wantNames) {
-		t.Errorf("cron jobs = %v, want %v", names, wantNames)
-	}
-	if n := len(s.Jobs()); n != len(wantNames)+2 {
-		t.Errorf("scheduled %d jobs, want %d (core's %d, the module's 2)", n, len(wantNames)+2, len(wantNames))
+	if n := len(s.Jobs()); n != 2 {
+		t.Errorf("scheduled %d jobs, want the module's 2", n)
 	}
 }
 

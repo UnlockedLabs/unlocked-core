@@ -85,8 +85,8 @@ func seedTestData(db *gorm.DB) {
 		}
 	}
 	// The local Canvas from `make canvas`. base_url is the compose service name, not
-	// localhost:3001, because the API calls originate inside the server and provider-service
-	// containers. The access key still has to be pasted in by hand -- it is minted per machine.
+	// localhost:3001, because the API calls originate inside the server and
+	// providerplatforms-worker containers. The access key still has to be pasted in by hand -- it is minted per machine.
 	platforms := []providerplatforms.ProviderPlatform{
 		{
 			Name:      "Canvas",

@@ -217,7 +217,7 @@ func canvasCourseURL(provider *ppapi.Provider, rawCourseID uint) string {
 
 // liveUserLister is implemented by live providers that can list their own user
 // accounts directly. Providers that do not implement it (Canvas) continue to be
-// served by provider-middleware over HTTP.
+// served by Provider Platforms' worker over HTTP.
 type liveUserLister interface {
 	ListUsers(ctx context.Context) ([]module.ProviderUser, error)
 }
