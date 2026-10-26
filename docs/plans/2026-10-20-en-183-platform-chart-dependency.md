@@ -18,18 +18,16 @@ EN-183, the same split `unlocked-core`'s EN-177 plan used with
    but none for charts. The user (CK-7vn) said they can create this
    themselves — do it before trying step 1 below, or the `helm dependency
    build` / `helm pull` in every step after will fail with "repository not
-   found."
-2. **The migration-hook Job and scheduler aren't in `unlocked-core`'s chart
-   yet**, because the PRs that define their shape haven't merged:
-   - EN-177: [unlocked-core#1258](https://github.com/UnlockedLabs/unlocked-core/pull/1258) (core), [unlocked-platform#8](https://github.com/UnlockedLabs/unlocked-platform/pull/8) (platform) — both CI-green, awaiting review, as of 2026-10-20.
-   - EN-191: [unlocked-core#1257](https://github.com/UnlockedLabs/unlocked-core/pull/1257) — has a failing "Scan Go Dependencies for Vulnerabilities" check and open review comments as of 2026-10-20. Its own description scopes the scheduler's chart Deployment as a separate follow-on PR after EN-179, not bundled with EN-191.
+   found." **Still the only real blocker as of 2026-10-26.**
 
-   Don't start this plan until at least EN-177 (both PRs) has merged and
-   `unlocked-core`'s chart has grown the migration-hook Job (see
-   `chart/README.md`'s "deliberately not in here yet" section) — otherwise
-   the platform chart would regress: it already runs `core-migrate-<revision>`
-   via PR #8's pattern, and switching to a dependency that doesn't have that
-   yet would silently drop it.
+~~2. The migration-hook Job and scheduler aren't in `unlocked-core`'s chart yet~~
+   — done. EN-177 merged on both sides 2026-10-22
+   ([unlocked-core#1258](https://github.com/UnlockedLabs/unlocked-core/pull/1258),
+   [unlocked-platform#8](https://github.com/UnlockedLabs/unlocked-platform/pull/8)),
+   and EN-191's scheduler ([unlocked-core#1257](https://github.com/UnlockedLabs/unlocked-core/pull/1257))
+   and its gate EN-179 both merged the same week. `unlocked-core`'s chart now
+   has `migrate-job.yaml` and `scheduler-deployment.yaml` — see
+   `chart/README.md`'s "What's in here" section for what each does.
 
 ## The actual integration work, once unblocked
 
@@ -69,9 +67,18 @@ EN-183, the same split `unlocked-core`'s EN-177 plan used with
    `unlocked-core`'s chart now also ships `scheduler-deployment.yaml` and
    sets `RUN_SCHEDULER=false` unconditionally on `server`. Platform never
    needs its own scheduler Deployment — it comes along free with the
-   dependency. Platform's own chart currently has no scheduler template at
-   all (there's no PR for one), so there's nothing to remove here, just
-   something to not separately build.
+   dependency.
+
+   Also replace `charts/unlocked/templates/core-migrate-job.yaml` with the
+   dependency's `migrate-job.yaml` — same Job name pattern
+   (`core-migrate-<revision>`), so nothing downstream that references it by
+   name needs to change. Keep platform's suspended staging CronJob variant
+   (`migrations.restartTemplate` in that file) if staging still needs it at
+   cutover time — `unlocked-core`'s chart deliberately doesn't render that
+   piece, since it's a staging-specific restart-path workaround, not
+   something every consumer of this chart should carry. `postgres-roles-job.yaml`/
+   `postgres-grants-job.yaml` stay in platform's chart untouched — they set up
+   hydra/kratos/kolibri/tutor roles, not anything core-specific.
 
 3. **Add the dependency to `Chart.yaml`**, same pattern as the existing
    `nats`/`kratos` dependencies (EN-211/EN-212):

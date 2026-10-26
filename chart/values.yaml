@@ -1,9 +1,8 @@
-# Defaults for the standalone unlocked-core chart (server + frontend only).
+# Defaults for the standalone unlocked-core chart.
 #
-# This chart is deliberately self-contained — see README.md for what's not
-# here yet (migration-hook Job, scheduler) and why. It does not share a
-# values schema with unlocked-platform; see docs/plans for the integration
-# gap that still needs solving when platform depends on this chart.
+# This chart is deliberately self-contained and does not share a values
+# schema with unlocked-platform; see docs/plans for the integration gap
+# that still needs solving when platform depends on this chart.
 
 # Required: app hostname, used for the frontend's nginx server_name and the
 # server's CORS/APP_URL.
@@ -99,6 +98,14 @@ strategy:
 # Docker Hub rather than through the ECR pull secret every other image uses.
 waitForNats:
   image: busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+
+migrations:
+  # How long a finished core-migrate-<revision> Job sticks around before
+  # Kubernetes garbage-collects it. Matches unlocked-platform's default.
+  ttlSecondsAfterFinished: 86400
+  # psql image for the migrate Job's wait-for-postgres initContainer. Pinned
+  # by digest for the same reason as waitForNats.image above.
+  waitForPostgresImage: postgres@sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97
 
 volumeDefaults:
   accessMode: ReadWriteMany

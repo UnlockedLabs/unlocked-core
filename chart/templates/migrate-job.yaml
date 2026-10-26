@@ -1,0 +1,64 @@
+{{- /*
+Ported from unlocked-platform's core-migrate-job.yaml (EN-177, merged
+2026-10-22) after its own review rounds simplified it: no RBAC, no
+server-side "wait for this Job" initContainer. The server and scheduler
+each wait on migration state themselves (database.WaitForMigrations,
+backend/src/database/DB.go) instead of waiting on this Job's existence, so
+this Job only has to run /migrate — nothing coordinates with it directly.
+Not included: the suspended staging CronJob variant platform also renders
+(`migrations.restartTemplate` there) — that's a workaround for staging's
+non-Helm restart path specific to that repo, not a concern of this chart.
+*/}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: core-migrate-{{ .Release.Revision }}
+  labels:
+    app: core-migrate
+spec:
+  ttlSecondsAfterFinished: {{ .Values.migrations.ttlSecondsAfterFinished }}
+  backoffLimit: 4
+  template:
+    spec:
+      initContainers:
+      - name: wait-for-postgres
+        image: {{ .Values.migrations.waitForPostgresImage }}
+        {{- if .Values.database.useAppDsn }}
+        command: ["sh", "-c", "until psql \"$APP_DSN\" -tAc 'SELECT 1' >/dev/null 2>&1; do echo waiting for postgres; sleep 2; done"]
+        env:
+        - name: APP_DSN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secretName }}
+              key: APP_DSN
+        {{- else }}
+        command: ["sh", "-c", "until psql -tAc 'SELECT 1' >/dev/null 2>&1; do echo waiting for postgres; sleep 2; done"]
+        env:
+        - name: PGHOST
+          value: {{ .Values.database.host | quote }}
+        - name: PGPORT
+          value: {{ .Values.database.port | quote }}
+        - name: PGUSER
+          value: {{ .Values.database.user | quote }}
+        - name: PGDATABASE
+          value: {{ .Values.database.name | quote }}
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secretName }}
+              key: DB_PASSWORD
+        {{- end }}
+      containers:
+      - name: core-migrate
+        image: {{ include "unlocked-core.image" (list . "server") }}
+        {{- include "unlocked-core.pullPolicy" (list . "server") | nindent 8 }}
+        command: ["/migrate", "-dir", "/migrations"]
+        env:
+        {{- include "unlocked-core.dbEnv" . | nindent 8 }}
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+      restartPolicy: OnFailure
+      imagePullSecrets:
+      - name: {{ .Values.imagePullSecretName }}

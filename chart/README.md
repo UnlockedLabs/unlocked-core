@@ -23,9 +23,19 @@ Core's own Helm chart (EN-183). Standalone and self-contained: it has its own
 - `frontend-config.yaml` / `nginx-config.yaml` — the frontend's runtime config
   ConfigMap and nginx config.
 - `persistent-volumes.yaml` — PV/PVC for the three volumes server+frontend
-  use (`logs`, `thumbnails`, `jaspertmp`). The scheduler needs none of these.
-- `services.yaml` — ClusterIP Services for `frontend` and `server`. The
-  scheduler has no Service — it's a worker, not something else calls into.
+  use (`logs`, `thumbnails`, `jaspertmp`). The scheduler and migrate Job
+  need none of these.
+- `services.yaml` — ClusterIP Services for `frontend` and `server`. Neither
+  the scheduler nor the migrate Job has a Service — nothing calls into them.
+- `migrate-job.yaml` — a per-revision `core-migrate-<revision>` Job that runs
+  `/migrate -dir /migrations` (EN-177, merged in
+  [unlocked-core#1258](https://github.com/UnlockedLabs/unlocked-core/pull/1258)/
+  [unlocked-platform#8](https://github.com/UnlockedLabs/unlocked-platform/pull/8)).
+  Ported from platform's `core-migrate-job.yaml` after its own review
+  rounds simplified it away from RBAC and a server-side "wait for this Job"
+  initContainer: the server and scheduler each wait on migration state
+  themselves (`database.WaitForMigrations`) instead, so nothing needs to
+  coordinate with this Job directly — it only has to run.
 
 This chart assumes it's deployed into a namespace that already has: a
 `core-secrets` Secret (APP_KEY, DB_PASSWORD, ORY_TOKEN, NATS_PASSWORD), an
@@ -34,16 +44,10 @@ hostnames in `values.yaml` — this chart does not create any of those. Today
 that means deploying it standalone requires `unlocked-platform` to also be
 installed in the same namespace for the in-cluster services it talks to.
 
-## What's deliberately not in here yet
-
-- **Migration-hook Job.** EN-177 — the ticket that builds the `/migrate`
-  binary into the backend image and defines the `core-migrate-<revision>`
-  Job pattern — hasn't merged yet
-  ([unlocked-core#1258](https://github.com/UnlockedLabs/unlocked-core/pull/1258),
-  [unlocked-platform#8](https://github.com/UnlockedLabs/unlocked-platform/pull/8)).
-  Once it does, port the `core-migrate-<revision>` Job, the
-  `core-migrate-waiter` RBAC, and the `wait-for-core-migrate` initContainer
-  pattern from PR #8 into this chart.
+Not included: the suspended staging CronJob variant platform also renders
+alongside its Job — that's a workaround for staging's non-Helm restart path
+specific to that repo (gone once EN-184 lands there), not a concern of this
+chart.
 
 ## Known gap: wiring this into unlocked-platform
 

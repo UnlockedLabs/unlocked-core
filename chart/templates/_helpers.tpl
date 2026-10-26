@@ -53,13 +53,13 @@ migrate Job) so the connection contract only has one place to change.
 Usage: {{- include "unlocked-core.dbEnv" . | nindent 8 }}
 */}}
 {{- define "unlocked-core.dbEnv" -}}
-{{- if .Values.database.useAppDsn }}
+{{- if .Values.database.useAppDsn -}}
 - name: APP_DSN
   valueFrom:
     secretKeyRef:
       name: {{ .Values.secretName }}
       key: APP_DSN
-{{- else }}
+{{- else -}}
 - name: DB_HOST
   value: {{ .Values.database.host | quote }}
 - name: DB_PORT
