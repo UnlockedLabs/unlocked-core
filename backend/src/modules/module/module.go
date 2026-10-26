@@ -233,8 +233,10 @@ type NewUser struct {
 }
 
 // Schema is a module whose tables live in its own Postgres schema. Core
-// connects its routes, jobs and worker with search_path set to the schema,
-// then public, so its queries find its own tables first, then core's.
+// connects its routes, jobs and worker as the Postgres role of the same name,
+// with search_path set to the schema, then public, so its queries find its own
+// tables first, then core's. The module's first migration creates the schema
+// and the role, and grants the role only what the module needs.
 type Schema interface {
 	Schema() string
 }

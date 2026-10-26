@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -205,9 +206,10 @@ type ModuleDBs struct {
 }
 
 // OpenModuleDBs opens a pool for each of mods that has its own schema
-// (module.Schema), with search_path set to the schema, then public. A process
-// opens them once, at startup. The SQLite tests have no schemas, so every
-// module shares core's connection there.
+// (module.Schema): its sessions run as the Postgres role of the same name,
+// with search_path set to the schema, then public. A process opens them once,
+// at startup. The SQLite tests have no schemas, so every module shares core's
+// connection there.
 func OpenModuleDBs(core *gorm.DB, mods []module.Module) ModuleDBs {
 	dbs := ModuleDBs{core: core, own: map[string]*gorm.DB{}}
 	if core.Name() != "postgres" {
@@ -221,6 +223,21 @@ func OpenModuleDBs(core *gorm.DB, mods []module.Module) ModuleDBs {
 	return dbs
 }
 
+// Close closes the modules' own pools. Core's connection stays open.
+func (dbs ModuleDBs) Close() error {
+	var errs []error
+	for name, db := range dbs.own {
+		sqlDB, err := db.DB()
+		if err == nil {
+			err = sqlDB.Close()
+		}
+		if err != nil {
+			errs = append(errs, fmt.Errorf("close module %s connection: %w", name, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
 // For is the connection the module called name uses: its own when it has a
 // schema, else core's.
 func (dbs ModuleDBs) For(name string) *gorm.DB {
@@ -230,15 +247,20 @@ func (dbs ModuleDBs) For(name string) *gorm.DB {
 	return dbs.core
 }
 
-// openModulePostgres opens a pool on core's database whose sessions look up
-// tables in schema first, then public.
+// openModulePostgres opens a pool on core's database whose sessions switch to
+// the role named schema, which a module's first migration creates, and look
+// up tables in schema first, then public.
 func openModulePostgres(schema string) *sql.DB {
 	cfg, err := pgx.ParseConfig(PostgresDSN("allow"))
 	if err != nil {
 		logrus.Fatalf("Failed to parse the database connection string: %v", err)
 	}
 	cfg.RuntimeParams["search_path"] = schema + ", public"
-	db := stdlib.OpenDB(*cfg)
+	setRole := stdlib.OptionAfterConnect(func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, "SET ROLE "+pgx.Identifier{schema}.Sanitize())
+		return err
+	})
+	db := stdlib.OpenDB(*cfg, setRole)
 	if err := db.Ping(); err != nil {
 		logrus.Fatalf("Failed to ping database for schema %s: %v", schema, err)
 	}
@@ -315,11 +337,11 @@ func moduleTestModels(mods []module.Module) []any {
 }
 
 // seedModules lets every module with default rows add them to a new
-// database, as the user in ctx.
-func seedModules(ctx context.Context, db *gorm.DB, facilityID uint, mods []module.Module) error {
+// database, as the user in ctx, each on its own connection.
+func seedModules(ctx context.Context, dbs ModuleDBs, facilityID uint, mods []module.Module) error {
 	for _, m := range mods {
 		if s, ok := m.(module.Seeder); ok {
-			if err := s.Seed(ctx, db, facilityID); err != nil {
+			if err := s.Seed(ctx, dbs.For(m.Name()), facilityID); err != nil {
 				return fmt.Errorf("seed module %s: %w", m.Name(), err)
 			}
 		}
@@ -393,8 +415,13 @@ func (db *DB) SeedDefaultData(isTesting bool) {
 		}
 
 		seedCtx := identity.NewContext(context.Background(), &identity.Claims{UserID: systemBatchUserID})
-		if err := seedModules(seedCtx, db.DB, defaultFacility.ID, registry.All()); err != nil {
+		mods := registry.All()
+		moduleDBs := OpenModuleDBs(db.DB, mods)
+		if err := seedModules(seedCtx, moduleDBs, defaultFacility.ID, mods); err != nil {
 			logrus.Fatalf("Failed to seed modules: %v", err)
+		}
+		if err := moduleDBs.Close(); err != nil {
+			logrus.Warnf("Failed to close the module connections used for seeding: %v", err)
 		}
 	}
 }

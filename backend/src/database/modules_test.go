@@ -67,7 +67,7 @@ func TestSeedModules(t *testing.T) {
 			plainModule{"none"},
 			seedingModule{plainModule: plainModule{"second"}, calls: &calls},
 		}
-		require.NoError(t, seedModules(ctx, nil, 7, mods))
+		require.NoError(t, seedModules(ctx, ModuleDBs{}, 7, mods))
 		assert.Equal(t, []seedCall{{"first", 99999, 7}, {"second", 99999, 7}}, calls)
 	})
 
@@ -77,7 +77,7 @@ func TestSeedModules(t *testing.T) {
 			seedingModule{plainModule: plainModule{"broken"}, calls: &calls, err: errors.New("boom")},
 			seedingModule{plainModule: plainModule{"after"}, calls: &calls},
 		}
-		err := seedModules(ctx, nil, 7, mods)
+		err := seedModules(ctx, ModuleDBs{}, 7, mods)
 		require.ErrorContains(t, err, "seed module broken: boom")
 		assert.Equal(t, []seedCall{{"broken", 99999, 7}}, calls)
 	})
