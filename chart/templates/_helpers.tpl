@@ -46,6 +46,37 @@ Usage: {{- include "unlocked-core.pullPolicy" (list . "server") | nindent 8 }}
 {{- end }}
 
 {{/*
+DB connection env vars: APP_DSN (external RDS) or DB_HOST/PORT/USER/NAME/
+PASSWORD (in-cluster), chosen by database.useAppDsn. Shared by every
+workload that talks to Postgres (server, scheduler, and eventually the
+migrate Job) so the connection contract only has one place to change.
+Usage: {{- include "unlocked-core.dbEnv" . | nindent 8 }}
+*/}}
+{{- define "unlocked-core.dbEnv" -}}
+{{- if .Values.database.useAppDsn }}
+- name: APP_DSN
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.secretName }}
+      key: APP_DSN
+{{- else }}
+- name: DB_HOST
+  value: {{ .Values.database.host | quote }}
+- name: DB_PORT
+  value: {{ .Values.database.port | quote }}
+- name: DB_USER
+  value: {{ .Values.database.user | quote }}
+- name: DB_NAME
+  value: {{ .Values.database.name | quote }}
+- name: DB_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.secretName }}
+      key: DB_PASSWORD
+{{- end }}
+{{- end }}
+
+{{/*
 Volume settings for one volume key, with required values checked.
 Usage: {{ $v := include "unlocked-core.volume" (list . "logs") | fromYaml }}
 */}}

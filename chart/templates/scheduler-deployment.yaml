@@ -30,27 +30,7 @@ spec:
         env:
         - name: APP_ENV
           value: {{ .Values.appEnv | quote }}
-        {{- if .Values.database.useAppDsn }}
-        - name: APP_DSN
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.secretName }}
-              key: APP_DSN
-        {{- else }}
-        - name: DB_HOST
-          value: {{ .Values.database.host | quote }}
-        - name: DB_PORT
-          value: {{ .Values.database.port | quote }}
-        - name: DB_USER
-          value: {{ .Values.database.user | quote }}
-        - name: DB_NAME
-          value: {{ .Values.database.name | quote }}
-        - name: DB_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.secretName }}
-              key: DB_PASSWORD
-        {{- end }}
+        {{- include "unlocked-core.dbEnv" . | nindent 8 }}
         - name: LOG_LEVEL
           value: {{ .Values.server.logLevel | quote }}
         - name: MIDDLEWARE_CRON_SCHEDULE
