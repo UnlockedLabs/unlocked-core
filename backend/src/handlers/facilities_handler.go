@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
 
+	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 )
 
@@ -27,6 +29,21 @@ func (srv *Server) handleIndexFacilities(w http.ResponseWriter, r *http.Request,
 	facilities, err := srv.Db.GetAllFacilitiesWithStats(&args)
 	if err != nil {
 		return newDatabaseServiceError(err)
+	}
+	ids := make([]uint, len(facilities))
+	for i, f := range facilities {
+		ids[i] = f.ID
+	}
+	content, err := srv.openContent.FacilityContent(r.Context(), ids)
+	if err != nil {
+		return newDatabaseServiceError(database.NewDBError(err, "error getting facilities"))
+	}
+	for i := range facilities {
+		// Open Content's activity and favorites block a delete, as in
+		// FacilityBlockingChildren.HasAny.
+		if c := content[facilities[i].ID]; c.Activities > 0 || c.Favorites > 0 {
+			facilities[i].CanDelete = false
+		}
 	}
 	return writePaginatedResponse(w, http.StatusOK, facilities, args.IntoMeta())
 }
@@ -92,9 +109,9 @@ func (srv *Server) handleGetFacilityDeleteCheck(w http.ResponseWriter, r *http.R
 		return newInvalidIdServiceError(err, "facility ID")
 	}
 	log.add("facility_id", id)
-	blockers, err := srv.Db.FacilityBlockingChildren(id)
+	blockers, err := srv.facilityBlockers(r.Context(), id)
 	if err != nil {
-		return newDatabaseServiceError(err)
+		return err
 	}
 	payload := struct {
 		CanDelete bool                            `json:"can_delete"`
@@ -117,9 +134,9 @@ func (srv *Server) handleDeleteFacility(w http.ResponseWriter, r *http.Request, 
 		return newInvalidIdServiceError(err, "facility ID")
 	}
 	log.add("facilityId", id)
-	blockers, err := srv.Db.FacilityBlockingChildren(id)
+	blockers, err := srv.facilityBlockers(r.Context(), id)
 	if err != nil {
-		return newDatabaseServiceError(err)
+		return err
 	}
 	if blockers.HasAny() {
 		log.info("facility delete blocked by associated records")
@@ -129,4 +146,22 @@ func (srv *Server) handleDeleteFacility(w http.ResponseWriter, r *http.Request, 
 		return newDatabaseServiceError(err)
 	}
 	return writeJsonResponse(w, http.StatusNoContent, "facility deleted successfully")
+}
+
+// facilityBlockers counts the rows that point at a facility: core's, and
+// Open Content's from its api.
+func (srv *Server) facilityBlockers(ctx context.Context, id int) (models.FacilityBlockingChildren, error) {
+	blockers, err := srv.Db.FacilityBlockingChildren(id)
+	if err != nil {
+		return blockers, newDatabaseServiceError(err)
+	}
+	content, err := srv.openContent.FacilityContent(ctx, []uint{uint(id)})
+	if err != nil {
+		return blockers, newDatabaseServiceError(database.NewDBError(err, "error getting delete_guard_facility_counts"))
+	}
+	c := content[uint(id)]
+	blockers.OpenContentActivity = c.Activities
+	blockers.OpenContentFavorites = c.Favorites
+	blockers.VisibilityStatuses = c.VisibilityStatuses
+	return blockers, nil
 }

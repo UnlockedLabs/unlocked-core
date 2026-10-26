@@ -26,6 +26,13 @@ type OpenContent interface {
 	// ResourcesAccessed counts the different libraries, videos and links a
 	// resident has opened.
 	ResourcesAccessed(ctx context.Context, userID uint) (int64, error)
+	// ActivityEngagement is a resident's reading time, for their profile.
+	ActivityEngagement(ctx context.Context, userID uint) (ActivityEngagement, error)
+
+	// FacilityContent is the Open Content data each of facilityIDs holds, for
+	// core's facility list and facility delete check. A facility that holds
+	// none is left out.
+	FacilityContent(ctx context.Context, facilityIDs []uint) (map[uint]FacilityContent, error)
 
 	// The Knowledge Center numbers, for the activity between start and end
 	// (all of it when either is nil) at facilityID (every facility when nil).
@@ -62,6 +69,28 @@ type ContentUsage struct {
 	IsFeatured   bool    `json:"is_featured"`
 	TotalHours   float64 `json:"total_hours"`
 	TotalMinutes float64 `json:"total_minutes"`
+}
+
+// ActivityEngagement totals a resident's reading time.
+type ActivityEngagement struct {
+	// TotalActiveDaysMonthly is the days with any reading activity.
+	TotalActiveDaysMonthly int64
+	// TotalHoursActiveMonthly is the average activity's length, in hours.
+	TotalHoursActiveMonthly float64
+	// TotalHoursActiveWeekly and TotalMinutesActiveWeekly are all the
+	// activity's time, divided by four.
+	TotalHoursActiveWeekly   float64
+	TotalMinutesActiveWeekly float64
+	// TotalHoursEngaged and TotalMinutesEngaged are this week's activity time.
+	TotalHoursEngaged   float64
+	TotalMinutesEngaged float64
+}
+
+// FacilityContent counts the Open Content rows recorded at a facility.
+type FacilityContent struct {
+	Activities         int64
+	Favorites          int64
+	VisibilityStatuses int64
 }
 
 // Window is the activity a Knowledge Center number counts.

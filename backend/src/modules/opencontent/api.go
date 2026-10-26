@@ -125,6 +125,68 @@ func (a openContentAPI) ResourcesAccessed(ctx context.Context, userID uint) (int
 	return total, nil
 }
 
+func (a openContentAPI) ActivityEngagement(ctx context.Context, userID uint) (api.ActivityEngagement, error) {
+	var engagement api.ActivityEngagement
+	err := a.db.WithContext(ctx).
+		Table("open_content_activities oca").
+		Select(`COUNT(DISTINCT CAST(oca.request_ts AS DATE)) AS total_active_days_monthly,
+		AVG(EXTRACT(EPOCH FROM (oca.stop_ts - oca.request_ts)) / 3600) AS total_hours_active_monthly,
+		SUM(EXTRACT(EPOCH FROM (oca.stop_ts - oca.request_ts)) / 3600) / 4 AS total_hours_active_weekly,
+		SUM(EXTRACT(EPOCH FROM (oca.stop_ts - oca.request_ts)) / 60) / 4 AS total_minutes_active_weekly,
+		SUM(
+			CASE
+				WHEN oca.request_ts >= date_trunc('week', CURRENT_DATE)
+				THEN EXTRACT(EPOCH FROM (oca.stop_ts - oca.request_ts)) / 3600
+				ELSE 0
+			END
+		) AS total_hours_engaged,
+		SUM(
+			CASE
+				WHEN oca.request_ts >= date_trunc('week', CURRENT_DATE)
+				THEN EXTRACT(EPOCH FROM (oca.stop_ts - oca.request_ts)) / 60
+				ELSE 0
+			END
+		) AS total_minutes_engaged`).
+		Where("oca.user_id = ?", userID).
+		Scan(&engagement).Error
+	return engagement, err
+}
+
+func (a openContentAPI) FacilityContent(ctx context.Context, facilityIDs []uint) (map[uint]api.FacilityContent, error) {
+	content := make(map[uint]api.FacilityContent)
+	if len(facilityIDs) == 0 {
+		return content, nil
+	}
+	counts := []struct {
+		table string
+		set   func(*api.FacilityContent, int64)
+	}{
+		{"open_content_activities", func(c *api.FacilityContent, n int64) { c.Activities = n }},
+		{"open_content_favorites", func(c *api.FacilityContent, n int64) { c.Favorites = n }},
+		{"facility_visibility_statuses", func(c *api.FacilityContent, n int64) { c.VisibilityStatuses = n }},
+	}
+	for _, count := range counts {
+		var rows []struct {
+			FacilityID uint
+			Count      int64
+		}
+		if err := a.db.WithContext(ctx).
+			Table(count.table).
+			Select("facility_id, COUNT(*) AS count").
+			Where("facility_id IN ?", facilityIDs).
+			Group("facility_id").
+			Scan(&rows).Error; err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			c := content[row.FacilityID]
+			count.set(&c, row.Count)
+			content[row.FacilityID] = c
+		}
+	}
+	return content, nil
+}
+
 // Knowledge Center
 
 func kcPriorWindow(start, end *time.Time) (*time.Time, *time.Time) {

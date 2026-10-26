@@ -53,10 +53,20 @@ func (srv *Server) handleResidentProfile(w http.ResponseWriter, r *http.Request,
 		return newDatabaseServiceError(err)
 	}
 
-	activityEngagement, err := srv.Db.GetUserOpenContentEngagement(userID)
+	activityEngagement, err := srv.Db.GetUserEngagement(userID)
 	if err != nil {
 		return newDatabaseServiceError(err)
 	}
+	reading, err := srv.openContent.ActivityEngagement(r.Context(), uint(userID))
+	if err != nil {
+		return newDatabaseServiceError(database.NewDBError(err, "error getting engagement_activity"))
+	}
+	activityEngagement.TotalActiveDaysMonthly = reading.TotalActiveDaysMonthly
+	activityEngagement.TotalHoursActiveMonthly = reading.TotalHoursActiveMonthly
+	activityEngagement.TotalHoursActiveWeekly = reading.TotalHoursActiveWeekly
+	activityEngagement.TotalMinutesActiveWeekly = reading.TotalMinutesActiveWeekly
+	activityEngagement.TotalHoursEngaged = reading.TotalHoursEngaged
+	activityEngagement.TotalMinutesEngaged = reading.TotalMinutesEngaged
 	args := srv.getQueryContext(r)
 	topLibraries, err := srv.openContent.TopLibraries(args.Ctx, uint(userID), args.FacilityID)
 	if err != nil {
