@@ -69,11 +69,8 @@ specific repos, so no IAM change was needed for this new one.
 ## Known gap: wiring this into unlocked-platform
 
 This chart is independently `helm pull`/`helm template`-able today, but
-`unlocked-platform` doesn't consume it yet. One thing still needs a design
-decision before that happens — see
-`docs/plans/2026-10-20-en-183-platform-chart-dependency.md`:
-how per-site values (`unlocked-platform/sites/<site>.yaml`) map onto this
-chart's flatter values schema when it's pulled in as a chart dependency.
+`unlocked-platform` doesn't consume it yet — that's separate, tracked work
+(EN-183) for that repo, not designed here.
 
 ## Local verification
 
