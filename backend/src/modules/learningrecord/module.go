@@ -35,6 +35,7 @@ func (Module) Register(r module.Router, deps module.Deps) {
 	}
 }
 
+// RegisterJobs does nothing: Learning Record has no background work.
 func (Module) RegisterJobs(module.Scheduler, module.Deps) {}
 
 func (Module) Migrations() fs.FS { return migrations }
