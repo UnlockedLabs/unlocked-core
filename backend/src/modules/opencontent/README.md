@@ -15,7 +15,8 @@ activity and the content proxies. It moved here from core in EN-192.
   `retry_video_downloads` and `sync_video_metadata`, and the worker,
   `backend worker opencontent`, runs them along with the two video jobs the
   routes publish (`add_videos`, `retry_manual_download`). The worker needs
-  yt-dlp and ffmpeg, which the backend image ships.
+  yt-dlp (with node as its JavaScript runtime) and ffmpeg, which the backend
+  image ships.
 - **Core still owns:**
   - the websocket, which Open Content messages through `Deps.Notify`;
   - three plain SQL reads of Open Content's tables (facility list, facility
