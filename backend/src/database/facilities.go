@@ -61,14 +61,6 @@ func (db *DB) GetAllFacilitiesWithStats(args *models.QueryContext) ([]models.Fac
 	return results, nil
 }
 
-func (db *DB) GetAllFacilitiesOrdered() ([]models.Facility, error) {
-	var facilities []models.Facility
-	if err := db.Order("name").Find(&facilities).Error; err != nil {
-		return nil, newGetRecordsDBError(err, "facilities")
-	}
-	return facilities, nil
-}
-
 func (db *DB) GetFacilityByID(id int) (*models.Facility, error) {
 	var facility models.Facility
 	if err := db.Where("id = ?", fmt.Sprintf("%d", id)).First(&facility).Error; err != nil {

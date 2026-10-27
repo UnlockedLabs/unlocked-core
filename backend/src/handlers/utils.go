@@ -186,4 +186,3 @@ func validatedAdminRoute(method string, handler HttpFunc, validate RouteResolver
 		resolver:    validate,
 	}
 }
-
