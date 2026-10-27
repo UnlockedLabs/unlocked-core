@@ -121,10 +121,11 @@ func (facility) TableName() string { return "facilities" }
 // UserAccountHistory is a row of core's user_account_history table. Learning
 // Record adds one when a resident deletes an entry.
 type UserAccountHistory struct {
-	UserID    uint                  `json:"user_id" gorm:"primaryKey"`
-	AdminID   *uint                 `json:"admin_id"`
-	Action    ActivityHistoryAction `json:"action" gorm:"size:255;primaryKey"`
-	CreatedAt time.Time             `json:"created_at" gorm:"primaryKey"`
+	UserID           uint                  `json:"user_id" gorm:"primaryKey"`
+	AdminID          *uint                 `json:"admin_id"`
+	Action           ActivityHistoryAction `json:"action" gorm:"size:255;primaryKey"`
+	CreatedAt        time.Time             `json:"created_at" gorm:"primaryKey"`
+	AttendanceStatus string                `json:"attendance_status" gorm:"size:27"`
 }
 
 func (UserAccountHistory) TableName() string { return "user_account_history" }

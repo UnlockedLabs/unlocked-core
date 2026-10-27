@@ -134,17 +134,23 @@ func TestLearningRecordRoutes(t *testing.T) {
 	// module Store.WithUserContext instead of core's) does.
 	t.Run("entry_delete_records_audit_history", func(t *testing.T) {
 		var history struct {
-			Action  string
-			AdminID *uint
+			Action           string
+			AdminID          *uint
+			AttendanceStatus *string
 		}
 		err := env.DB.Table("user_account_history").
-			Select("action, admin_id").
+			Select("action, admin_id, attendance_status").
 			Where("user_id = ? AND action = ?", w.resident.ID, "learning_record_deleted").
 			Order("created_at DESC").Limit(1).Scan(&history).Error
 		require.NoError(t, err)
 		require.Equal(t, "learning_record_deleted", history.Action)
 		require.NotNil(t, history.AdminID)
 		require.Equal(t, w.resident.ID, *history.AdminID)
+		// Core wrote this column's zero value before the move; a module struct
+		// that drops the field writes NULL instead, changing the account-history
+		// response body.
+		require.NotNil(t, history.AttendanceStatus)
+		require.Equal(t, "", *history.AttendanceStatus)
 	})
 }
 
