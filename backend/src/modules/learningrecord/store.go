@@ -112,6 +112,7 @@ func (db *Store) DeleteEntry(id, userID uint) error {
 	})
 }
 
+// GetDraft returns the most recently updated draft for the user, or nil.
 func (db *Store) GetDraft(userID uint) (*LearningRecordEntry, error) {
 	var draft LearningRecordEntry
 	err := withFacilityName(db).

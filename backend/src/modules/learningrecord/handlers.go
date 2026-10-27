@@ -44,6 +44,8 @@ foreign key error, and facility_name is replaced with the name on record so a
 client cannot label a facility as something it is not.
 */
 func (srv *server) validateLocation(entry *LearningRecordEntry) error {
+	// Whitespace-only text is the same as no text: the resident may have opened
+	// the "Other" field and typed nothing meaningful into it yet.
 	entry.FacilityOther = strings.TrimSpace(entry.FacilityOther)
 	entry.FacilityName = ""
 	if utf8.RuneCountInString(entry.FacilityOther) > maxFacilityOtherRunes {

@@ -15,9 +15,11 @@ EN-195.
   The depguard rule for this module already allow-lists
   `modules/programs/api` and `modules/providerplatforms/api` for whenever
   that changes.
-- **It reads core's `facilities` table** for the achievement-location picker
-  (the `facility` type in `models.go`), the same way it reads `users` rows it
-  doesn't own.
+- **It reads and writes some of core's tables:** it reads `facilities` for the
+  achievement-location picker (the `facility` type in `models.go`), and adds a
+  `user_account_history` row when a resident deletes an entry, in the same
+  transaction. It touches no other core table; the caller's identity comes from
+  the request claims, not from `users`.
 - **Core still owns** the `learning_record` feature flag
   (`models.LearningRecordAccess`). The `learning_record_deleted` audit action
   is this module's own private constant (`LearningRecordDeleted` in

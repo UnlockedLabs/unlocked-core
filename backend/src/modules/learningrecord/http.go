@@ -60,6 +60,8 @@ type handlerFunc func(w http.ResponseWriter, r *http.Request, log sLog) error
 // handleError does.
 func handle(h handlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Start from core's fields, so an admin write's error line names the
+		// admin, as core's own handlers' lines do.
 		f := logrus.Fields(module.LogFields(r.Context()))
 		f["module"] = "learningrecord"
 		f["method"] = r.Method
@@ -84,6 +86,8 @@ type sLog struct {
 	f   logrus.Fields
 }
 
+// add adds a field to this module's log lines and to core's, so it also
+// reaches the admin audit line, as it did before the move.
 func (slog sLog) add(key string, value any) {
 	slog.f[key] = value
 	module.LogField(slog.ctx, key, value)
