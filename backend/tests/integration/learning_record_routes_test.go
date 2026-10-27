@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -149,6 +150,20 @@ func TestLearningRecordRoutes(t *testing.T) {
 		// response body.
 		require.NotNil(t, history.AttendanceStatus)
 		require.Equal(t, "", *history.AttendanceStatus)
+	})
+
+	// The assertion above reads the row; this reads the endpoint that serves
+	// it. attendance_status is what the move regressed, and an admin calling
+	// account-history is the consumer that sees it, so pin it at that
+	// boundary too (the same route programs' test pins).
+	t.Run("account_history_endpoint", func(t *testing.T) {
+		admin, err := env.CreateTestUser("lradmin", models.FacilityAdmin, w.north.ID, "")
+		require.NoError(t, err)
+		resp := NewRequest[any](client, t, http.MethodGet,
+			fmt.Sprintf("/api/users/%d/account-history", w.resident.ID), nil).
+			WithTestClaims(w.claims(admin)).AsRaw().Do().
+			ExpectStatus(http.StatusOK)
+		expectGolden(t, "learning_record", "account_history", resp.rawBody)
 	})
 }
 
