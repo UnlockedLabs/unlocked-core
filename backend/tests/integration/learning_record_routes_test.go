@@ -6,6 +6,7 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/learningrecord"
 
 	"github.com/stretchr/testify/require"
 )
@@ -108,7 +109,7 @@ func TestLearningRecordRoutes(t *testing.T) {
 	// See verification.md: UNVERIFIED here, rung 4 against a real Postgres
 	// (`make dev`) is what would settle it. The GET and DELETE draft routes
 	// don't go through that code path, so they're seeded and tested directly.
-	draft := models.LearningRecordEntry{UserID: w.resident.ID, ClientID: "draft-1", IsDraft: true, ProgramName: "Welding Basics", StepIndex: 1, UiPhase: "survey"}
+	draft := learningrecord.LearningRecordEntry{UserID: w.resident.ID, ClientID: "draft-1", IsDraft: true, ProgramName: "Welding Basics", StepIndex: 1, UiPhase: "survey"}
 	require.NoError(t, env.DB.Create(&draft).Error)
 	for _, tt := range []struct {
 		name   string

@@ -187,11 +187,3 @@ func validatedAdminRoute(method string, handler HttpFunc, validate RouteResolver
 	}
 }
 
-func featureRoute(method string, handler HttpFunc, features ...models.FeatureAccess) routeDef {
-	return routeDef{
-		routeMethod: method,
-		handler:     handler,
-		admin:       false,
-		features:    features,
-	}
-}
