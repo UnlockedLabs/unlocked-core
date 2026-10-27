@@ -142,14 +142,13 @@ func (UserAccountHistory) TableName() string {
 type ActivityHistoryAction string
 
 const (
-	AccountCreation       ActivityHistoryAction = "account_creation"
-	FacilityTransfer      ActivityHistoryAction = "facility_transfer"
-	SetPassword           ActivityHistoryAction = "set_password"
-	ResetPassword         ActivityHistoryAction = "reset_password"
-	ProgClassHistory      ActivityHistoryAction = "progclass_history"
-	UserDeactivated       ActivityHistoryAction = "user_deactivated"
-	AttendanceRecorded    ActivityHistoryAction = "attendance_recorded"
-	LearningRecordDeleted ActivityHistoryAction = "learning_record_deleted"
+	AccountCreation    ActivityHistoryAction = "account_creation"
+	FacilityTransfer   ActivityHistoryAction = "facility_transfer"
+	SetPassword        ActivityHistoryAction = "set_password"
+	ResetPassword      ActivityHistoryAction = "reset_password"
+	ProgClassHistory   ActivityHistoryAction = "progclass_history"
+	UserDeactivated    ActivityHistoryAction = "user_deactivated"
+	AttendanceRecorded ActivityHistoryAction = "attendance_recorded"
 )
 
 type ActivityHistoryResponse struct {
