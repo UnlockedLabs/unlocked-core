@@ -91,9 +91,7 @@ func TestLearningRecordRoutes(t *testing.T) {
 		{"entries_after_delete", http.MethodGet, "/api/learning-record/entries", nil, http.StatusOK},
 		{"draft_get_none", http.MethodGet, "/api/learning-record/draft", nil, http.StatusOK},
 		// draft_upsert (PUT /api/learning-record/draft) is a pre-existing,
-		// pinned-as-broken route: its ON CONFLICT target doesn't match
-		// migration 00069's partial unique index, so it 500s against a real
-		// Postgres too, not just this SQLite harness (see verification.md).
+		// pinned-as-broken route; see README.md's Tests section.
 		{"draft_upsert", http.MethodPut, "/api/learning-record/draft",
 			map[string]any{"client_id": "draft-upsert", "program_name": "Welding Basics"}, http.StatusInternalServerError},
 	}
