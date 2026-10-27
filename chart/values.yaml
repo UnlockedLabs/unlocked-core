@@ -1,8 +1,8 @@
 # Defaults for the standalone unlocked-core chart.
 #
 # This chart is deliberately self-contained and does not share a values
-# schema with unlocked-platform; see docs/plans for the integration gap
-# that still needs solving when platform depends on this chart.
+# schema with unlocked-platform — that integration is separate, tracked
+# work (EN-183) for that repo, not designed here.
 
 # Required: app hostname, used for the frontend's nginx server_name and the
 # server's CORS/APP_URL.
