@@ -1,0 +1,4 @@
+{
+  "data": null,
+  "message": "location must be either a facility or free text, not both"
+}

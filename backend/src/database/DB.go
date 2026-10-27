@@ -242,6 +242,7 @@ func MigrateTesting(db *gorm.DB) {
 		&models.FeatureFlags{},
 		&models.PageFeatureFlags{},
 		&models.FacilityFeatureFlag{},
+		&models.LearningRecordEntry{},
 	}
 	logrus.Println("Running up migrations...")
 	for _, table := range append(TableList, moduleTestModels(registry.All())...) {
