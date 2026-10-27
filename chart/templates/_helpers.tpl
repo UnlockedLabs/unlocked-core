@@ -13,7 +13,11 @@ collision.
 {{- end }}
 
 {{/*
-Image reference for a component: repository:tag. The tag is required.
+Image reference for a component: repository:tag. tag defaults to the
+chart's own AppVersion (set to the release tag by CI) - this chart's
+versioning is lockstep with the image by design, so an unset tag should
+mean "the image this chart release shipped with," not a render-time error.
+Override only for a deliberate mismatch (e.g. testing an older image).
 Usage: {{ include "unlocked-core.image" (list . "server") }}
 */}}
 {{- define "unlocked-core.image" -}}
@@ -21,7 +25,7 @@ Usage: {{ include "unlocked-core.image" (list . "server") }}
 {{- $name := index . 1 -}}
 {{- $img := index $root.Values.images $name -}}
 {{- $repo := required (printf "images.%s.repository must be set" $name) $img.repository -}}
-{{- $tag := required (printf "images.%s.tag must be set" $name) $img.tag -}}
+{{- $tag := $img.tag | default $root.Chart.AppVersion -}}
 {{- printf "%s:%s" $repo (toString $tag) -}}
 {{- end }}
 

@@ -38,7 +38,8 @@ Core's own Helm chart (EN-183). Standalone and self-contained: it has its own
   coordinate with this Job directly — it only has to run.
 
 This chart assumes it's deployed into a namespace that already has: a
-`core-secrets` Secret (APP_KEY, DB_PASSWORD, ORY_TOKEN, NATS_PASSWORD), an
+`core-secrets` Secret (APP_KEY, ORY_TOKEN, NATS_PASSWORD, and either
+DB_PASSWORD or APP_DSN depending on `database.useAppDsn`), an
 `ecr-secret` imagePullSecret, and `kratos`/`nats` Services reachable at the
 hostnames in `values.yaml` — this chart does not create any of those. Today
 that means deploying it standalone requires `unlocked-platform` to also be

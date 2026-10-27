@@ -17,11 +17,15 @@ providerServiceUrl: http://provider-service:8081
 images:
   # Applied to server/frontend unless the image sets its own pullPolicy.
   pullPolicy: IfNotPresent
+  # Repository is fixed infrastructure (same ECR repo for every site);
+  # only tag varies per deployment. tag has no default - see
+  # unlocked-core.image in _helpers.tpl for why, and what happens if you
+  # leave it unset.
   server:
-    repository: ""
+    repository: 239442854891.dkr.ecr.us-west-2.amazonaws.com/unlockedv2
     tag: ""
   frontend:
-    repository: ""
+    repository: 239442854891.dkr.ecr.us-west-2.amazonaws.com/frontend
     tag: ""
 
 database:
@@ -35,8 +39,9 @@ database:
   user: unlocked
   name: unlocked
 
-# Name of the Secret (not created by this chart) holding APP_KEY, DB_PASSWORD,
-# ORY_TOKEN and NATS_PASSWORD.
+# Name of the Secret (not created by this chart) holding APP_KEY, ORY_TOKEN,
+# NATS_PASSWORD, and either DB_PASSWORD or APP_DSN depending on
+# database.useAppDsn (see unlocked-core.dbEnv in _helpers.tpl).
 secretName: core-secrets
 
 # Name of the imagePullSecret (not created by this chart) used to pull
@@ -74,7 +79,9 @@ frontendConfig:
   state: ""
   deployment: ""
   posthogKey: ""
-  posthogHost: ""
+  # Same PostHog Cloud endpoint for every site - only posthogKey varies.
+  # Matches unlocked-platform's default.
+  posthogHost: https://us.i.posthog.com
 
 middlewareCron: "0 22 * * *"
 

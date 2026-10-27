@@ -1,6 +1,6 @@
 apiVersion: v2
 name: unlocked-core
-description: Core's own Helm chart (server + frontend). See README.md for what's deliberately not here yet.
+description: Core's own Helm chart (server, frontend, scheduler, migration Job). See README.md.
 type: application
 # Overridden at package time by CI (`helm package --version`) to match the
 # release tag. This value only matters for local `helm lint`/`helm template`.
