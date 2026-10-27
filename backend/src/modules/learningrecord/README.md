@@ -47,7 +47,14 @@ EN-195.
   ```
 
   The changed JSON then shows in the PR for review.
-- `PUT /api/learning-record/draft` (the upsert) isn't covered by a golden
-  case: it sets `updated_at` via `gorm.Expr("NOW()")`, valid Postgres but not
-  SQLite, so every call 500s under this harness. Pre-existing, not introduced
-  by the move — check it with `make dev`.
+- `PUT /api/learning-record/draft` (the upsert) is pinned as a 500: its
+  `ON CONFLICT` target doesn't match migration 00069's partial unique index
+  on `(user_id, client_id) WHERE deleted_at IS NULL`, and Postgres won't
+  infer a partial index for a target that doesn't repeat its predicate.
+  Confirmed against a live Postgres container, not just this SQLite
+  harness — a pre-existing production bug, not introduced by the move, and
+  not fixed here (out of scope for a move). The fix is
+  `clause.OnConflict{..., Where: clause.Where{Exprs: []clause.Expression{
+  clause.Expr{SQL: "deleted_at IS NULL"}}}}` in `store.go`'s `UpsertDraft`,
+  plus swapping `gorm.Expr("NOW()")` for a portable `CURRENT_TIMESTAMP`
+  (needed for the SQLite test, not for Postgres) — a follow-up ticket.

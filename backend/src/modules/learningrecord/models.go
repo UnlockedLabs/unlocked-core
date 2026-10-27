@@ -62,14 +62,20 @@ func (s *StringSlice) Scan(value any) error {
 
 type LearningRecordEntry struct {
 	DatabaseFields
-	// The uniqueIndex tag exists only so AutoMigrate gives the SQLite test
-	// database the same constraint migration 00069 gives production
-	// (idx_learning_record_entries_client_id, a partial index on
-	// deleted_at IS NULL) -- without it, UpsertLearningRecordDraft's ON
-	// CONFLICT has nothing to target and every test against it 500s. GORM's
-	// AutoMigrate on SQLite does not support the partial "where" production
-	// uses, so this is a full index; it is never applied to production,
-	// which keeps migration 00069's.
+	// The uniqueIndex tag exists only so UpsertLearningRecordDraft's ON
+	// CONFLICT has an index to target in the SQLite test database, which
+	// AutoMigrate builds from this struct; production's schema comes from
+	// migration 00069 and never sees this tag (AutoMigrate never runs
+	// against it). It is NOT equivalent to 00069's index: that one is
+	// partial (`WHERE deleted_at IS NULL`), this one is total, because
+	// AutoMigrate on SQLite can't express the partial form. That is a
+	// pre-existing production bug, not a test-only gap: Postgres won't
+	// infer a partial unique index for an ON CONFLICT target whose clause
+	// doesn't repeat the predicate, so UpsertDraft's
+	// `clause.OnConflict{Columns: user_id, client_id}` (store.go) 42P10s
+	// against migration 00069's real index on every call, the same as it
+	// does on main today -- confirmed against a live Postgres container.
+	// See verification.md; not fixed here, out of scope for a move.
 	UserID              uint        `gorm:"not null;uniqueIndex:idx_learning_record_entries_client_id" json:"user_id"`
 	ClientID            string      `gorm:"not null;uniqueIndex:idx_learning_record_entries_client_id" json:"client_id"`
 	IsDraft             bool        `gorm:"not null;default:false" json:"is_draft"`

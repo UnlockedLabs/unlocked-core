@@ -90,6 +90,12 @@ func TestLearningRecordRoutes(t *testing.T) {
 		{"entry_delete", http.MethodDelete, "/api/learning-record/entries/1", nil, http.StatusOK},
 		{"entries_after_delete", http.MethodGet, "/api/learning-record/entries", nil, http.StatusOK},
 		{"draft_get_none", http.MethodGet, "/api/learning-record/draft", nil, http.StatusOK},
+		// draft_upsert (PUT /api/learning-record/draft) is a pre-existing,
+		// pinned-as-broken route: its ON CONFLICT target doesn't match
+		// migration 00069's partial unique index, so it 500s against a real
+		// Postgres too, not just this SQLite harness (see verification.md).
+		{"draft_upsert", http.MethodPut, "/api/learning-record/draft",
+			map[string]any{"client_id": "draft-upsert", "program_name": "Welding Basics"}, http.StatusInternalServerError},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -100,15 +106,8 @@ func TestLearningRecordRoutes(t *testing.T) {
 		})
 	}
 
-	// PUT /api/learning-record/draft (the upsert) is not covered by a golden
-	// case: UpsertLearningRecordDraft sets updated_at via gorm.Expr("NOW()"),
-	// valid Postgres but not SQLite ("no such function: NOW"), so every call
-	// 500s against this harness regardless of the move -- a pre-existing gap
-	// (this route and its table were never in the SQLite test harness before
-	// EN-195), unrelated to the move, and carried into the module unchanged.
-	// See verification.md: UNVERIFIED here, rung 4 against a real Postgres
-	// (`make dev`) is what would settle it. The GET and DELETE draft routes
-	// don't go through that code path, so they're seeded and tested directly.
+	// The GET and DELETE draft routes don't go through UpsertDraft, so a
+	// draft is seeded directly to cover them independently of that route.
 	draft := learningrecord.LearningRecordEntry{UserID: w.resident.ID, ClientID: "draft-1", IsDraft: true, ProgramName: "Welding Basics", StepIndex: 1, UiPhase: "survey"}
 	require.NoError(t, env.DB.Create(&draft).Error)
 	for _, tt := range []struct {
