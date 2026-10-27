@@ -19,9 +19,11 @@ EN-195.
   (the `facility` type in `models.go`), the same way it reads `users` rows it
   doesn't own.
 - **Core still owns** the `learning_record` feature flag
-  (`models.LearningRecordAccess`) and the `learning_record_deleted` audit
-  action's string literal (`models.LearningRecordDeleted`), the same split
-  every other module's feature flag and audit actions use.
+  (`models.LearningRecordAccess`). The `learning_record_deleted` audit action
+  is this module's own private constant (`LearningRecordDeleted` in
+  `models.go`), not an import of core's `models.LearningRecordDeleted` --
+  depguard forbids that import, so it's duplicated like `UserAccountHistory`
+  itself. Core's copy has no remaining consumers after the move.
 
 ## Files
 
