@@ -5,9 +5,6 @@ name: Chart release
 #
 # This is a separate workflow from container_builds.yml on purpose: a
 # failure here must never block or delay the image build/deploy pipeline.
-#
-# KNOWN GAP (as of EN-183): the oci://<ecr>/charts repo this pushes to does
-# not exist yet. This workflow's push step will fail until it's created.
 on:
   push:
     tags:

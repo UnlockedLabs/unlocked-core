@@ -75,13 +75,14 @@ This chart is independently `helm pull`/`helm template`-able today, but
 ## Local verification
 
 ```bash
-helm lint chart/ --set host=test.example.com \
+FLAGS="--set host=test.example.com \
   --set images.server.repository=x --set images.server.tag=x \
   --set images.frontend.repository=x --set images.frontend.tag=x \
   --set s3.bucket=x --set s3.region=us-west-2 --set kiwixServerUrl=http://x \
   --set volumes.logs.pvName=x --set volumes.logs.pvcName=x --set volumes.logs.hostPath=/x --set volumes.logs.size=1Gi \
   --set volumes.thumbnails.pvName=x --set volumes.thumbnails.pvcName=x --set volumes.thumbnails.hostPath=/x --set volumes.thumbnails.size=1Gi \
-  --set volumes.jaspertmp.pvName=x --set volumes.jaspertmp.pvcName=x --set volumes.jaspertmp.hostPath=/x --set volumes.jaspertmp.size=1Gi
+  --set volumes.jaspertmp.pvName=x --set volumes.jaspertmp.pvcName=x --set volumes.jaspertmp.hostPath=/x --set volumes.jaspertmp.size=1Gi"
 
-helm template unlocked-core chart/ [... same --set flags ...]
+helm lint chart/ $FLAGS
+helm template unlocked-core chart/ $FLAGS
 ```
