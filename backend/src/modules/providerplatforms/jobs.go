@@ -24,6 +24,10 @@ var lmsJobs = []jobs.Type{jobs.GetCourses, jobs.GetMilestones, jobs.GetActivity}
 // and, outside dev, also runs them once at start. Brightspace runs weekly
 // instead, and not at start. The providers are read once, so a provider
 // added later is picked up at the next restart.
+//
+// It creates the jobs' cron_jobs and runnable_tasks rows first, one at a
+// time: the runs fire together, and nothing stops two of them creating the
+// same row.
 func scheduleJobs(s module.Scheduler, p *jobPublisher, dev bool) {
 	providers, err := p.store.getAllActiveProviderPlatforms()
 	if err != nil {
@@ -34,6 +38,9 @@ func scheduleJobs(s module.Scheduler, p *jobPublisher, dev bool) {
 	hour := 1
 	for _, provider := range providers {
 		for _, job := range lmsJobs {
+			if _, err := p.store.getOrCreateTask(context.Background(), newCronJob(job), provider.ID); err != nil {
+				log.Errorf("Failed to create the task for %s and provider %d: %v", job, provider.ID, err)
+			}
 			schedule := os.Getenv("MIDDLEWARE_CRON_SCHEDULE")
 			if provider.Type == Brightspace {
 				schedule = fmt.Sprintf("0 %d * * 4", hour)
@@ -69,13 +76,7 @@ type jobPublisher struct {
 // the task's last successful run. The worker marks the task pending again
 // when the job ends.
 func (p *jobPublisher) run(ctx context.Context, job jobs.Type, providerID uint) {
-	cj := cronJob{
-		ID:       uuid.NewString(),
-		Name:     string(job),
-		Category: providerPlatformJob,
-		Schedule: os.Getenv("MIDDLEWARE_CRON_SCHEDULE"),
-	}
-	task, err := p.store.getOrCreateTask(ctx, cj, providerID)
+	task, err := p.store.getOrCreateTask(ctx, newCronJob(job), providerID)
 	if err != nil {
 		log.Errorf("failed to find the task for %s and provider %d: %v", job, providerID, err)
 		return
@@ -94,6 +95,16 @@ func (p *jobPublisher) run(ctx context.Context, job jobs.Type, providerID uint) 
 		return
 	}
 	log.Info("Published job: ", job)
+}
+
+// newCronJob is job's cron_jobs row, for creating it the first time.
+func newCronJob(job jobs.Type) cronJob {
+	return cronJob{
+		ID:       uuid.NewString(),
+		Name:     string(job),
+		Category: providerPlatformJob,
+		Schedule: os.Getenv("MIDDLEWARE_CRON_SCHEDULE"),
+	}
 }
 
 // jobMsg asks the worker to run job for a provider: the same message core's

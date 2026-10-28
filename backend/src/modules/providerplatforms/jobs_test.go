@@ -132,6 +132,37 @@ func TestScheduleJobs(t *testing.T) {
 	}
 }
 
+// Scheduling creates every job's rows before any run, so runs that fire
+// together don't each create them.
+func TestScheduleJobsCreatesTasks(t *testing.T) {
+	t.Setenv("MIDDLEWARE_CRON_SCHEDULE", "0 22 * * *")
+	db := newTestDB(t)
+	createProvider(t, db, ProviderPlatform{Type: CanvasCloud, Name: "one"})
+	createProvider(t, db, ProviderPlatform{Type: CanvasCloud, Name: "two"})
+	createProvider(t, db, ProviderPlatform{Type: Kolibri, Name: "off", State: Disabled})
+	s := &fakeScheduler{}
+	pub := &published{}
+
+	scheduleJobs(s, &jobPublisher{store: &store{db: db}, publish: pub.publish}, false)
+
+	assert.Empty(t, pub.msgs, "nothing has run yet")
+	countRows := func() (cronJobs, tasks int64) {
+		require.NoError(t, db.Model(&cronJob{}).Count(&cronJobs).Error)
+		require.NoError(t, db.Model(&runnableTask{}).Count(&tasks).Error)
+		return cronJobs, tasks
+	}
+	cronJobs, tasks := countRows()
+	assert.Equal(t, int64(3), cronJobs, "one per job")
+	assert.Equal(t, int64(6), tasks, "one per job and active provider")
+
+	for _, run := range append(s.atStart, s.cron...) {
+		run()
+	}
+	cronJobs, tasks = countRows()
+	assert.Equal(t, int64(3), cronJobs)
+	assert.Equal(t, int64(6), tasks)
+}
+
 // A run creates the job's rows the first time, marks the task running and
 // publishes the message core's scheduler sent, with the task's last_run as
 // it is at that run.
