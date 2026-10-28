@@ -23,9 +23,8 @@ EN-195.
 - **Core still owns** the `learning_record` feature flag
   (`models.LearningRecordAccess`). The `learning_record_deleted` audit action
   is this module's own private constant (`LearningRecordDeleted` in
-  `models.go`), not an import of core's `models.LearningRecordDeleted` --
-  depguard forbids that import, so it's duplicated like `UserAccountHistory`
-  itself. Core's copy has no remaining consumers after the move.
+  `models.go`), not an import of core's -- depguard forbids that import, so
+  it's duplicated like `UserAccountHistory` itself.
 
 ## Files
 
@@ -58,7 +57,11 @@ EN-195.
   Confirmed against a live Postgres container, not just this SQLite
   harness — a pre-existing production bug, not introduced by the move, and
   not fixed here (out of scope for a move). The fix is
-  `clause.OnConflict{..., Where: clause.Where{Exprs: []clause.Expression{
-  clause.Expr{SQL: "deleted_at IS NULL"}}}}` in `store.go`'s `UpsertDraft`,
-  plus swapping `gorm.Expr("NOW()")` for a portable `CURRENT_TIMESTAMP`
-  (needed for the SQLite test, not for Postgres) — a follow-up ticket.
+  `clause.OnConflict{..., TargetWhere: clause.Where{Exprs: []clause.Expression{
+  clause.Expr{SQL: "deleted_at IS NULL"}}}}` in `store.go`'s `UpsertDraft` --
+  `TargetWhere` repeats the index's predicate on the conflict target itself;
+  `Where` instead conditions the `DO UPDATE`, which doesn't match the index
+  either (confirmed against a live Postgres container: it fails a different
+  way, `42702` ambiguous column, not `42P10`). Also swap `gorm.Expr("NOW()")`
+  for a portable `CURRENT_TIMESTAMP` (needed for the SQLite test, not for
+  Postgres) — a follow-up ticket.

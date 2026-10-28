@@ -128,8 +128,9 @@ func (db *Store) GetDraft(userID uint) (*LearningRecordEntry, error) {
 	return &draft, nil
 }
 
-// UpsertDraft's ON CONFLICT target doesn't match migration 00069's partial
-// unique index, so it 500s on every call, in production too -- see README.md's
+// UpsertDraft inserts or updates a draft row keyed on (user_id, client_id).
+// Its ON CONFLICT target doesn't match migration 00069's partial unique
+// index, so it 500s on every call, in production too -- see README.md's
 // Tests section.
 func (db *Store) UpsertDraft(draft *LearningRecordEntry) error {
 	draft.IsDraft = true
