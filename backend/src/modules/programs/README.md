@@ -33,13 +33,14 @@ EN-194.
   of their own (`Route.Allow`), which `handlers.go` copies from core's
   resolvers.
 - **Some code outside the module imports its insides:**
-  - provider-middleware and `backend/seeder`, until EN-197;
+  - `backend/seeder`;
   - the integration tests, which build their data with its types and call its
     queries through `env.Programs` (the exported `Store`). depguard exempts
     `backend/tests/integration` for this.
+- **Class activation** runs in the scheduler from `RegisterJobs` (`jobs.go`),
+  every morning at 5 and once at start outside dev, with its queries in
+  `program_classes_store.go`.
 - **Core still owns:**
-  - the `activate_scheduled_classes` job, which core's scheduler sends and
-    provider-middleware runs, until EN-197;
   - plain SQL reads of Programs' tables: the facility list's counts and the
     facility delete check, until EN-200, and the account history's join on
     `program_classes_history`.
@@ -48,7 +49,8 @@ EN-194.
 
 | File | What it holds |
 |---|---|
-| `module.go` | Registers the routes, opens the Canvas cache buckets, lists the test tables, answers `Deps.LiveProviders` |
+| `module.go` | Registers the routes and class activation, opens the Canvas cache buckets, lists the test tables, answers `Deps.LiveProviders` |
+| `jobs.go` | Class activation |
 | `handlers.go` | The routes, with their access levels, checks and feature flags |
 | `programs_handler.go`, `program_class_tier_handler.go`, `classes_handler.go`, `class_events.go`, `class_enrollments.go`, `events_attendance_handler.go`, `reports_handler.go`, `facilities_handler.go`, `users_handler.go` | The handlers |
 | `classes_service.go`, `users_service.go` | Class details, missing attendance and facility health; a resident's weekly attendance trend |

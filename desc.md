@@ -92,7 +92,8 @@ Per row: **Confirm**, **Link existing**, **Create**. In bulk: **Confirm all** on
 
 - **Three nightly jobs fail.** The scheduler builds `get_courses`, `get_milestones` and
   `get_activity` for Essential Ed because the platform is enabled, and all three fail: there is no
-  Essential Ed service in provider-middleware, by design. They fail cleanly and only fire on
+  Essential Ed sync in the Provider Platforms worker, by design. The worker logs
+  `unsupported provider type: essential_ed` and leaves the task marked running. They only fire on
   `MIDDLEWARE_CRON_SCHEDULE` (default `0 22 * * *`).
 - **`account_id` is wrong.** The Add dialog hardcodes `account_id: '1'` and neither dialog exposes
   a field for it. It should be the district, `303`. Nothing reads it today — the class URL is just
@@ -118,7 +119,7 @@ Full instructions are in `README.md`. The short version:
   `make seed` sets the rest.
 
 **The one people get wrong:** `base_url` is `http://canvas`, *not* `localhost:3001`. The API is
-called from inside the `server` and `provider-service` containers, so it needs the compose service
+called from inside the `server` and `providerplatforms-worker` containers, so it needs the compose service
 name. `localhost:3001` only works from your browser.
 
 ### Gotchas not in the README
@@ -129,8 +130,8 @@ name. `localhost:3001` only works from your browser.
 - **Canvas tokens are per-machine and expire.** A stale one shows up as
   `canvas API returned 401` in the server log while the platform still looks correctly configured
   and every call quietly fails. Worth checking first if Canvas data is missing.
-- **A panic does not restart the container in dev** and `RestartCount` stays 0, because
-  `provider-service` runs under `air`, which doesn't bring the inner process back. Grep the logs
+- **A panic in the server does not restart it in dev** and `RestartCount` stays 0, because
+  `server` runs under `air`, which doesn't bring the inner process back. Grep the logs
   for `panic` instead of trusting container state.
 - **gopls goes stale** and will report compiler errors that aren't real. Trust `go build` over the
   editor; restart the language server if it gets confused.

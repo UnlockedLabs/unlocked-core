@@ -83,7 +83,7 @@ jobs:
 
       - id: build-images
         run: |
-          # Every push builds and tags all three images — a partial set (gated
+          # Every push builds and tags both images — a partial set (gated
           # on which folder changed) can't be pinned per-site, can't tell you
           # what staging actually tested, and drops a build's changes entirely
           # if a later push's run replaces it in the concurrency queue.

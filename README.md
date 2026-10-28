@@ -124,7 +124,7 @@ If this does not work because your directory is named something different, you c
   the one value that can't be seeded, since you mint it per machine.
 
   **Note** the base url is `http://canvas`, not `localhost:3001`. UnlockEd calls the Canvas API
-  from inside the `server` and `provider-service` containers, so it needs the compose service
+  from inside the `server` and `providerplatforms-worker` containers, so it needs the compose service
   name. `localhost:3001` only works from your browser.
 
  - **Videos**:
@@ -186,7 +186,7 @@ and our conventional commits (CI checks every commit subject and the PR title).
    `CHANGELOG.md` entry.
 2. When it's time to release, review and merge that PR. It tags `vX.Y.Z` and
    creates the GitHub Release.
-3. CI then builds `frontend`, `unlockedv2` and `provider_middleware` at `X.Y.Z`
+3. CI then builds `frontend` and `unlockedv2` at `X.Y.Z`
    in ECR. Staging keeps following `:latest` from `main`.
 
 `feat` bumps the minor version, `fix` the patch, and a breaking change (`!`)
