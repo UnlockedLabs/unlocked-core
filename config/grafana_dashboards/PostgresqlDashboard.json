@@ -85,7 +85,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "select * from (\r\nselect 'Libraries' as content_type, count(f.id) from open_content_favorites f\r\nJOIN open_content_providers ocp ON ocp.id = f.open_content_provider_id\r\n        AND ocp.currently_enabled = TRUE\r\n        AND ocp.deleted_at IS NULL\r\nJOIN libraries lib ON lib.open_content_provider_id = ocp.id \r\n        AND lib.id = f.content_id\r\nUnion all\r\nselect 'Videos' as content_type, count(f.id) from open_content_favorites f\r\nJOIN open_content_providers ocp ON ocp.id = f.open_content_provider_id\r\n        AND ocp.currently_enabled = TRUE\r\n        AND ocp.deleted_at IS NULL\r\nJOIN videos vid ON vid.open_content_provider_id = ocp.id \r\n        AND vid.id = f.content_id\r\nunion all\r\nselect 'Helpful Links' as content_type, count(f.id) from open_content_favorites f\r\nJOIN open_content_providers ocp ON ocp.id = f.open_content_provider_id\r\n        AND ocp.currently_enabled = TRUE\r\n        AND ocp.deleted_at IS NULL\r\nJOIN helpful_links hel ON hel.open_content_provider_id = ocp.id \r\n        AND hel.id = f.content_id\r\n) order by 2 desc;\r\n",
+          "rawSql": "select * from (\r\nselect 'Libraries' as content_type, count(f.id) from open_content.open_content_favorites f\r\nJOIN open_content.open_content_providers ocp ON ocp.id = f.open_content_provider_id\r\n        AND ocp.currently_enabled = TRUE\r\n        AND ocp.deleted_at IS NULL\r\nJOIN open_content.libraries lib ON lib.open_content_provider_id = ocp.id \r\n        AND lib.id = f.content_id\r\nUnion all\r\nselect 'Videos' as content_type, count(f.id) from open_content.open_content_favorites f\r\nJOIN open_content.open_content_providers ocp ON ocp.id = f.open_content_provider_id\r\n        AND ocp.currently_enabled = TRUE\r\n        AND ocp.deleted_at IS NULL\r\nJOIN open_content.videos vid ON vid.open_content_provider_id = ocp.id \r\n        AND vid.id = f.content_id\r\nunion all\r\nselect 'Helpful Links' as content_type, count(f.id) from open_content.open_content_favorites f\r\nJOIN open_content.open_content_providers ocp ON ocp.id = f.open_content_provider_id\r\n        AND ocp.currently_enabled = TRUE\r\n        AND ocp.deleted_at IS NULL\r\nJOIN open_content.helpful_links hel ON hel.open_content_provider_id = ocp.id \r\n        AND hel.id = f.content_id\r\n) order by 2 desc;\r\n",
           "refId": "A",
           "sql": {
             "columns": [
@@ -294,7 +294,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "select u.username, count(ocf.id) num_of_features  from open_content_favorites ocf \r\n\r\ninner join users u on u.id = ocf.user_id \r\ninner join facilities f on f.id = u.facility_id\r\n\r\nwhere ocf.facility_id is not null\r\n\r\ngroup by u.username\r\n;",
+          "rawSql": "select u.username, count(ocf.id) num_of_features  from open_content.open_content_favorites ocf \r\n\r\ninner join users u on u.id = ocf.user_id \r\ninner join facilities f on f.id = u.facility_id\r\n\r\nwhere ocf.facility_id is not null\r\n\r\ngroup by u.username\r\n;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -396,7 +396,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "select u.username, count(ocf.id) num_of_favs  from open_content_favorites ocf \r\n\r\ninner join users u on u.id = ocf.user_id \r\ninner join facilities f on f.id = u.facility_id\r\n\r\nwhere ocf.facility_id is null\r\n\r\ngroup by u.username\r\n;\r\n",
+          "rawSql": "select u.username, count(ocf.id) num_of_favs  from open_content.open_content_favorites ocf \r\n\r\ninner join users u on u.id = ocf.user_id \r\ninner join facilities f on f.id = u.facility_id\r\n\r\nwhere ocf.facility_id is null\r\n\r\ngroup by u.username\r\n;\r\n",
           "refId": "A",
           "sql": {
             "columns": [

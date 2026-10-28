@@ -34,7 +34,10 @@ activity and the content proxies. It moved here from core in EN-192.
   (`database.OpenModuleDBs`). Each connection switches with
   `SET ROLE open_content` and `search_path = open_content, public`, so queries
   stay unqualified and no site needs a new password.
-- **Tables a later migration adds here** get the role's grants automatically.
+- **Later migrations must create tables as `open_content.<name>`.** Module
+  migrations run on core's connection, so an unqualified table lands in
+  `public`, where the role can't use it. Tables created here get the role's
+  grants automatically.
 - **On SQLite** (the tests) there are no schemas or roles, so Open Content
   uses core's connection.
 

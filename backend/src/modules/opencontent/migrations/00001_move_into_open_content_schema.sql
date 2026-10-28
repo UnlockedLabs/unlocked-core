@@ -22,7 +22,9 @@ ALTER TABLE public.video_download_attempts SET SCHEMA open_content;
 
 -- The role can't log in: the app connects as its own user and switches to
 -- open_content with SET ROLE, so no new password is needed. Roles belong to
--- the whole Postgres server, so it may already exist.
+-- the whole Postgres server, so it may already exist. This assumes one
+-- Unlocked database per server: a second one with a different app user fails
+-- at the GRANT below, and its Down can't drop a role another database uses.
 -- +goose StatementBegin
 DO $$
 BEGIN
