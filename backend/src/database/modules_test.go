@@ -67,7 +67,7 @@ func TestSeedModules(t *testing.T) {
 			plainModule{"none"},
 			seedingModule{plainModule: plainModule{"second"}, calls: &calls},
 		}
-		require.NoError(t, seedModules(ctx, nil, 7, mods))
+		require.NoError(t, seedModules(ctx, ModuleDBs{}, 7, mods))
 		assert.Equal(t, []seedCall{{"first", 99999, 7}, {"second", 99999, 7}}, calls)
 	})
 
@@ -77,8 +77,23 @@ func TestSeedModules(t *testing.T) {
 			seedingModule{plainModule: plainModule{"broken"}, calls: &calls, err: errors.New("boom")},
 			seedingModule{plainModule: plainModule{"after"}, calls: &calls},
 		}
-		err := seedModules(ctx, nil, 7, mods)
+		err := seedModules(ctx, ModuleDBs{}, 7, mods)
 		require.ErrorContains(t, err, "seed module broken: boom")
 		assert.Equal(t, []seedCall{{"broken", 99999, 7}}, calls)
 	})
+}
+
+// schemaModule keeps its tables in their own schema.
+type schemaModule struct{ plainModule }
+
+func (schemaModule) Schema() string { return "own" }
+
+// The SQLite tests have no schemas, so every module, even one with its own
+// schema, shares core's connection there.
+func TestModuleDBsShareCoreOnSQLite(t *testing.T) {
+	core := InitDB(context.Background(), true).DB
+	dbs := OpenModuleDBs(core, []module.Module{plainModule{"plain"}, schemaModule{plainModule{"withschema"}}})
+	for _, name := range []string{"plain", "withschema", "missing"} {
+		assert.Same(t, core, dbs.For(name), name)
+	}
 }

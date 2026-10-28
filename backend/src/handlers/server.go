@@ -41,6 +41,7 @@ type Server struct {
 	wsClient          *ClientManager
 	scheduler         *tasks.Scheduler
 	modules           []module.Module
+	moduleDBs         database.ModuleDBs
 	openContent       ocapi.OpenContent
 	providerPlatforms ppapi.ProviderPlatforms
 	programs          programsapi.Programs
@@ -181,6 +182,8 @@ func newServer(ctx context.Context) *Server {
 	if db == nil {
 		return nil
 	}
+	mods := registry.All()
+	moduleDBs := database.OpenModuleDBs(db.DB, mods)
 	server := Server{
 		port:              port,
 		Db:                db,
@@ -189,8 +192,9 @@ func newServer(ctx context.Context) *Server {
 		Client:            &http.Client{},
 		nats:              conn,
 		dev:               dev,
-		modules:           registry.All(),
-		openContent:       registry.OpenContent(db.DB),
+		modules:           mods,
+		moduleDBs:         moduleDBs,
+		openContent:       registry.OpenContent(moduleDBs.For),
 		providerPlatforms: registry.ProviderPlatforms(db.DB),
 		programs:          registry.Programs(db.DB),
 	}
@@ -209,7 +213,7 @@ func newServer(ctx context.Context) *Server {
 	}
 	server.wsClient = newClientManager()
 	if tasks.ServerRunsJobs() {
-		server.scheduler = tasks.Start(dev, server.nats, server.Db.DB, server.modules)
+		server.scheduler = tasks.Start(dev, server.nats, server.Db.DB, server.modules, server.moduleDBs)
 	} else {
 		log.Info("RUN_SCHEDULER=false: background jobs run in the scheduler process, not here")
 	}
@@ -219,6 +223,8 @@ func newServer(ctx context.Context) *Server {
 func newTestingServer() *Server {
 	db := database.InitDB(context.Background(), true)
 	features := models.AllFeatures
+	mods := registry.All()
+	moduleDBs := database.OpenModuleDBs(db.DB, mods)
 	return &Server{
 		Db:                db,
 		Mux:               http.NewServeMux(),
@@ -226,8 +232,9 @@ func newTestingServer() *Server {
 		Client:            nil,
 		features:          features,
 		testingMode:       true,
-		modules:           registry.All(),
-		openContent:       registry.OpenContent(db.DB),
+		modules:           mods,
+		moduleDBs:         moduleDBs,
+		openContent:       registry.OpenContent(moduleDBs.For),
 		providerPlatforms: registry.ProviderPlatforms(db.DB),
 		programs:          registry.Programs(db.DB),
 	}

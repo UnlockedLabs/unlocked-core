@@ -1,0 +1,14 @@
+{
+  "data": {
+    "classes": 0,
+    "login_activity": 0,
+    "open_content_activity": 1,
+    "open_content_favorites": 0,
+    "programs": 0,
+    "rooms": 0,
+    "user_history": 0,
+    "users": 0,
+    "visibility_statuses": 0
+  },
+  "message": "cannot delete: facility has associated records"
+}

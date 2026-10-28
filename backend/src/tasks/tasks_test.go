@@ -61,7 +61,8 @@ func TestStart(t *testing.T) {
 
 	var got module.Deps
 	// dev skips the run-everything-at-start, which needs NATS.
-	s := Start(true, nil, db.DB, []module.Module{jobModule{deps: &got}})
+	mods := []module.Module{jobModule{deps: &got}}
+	s := Start(true, nil, db.DB, mods, database.OpenModuleDBs(db.DB, mods))
 	t.Cleanup(func() { _ = s.Shutdown() })
 
 	if got.DB != db.DB {

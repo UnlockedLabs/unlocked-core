@@ -31,12 +31,16 @@ type Module struct{}
 
 var (
 	_ module.Module     = Module{}
+	_ module.Schema     = Module{}
 	_ module.Seeder     = Module{}
 	_ module.TestModels = Module{}
 	_ module.Worker     = Module{}
 )
 
 func (Module) Name() string { return "opencontent" }
+
+// Schema is the Postgres schema that holds Open Content's tables.
+func (Module) Schema() string { return "open_content" }
 
 // Register adds Open Content's routes. A failure to reach AWS or NATS stops
 // the server, as it did when core set them up.

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
 	ppapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api"
@@ -57,14 +58,14 @@ func InitScheduling(dev bool, nats *nats.Conn, db *gorm.DB) *Scheduler {
 	return &runner
 }
 
-// Start schedules every background job: core's and each feature module's. The
-// scheduler process (`backend scheduler`) calls it, and so does the API server
-// while ServerRunsJobs is true.
-func Start(dev bool, nats *nats.Conn, db *gorm.DB, mods []module.Module) *Scheduler {
+// Start schedules every background job: core's and each feature module's, each
+// module's on its own connection (moduleDBs). The scheduler process (`backend
+// scheduler`) calls it, and so does the API server while ServerRunsJobs is
+// true.
+func Start(dev bool, nats *nats.Conn, db *gorm.DB, mods []module.Module, moduleDBs database.ModuleDBs) *Scheduler {
 	s := InitScheduling(dev, nats, db)
-	deps := module.Deps{DB: db, NATS: nats}
 	for _, m := range mods {
-		m.RegisterJobs(s, deps)
+		m.RegisterJobs(s, module.Deps{DB: moduleDBs.For(m.Name()), NATS: nats})
 	}
 	return s
 }

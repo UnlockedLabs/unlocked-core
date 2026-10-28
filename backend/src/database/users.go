@@ -601,34 +601,16 @@ func (db *DB) GetUserSessionEngagement(userID int, days int) ([]models.SessionEn
 	return sessionEngagement, nil
 }
 
-func (db *DB) GetUserOpenContentEngagement(userID int) (*models.EngagementActivityMetrics, error) {
+// GetUserEngagement is core's part of a resident's engagement: when they
+// joined and last logged in. The handler adds Open Content's reading time.
+func (db *DB) GetUserEngagement(userID int) (*models.EngagementActivityMetrics, error) {
 	var engagementActivityMetrics models.EngagementActivityMetrics
 	query := db.Table("users u").
 		Select(`u.id as user_id,
-		COUNT(DISTINCT CAST(oca.request_ts AS DATE)) AS total_active_days_monthly,
-		AVG(EXTRACT(EPOCH FROM (oca.stop_ts - oca.request_ts)) / 3600) AS total_hours_active_monthly,
-		SUM(EXTRACT(EPOCH FROM (oca.stop_ts - oca.request_ts)) / 3600) / 4 AS total_hours_active_weekly,
-		SUM(EXTRACT(EPOCH FROM (oca.stop_ts - oca.request_ts)) / 60) / 4 AS total_minutes_active_weekly,
-		SUM(
-			CASE
-				WHEN oca.request_ts >= date_trunc('week', CURRENT_DATE)
-				THEN EXTRACT(EPOCH FROM (oca.stop_ts - oca.request_ts)) / 3600
-				ELSE 0
-			END
-		) AS total_hours_engaged,
-		SUM(
-			CASE
-				WHEN oca.request_ts >= date_trunc('week', CURRENT_DATE)
-				THEN EXTRACT(EPOCH FROM (oca.stop_ts - oca.request_ts)) / 60
-				ELSE 0
-			END
-		) AS total_minutes_engaged,
 		COALESCE(l.last_login, NULL) AS last_active_date,
 		u.created_at as joined`).
 		Joins("LEFT JOIN login_metrics l ON l.user_id = u.id").
-		Joins("LEFT JOIN open_content_activities oca ON oca.user_id = u.id").
-		Where("u.id = ?", userID).
-		Group("u.id, l.last_login, u.created_at")
+		Where("u.id = ?", userID)
 
 	if err := query.Find(&engagementActivityMetrics).Error; err != nil {
 		return nil, NewDBError(err, "error getting engagement_activity")

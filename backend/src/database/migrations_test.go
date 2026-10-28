@@ -3,13 +3,19 @@ package database
 import (
 	"context"
 	"database/sql"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
+
 	_ "github.com/glebarez/go-sqlite"
+	"github.com/pressly/goose/v3"
 )
 
 func TestCoreMigrationsPending(t *testing.T) {
@@ -145,6 +151,9 @@ func TestWaitForMigrations(t *testing.T) {
 					}
 				}
 			}
+			if tt.want {
+				markModulesMigrated(t, db)
+			}
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -162,5 +171,33 @@ func TestWaitForMigrations(t *testing.T) {
 				t.Fatal("WaitForMigrations() kept waiting")
 			}
 		})
+	}
+}
+
+// markModulesMigrated records every module's migrations as applied in its
+// ledger, as the migration runner does.
+func markModulesMigrated(t *testing.T, db *sql.DB) {
+	t.Helper()
+	for _, m := range registry.All() {
+		files, err := fs.Glob(m.Migrations(), "migrations/*.sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(files) == 0 {
+			continue
+		}
+		ledger := module.LedgerTable(m.Name())
+		if _, err := db.Exec(`CREATE TABLE ` + ledger + ` (version_id INTEGER, is_applied BOOLEAN)`); err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range files {
+			version, err := goose.NumericComponent(path.Base(f))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.Exec(`INSERT INTO `+ledger+` VALUES (?, true)`, version); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 }

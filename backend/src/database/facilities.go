@@ -38,8 +38,6 @@ func (db *DB) GetAllFacilitiesWithStats(args *models.QueryContext) ([]models.Fac
 				OR EXISTS(SELECT 1 FROM program_classes WHERE facility_id = f.id AND deleted_at IS NULL)
 				OR EXISTS(SELECT 1 FROM facilities_programs WHERE facility_id = f.id AND deleted_at IS NULL)
 				OR EXISTS(SELECT 1 FROM rooms WHERE facility_id = f.id AND deleted_at IS NULL)
-				OR EXISTS(SELECT 1 FROM open_content_activities WHERE facility_id = f.id)
-				OR EXISTS(SELECT 1 FROM open_content_favorites WHERE facility_id = f.id)
 				OR EXISTS(SELECT 1 FROM user_account_history WHERE facility_id = f.id)
 			) AS can_delete
 		FROM facilities f
