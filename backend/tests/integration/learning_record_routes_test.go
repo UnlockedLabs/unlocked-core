@@ -129,8 +129,8 @@ func TestLearningRecordRoutes(t *testing.T) {
 	}
 
 	// The HTTP response never shows who recorded the deletion; the audit
-	// trail (EN-195's move puts this update_user_id/admin_id write through a
-	// module Store.WithUserContext instead of core's) does.
+	// trail (written through Store.WithUserContext, which records the actor
+	// from the request's identity claims) does.
 	t.Run("entry_delete_records_audit_history", func(t *testing.T) {
 		var history struct {
 			Action           string
@@ -152,10 +152,9 @@ func TestLearningRecordRoutes(t *testing.T) {
 		require.Equal(t, "", *history.AttendanceStatus)
 	})
 
-	// The assertion above reads the row; this reads the endpoint that serves
-	// it. attendance_status is what the move regressed, and an admin calling
-	// account-history is the consumer that sees it, so pin it at that
-	// boundary too (the same route programs' test pins).
+	// The assertion above reads the row directly; this reads the endpoint
+	// that serves it to an admin, the real consumer of attendance_status, so
+	// both boundaries are pinned (the same two-level pin programs' test uses).
 	t.Run("account_history_endpoint", func(t *testing.T) {
 		admin, err := env.CreateTestUser("lradmin", models.FacilityAdmin, w.north.ID, "")
 		require.NoError(t, err)
@@ -168,8 +167,7 @@ func TestLearningRecordRoutes(t *testing.T) {
 }
 
 // TestLearningRecordRouteAccess pins each route's access level and feature
-// flag, the part of a route most easily lost in a move (plan-adversary
-// PARITY finding).
+// flag against every route this module registers.
 func TestLearningRecordRouteAccess(t *testing.T) {
 	env := SetupTestEnv(t)
 	defer env.CleanupTestEnv()
@@ -197,8 +195,9 @@ func TestLearningRecordRouteAccess(t *testing.T) {
 				ExpectStatus(http.StatusUnauthorized).ExpectMessage("Feature not enabled")
 
 			// Every route is anyUser: a resident with the feature gets past
-			// auth. The body isn't valid JSON, so a route that reads one
-			// stops there without side effects.
+			// auth. The body isn't valid JSON; a route that reads one
+			// (POST/PUT) rejects it before doing anything else. DELETE never
+			// reads a body, so it still runs its normal delete here.
 			resp := NewRequest[any](client, t, rt.method, rt.path, "not an object").
 				WithTestClaims(w.claims(w.resident)).AsRaw().Do()
 			require.NotEqual(t, http.StatusUnauthorized, resp.resp.StatusCode, resp.rawBody)
