@@ -244,7 +244,10 @@ func (db *DB) DeleteUser(id int) error {
 		if result.RowsAffected == 0 {
 			return newDeleteDBError(gorm.ErrRecordNotFound, "users")
 		}
-		if err := registry.ProviderPlatforms(tx).DeleteUserMappings(context.Background(), uint(id)); err != nil {
+		err := AsModule(tx, "providerplatforms", func(tx *gorm.DB) error {
+			return registry.ProviderPlatforms(tx).DeleteUserMappings(context.Background(), uint(id))
+		})
+		if err != nil {
 			return newDeleteDBError(err, "provider_user_mappings")
 		}
 		return nil

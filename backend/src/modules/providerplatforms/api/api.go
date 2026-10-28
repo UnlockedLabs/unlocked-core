@@ -29,8 +29,8 @@ type ProviderPlatforms interface {
 	UserMappings(ctx context.Context, userID uint) ([]Mapping, error)
 	// MappedUserIDs is the users linked to an account at the provider.
 	MappedUserIDs(ctx context.Context, providerID uint) ([]uint, error)
-	// DeleteUserMappings unlinks every provider account from the user. Get the
-	// api with registry.ProviderPlatforms(tx) to make it part of a transaction.
+	// DeleteUserMappings unlinks every provider account from the user. To make
+	// it part of core's transaction, run it inside database.AsModule.
 	DeleteUserMappings(ctx context.Context, userID uint) error
 
 	// The users linked to the given accounts at a provider, for Programs'

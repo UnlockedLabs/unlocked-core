@@ -35,7 +35,9 @@ func OpenContent(db func(name string) *gorm.DB) ocapi.OpenContent {
 	return opencontent.NewAPI(db(opencontent.Module{}.Name()))
 }
 
-// ProviderPlatforms is Provider Platforms' answers to core, reading db.
+// ProviderPlatforms is Provider Platforms' answers to core, reading db: the
+// module's own connection (database.ModuleDBs.For), or core's transaction
+// while it runs as the module (database.AsModule).
 func ProviderPlatforms(db *gorm.DB) ppapi.ProviderPlatforms {
 	return providerplatforms.NewAPI(db)
 }
