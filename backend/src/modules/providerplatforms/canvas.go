@@ -11,7 +11,6 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"gorm.io/gorm"
 )
 
 type CanvasService struct {
@@ -124,21 +123,19 @@ func (srv *CanvasService) fetchCanvasUsers() ([]ImportUser, error) {
 }
 
 // GetUsers returns only Canvas users that have not yet been mapped to an UnlockEd user.
-func (srv *CanvasService) GetUsers(db *gorm.DB) ([]ImportUser, error) {
+func (srv *CanvasService) GetUsers(st *store) ([]ImportUser, error) {
 	all, err := srv.fetchCanvasUsers()
 	if err != nil {
 		return nil, err
 	}
 	unmapped := make([]ImportUser, 0, len(all))
 	for _, u := range all {
-		var count int64
-		if err := db.Model(&ProviderUserMapping{}).
-			Where("external_user_id = ? AND provider_platform_id = ?", u.ExternalUserID, srv.ProviderPlatformID).
-			Count(&count).Error; err != nil {
+		mapped, err := st.isUserMapped(srv.ProviderPlatformID, u.ExternalUserID)
+		if err != nil {
 			log.Errorf("Error counting provider_user_mappings: %v", err)
 			continue
 		}
-		if count > 0 {
+		if mapped {
 			log.Printf("User %s already mapped, skipping", u.ExternalUserID)
 			continue
 		}
@@ -159,7 +156,7 @@ func (srv *CanvasService) GetAllUsers() ([]ImportUser, error) {
 	return users, nil
 }
 
-func (srv *CanvasService) ImportCourses(db *gorm.DB) error {
+func (srv *CanvasService) ImportCourses(st *store) error {
 	url := srv.BaseURL + "/api/v1/accounts/" + srv.AccountID + "/courses?include[]=course_image&include[]=public_description"
 	resp, err := srv.SendRequest(url)
 	if err != nil {
@@ -181,15 +178,13 @@ func (srv *CanvasService) ImportCourses(db *gorm.DB) error {
 	}
 	for _, course := range courses {
 		id := int(course["id"].(float64))
-		var count int64 = 0
 		log.Infof("importing course %d", id)
-		if db.Table("courses").Where("provider_platform_id = ?", srv.ProviderPlatformID).
-			Where("external_id = ?", fmt.Sprintf("%d", id)).
-			Count(&count).Error != nil {
+		exists, err := st.courseExists(srv.ProviderPlatformID, fmt.Sprintf("%d", id))
+		if err != nil {
 			log.Error("error getting count of provider courses")
 			continue
 		}
-		if count > 0 {
+		if exists {
 			log.Debug("skipping course id: ", id)
 			continue
 		}
@@ -233,7 +228,7 @@ func (srv *CanvasService) ImportCourses(db *gorm.DB) error {
 		if date, ok := course["end_at"].(string); ok {
 			unlockedCourse.EndDt = parseDate(date, datePattern)
 		}
-		if err = db.Create(&unlockedCourse).Error; err != nil {
+		if err = st.createCourse(&unlockedCourse); err != nil {
 			log.Printf("Failed to create course: %v", err)
 			continue
 		}
@@ -338,7 +333,7 @@ func (srv *CanvasService) getUsersSubmissionsForCourse(courseId string, queryStr
 *
 * Quizzes are included in assignments so we don't need to get them separately
 * */
-func (srv *CanvasService) ImportMilestones(courseIdPair map[string]any, mapping []map[string]any, db *gorm.DB, lastRun time.Time) error {
+func (srv *CanvasService) ImportMilestones(courseIdPair map[string]any, mapping []map[string]any, st *store, lastRun time.Time) error {
 	courseId, ok := dbUint(courseIdPair, "course_id")
 	if !ok {
 		return fmt.Errorf("unexpected type %T for course_id in course mapping", courseIdPair["course_id"])
@@ -382,7 +377,7 @@ func (srv *CanvasService) ImportMilestones(courseIdPair map[string]any, mapping 
 			Type:        "assignment_submission",
 			IsCompleted: submission["workflow_state"] == "complete" || submission["workflow_state"] == "graded",
 		}
-		if createErr := db.Create(&milestone).Error; createErr != nil {
+		if createErr := st.createMilestone(&milestone); createErr != nil {
 			log.WithFields(fields).Errorln("failed to create assignment_submission milestone: ", createErr)
 		}
 		_, ok := submission["grade"].(string)
@@ -399,7 +394,7 @@ func (srv *CanvasService) ImportMilestones(courseIdPair map[string]any, mapping 
 				Type:        "grade_received",
 				IsCompleted: true,
 			}
-			if createErr := db.Create(&gradeReceived).Error; createErr != nil {
+			if createErr := st.createMilestone(&gradeReceived); createErr != nil {
 				log.WithFields(fields).Errorln("failed to create grade_received milestone: ", createErr)
 				continue
 			}
@@ -457,7 +452,7 @@ func (srv *CanvasService) getEnrollmentsForCourse(courseId string) ([]map[string
 	return enrollments, nil
 }
 
-func (srv *CanvasService) ImportActivityForCourse(coursePair map[string]any, db *gorm.DB) error {
+func (srv *CanvasService) ImportActivityForCourse(coursePair map[string]any, st *store) error {
 	courseId, ok := dbUint(coursePair, "course_id")
 	if !ok {
 		return fmt.Errorf("unexpected type %T for course_id in course mapping", coursePair["course_id"])
@@ -470,21 +465,25 @@ func (srv *CanvasService) ImportActivityForCourse(coursePair map[string]any, db 
 	}
 	for _, enrollment := range enrollments {
 		userId := fmt.Sprintf("%d", int(enrollment["user_id"].(float64)))
-		var userID uint
-		err := db.Model(ProviderUserMapping{}).Select("user_id").First(&userID, "provider_platform_id = ? AND external_user_id = ?", srv.ProviderPlatformID, userId).Error
+		userID, err := st.getMappedUserID(srv.ProviderPlatformID, userId)
 		if err != nil {
 			log.Printf("Failed to get user: %v", err)
 			continue
 		}
-		if db.Model(&UserEnrollment{}).First(&UserEnrollment{}, "user_id = ? AND course_id = ?", userID, courseId).RowsAffected == 0 {
-			if err := db.Create(&UserEnrollment{UserID: userID, CourseID: courseId}).Error; err != nil {
+		enrolled, err := st.enrollmentExists(userID, courseId)
+		if err != nil {
+			log.WithFields(log.Fields{"userId": userID, "course_id": courseId, "error": err}).Error("Failed to check enrollment")
+			continue
+		}
+		if !enrolled {
+			if err := st.createEnrollment(userID, courseId); err != nil {
 				log.WithFields(log.Fields{"userId": userID, "course_id": courseId, "error": err}).Error("Failed to create enrollment")
 				continue
 			}
 		}
 		totalTime := uint(enrollment["total_activity_time"].(float64))
 		// NOTE: this is calling a stored procedure to calculate the time delta
-		if err := db.Exec("CALL insert_daily_activity_canvas(?, ?, ?, ?, ?, ?)", userID, courseId, "course_interaction", totalTime, externalId, time.Now()).Error; err != nil {
+		if err := st.insertDailyActivity("insert_daily_activity_canvas", userID, courseId, "course_interaction", totalTime, externalId); err != nil {
 			log.WithFields(log.Fields{"userId": userID, "course_id": courseId, "error": err}).Error("Failed to create activity")
 			continue
 		}

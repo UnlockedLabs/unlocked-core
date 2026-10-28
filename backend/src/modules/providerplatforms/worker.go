@@ -35,15 +35,15 @@ const (
 
 // lmsService is one provider's connection: Canvas, Brightspace or Kolibri.
 type lmsService interface {
-	GetUsers(db *gorm.DB) ([]ImportUser, error)
-	ImportCourses(db *gorm.DB) error
-	ImportMilestones(coursePair map[string]any, mappings []map[string]any, db *gorm.DB, lastRun time.Time) error
-	ImportActivityForCourse(coursePair map[string]any, db *gorm.DB) error
+	GetUsers(st *store) ([]ImportUser, error)
+	ImportCourses(st *store) error
+	ImportMilestones(coursePair map[string]any, mappings []map[string]any, st *store, lastRun time.Time) error
+	ImportActivityForCourse(coursePair map[string]any, st *store) error
 	GetJobParams() map[string]any
 }
 
 type worker struct {
-	db *gorm.DB
+	store *store
 }
 
 // run subscribes to the LMS jobs and serves the user lists until ctx is
@@ -106,7 +106,7 @@ func (w *worker) handleCourses(ctx context.Context, msg *nats.Msg) {
 	params := service.GetJobParams()
 	jobId := params["job_id"].(string)
 	providerPlatformId := int(params["provider_platform_id"].(float64))
-	success := service.ImportCourses(w.db) == nil
+	success := service.ImportCourses(w.store) == nil
 	w.cleanupJob(ctx, providerPlatformId, jobId, success)
 }
 
@@ -124,7 +124,7 @@ func (w *worker) handleUsers(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "Failed to initialize provider service", providerServiceStatus(err))
 		return
 	}
-	users, err := service.GetUsers(w.db)
+	users, err := service.GetUsers(w.store)
 	if err != nil {
 		log.WithFields(fields).Errorln("Failed to retrieve users")
 		http.Error(rw, "Failed to retrieve users", http.StatusInternalServerError)
@@ -212,7 +212,7 @@ func (w *worker) handleMilestonesForCourseUser(ctx context.Context, msg *nats.Ms
 			log.Println("context cancelled for getMilestones")
 			return
 		default:
-			err = service.ImportMilestones(course, usersMap, w.db, lastRun)
+			err = service.ImportMilestones(course, usersMap, w.store, lastRun)
 			time.Sleep(rateLimitWait)
 			if err != nil {
 				success = false
@@ -247,7 +247,7 @@ func (w *worker) handleActivityForCourse(ctx context.Context, msg *nats.Msg) {
 			log.Println("context cancelled for getActivity")
 			return
 		default:
-			err = service.ImportActivityForCourse(course, w.db)
+			err = service.ImportActivityForCourse(course, w.store)
 			if err != nil {
 				success = false
 				log.Errorf("failed to get course activity: %v", err)
@@ -285,19 +285,18 @@ func (w *worker) initServiceFromRequest(ctx context.Context, r *http.Request) (l
 		log.Printf("Error: %v", err)
 		return nil, fmt.Errorf("%w: %v", errInvalidProviderID, err)
 	}
-	var provider ProviderPlatform
-	err = w.db.WithContext(ctx).First(&provider, "id = ?", id).Error
+	provider, err := w.store.getProviderPlatform(ctx, id)
 	if err != nil {
 		log.Println("Failed to find provider")
 		return nil, err
 	}
 	switch provider.Type {
 	case Kolibri:
-		return NewKolibriService(&provider, nil), nil
+		return NewKolibriService(provider, nil), nil
 	case CanvasCloud, CanvasOSS:
-		return newCanvasService(&provider, nil), nil
+		return newCanvasService(provider, nil), nil
 	case Brightspace:
-		return newBrightspaceService(&provider, w.db, nil)
+		return newBrightspaceService(provider, w.store, nil)
 	}
 	return nil, fmt.Errorf("%w: %s", errUnsupportedProvider, provider.Type)
 }
@@ -317,8 +316,7 @@ func (w *worker) initProviderPlatformService(ctx context.Context, msg *nats.Msg)
 		return nil, fmt.Errorf("failed to parse job_id: %v", body["job_id"])
 	}
 	// prior to here, we are unable to cleanup the job
-	var provider ProviderPlatform
-	err := w.db.WithContext(ctx).First(&provider, "id = ?", int(providerId)).Error
+	provider, err := w.store.getProviderPlatform(ctx, int(providerId))
 	if err != nil {
 		log.Errorf("error looking up provider platform: %v", err)
 		w.cleanupJob(ctx, int(providerId), jobId, false)
@@ -326,11 +324,11 @@ func (w *worker) initProviderPlatformService(ctx context.Context, msg *nats.Msg)
 	}
 	switch provider.Type {
 	case Kolibri:
-		return NewKolibriService(&provider, body), nil
+		return NewKolibriService(provider, body), nil
 	case CanvasCloud, CanvasOSS:
-		return newCanvasService(&provider, body), nil
+		return newCanvasService(provider, body), nil
 	case Brightspace:
-		return newBrightspaceService(&provider, w.db, body)
+		return newBrightspaceService(provider, w.store, body)
 	}
 	return nil, fmt.Errorf("unsupported provider type: %s", provider.Type)
 }
@@ -340,11 +338,8 @@ func (w *worker) initProviderPlatformService(ctx context.Context, msg *nats.Msg)
 // here; after a failure the next run tries again from the same point.
 func (w *worker) cleanupJob(ctx context.Context, providerID int, jobId string, success bool) {
 	log.Infof("job %s succeeded?: %v \n cleaning up task", jobId, success)
-	var task runnableTask
-	if err := w.db.WithContext(ctx).
-		Where("provider_platform_id = ? AND job_id = ?", providerID, jobId).
-		First(&task).
-		Error; err != nil {
+	task, err := w.store.getTask(ctx, providerID, jobId)
+	if err != nil {
 		log.Errorf("failed to fetch task: %v", err)
 		return
 	}
@@ -352,7 +347,7 @@ func (w *worker) cleanupJob(ctx context.Context, providerID int, jobId string, s
 	if success {
 		task.LastRun = time.Now()
 	}
-	if err := w.db.WithContext(ctx).Save(&task).Error; err != nil {
+	if err := w.store.saveTask(ctx, task); err != nil {
 		log.Errorf("failed to update task: %v", err)
 		return
 	}
@@ -360,11 +355,8 @@ func (w *worker) cleanupJob(ctx context.Context, providerID int, jobId string, s
 
 func (w *worker) lookupUserMapping(params map[string]any) ([]map[string]any, error) {
 	providerPlatformId := int(params["provider_platform_id"].(float64))
-	users := make([]map[string]any, 0, 25) // rough class size estimate
-	if err := w.db.Model(ProviderUserMapping{}).Select("user_id, external_user_id").
-		Joins("JOIN users u on provider_user_mappings.user_id = u.id").
-		Find(&users, "provider_platform_id = ? AND u.role = 'student'", providerPlatformId).
-		Error; err != nil {
+	users, err := w.store.getStudentMappings(providerPlatformId)
+	if err != nil {
 		log.Errorf("failed to fetch users: %v", err)
 	}
 	return users, nil
@@ -391,10 +383,8 @@ func dbUint(row map[string]any, key string) (uint, bool) {
 }
 
 func (w *worker) lookupCoursesMapping(provId int) ([]map[string]any, error) {
-	courses := make([]map[string]any, 0, 10)
-	if err := w.db.Model(Course{}).Select("id as course_id, external_id as external_course_id").
-		Find(&courses, "provider_platform_id = ?", provId).
-		Error; err != nil {
+	courses, err := w.store.getCourseMappings(provId)
+	if err != nil {
 		log.Errorf("failed to fetch courses: %v", err)
 	}
 	return courses, nil

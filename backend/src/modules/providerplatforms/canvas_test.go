@@ -110,7 +110,7 @@ func TestCanvasUsers(t *testing.T) {
 		{ExternalUserID: "15", ExternalUsername: "mapped@example.com", NameFirst: "Mapped", NameLast: "User", Email: "mapped@example.com", Username: "UserMapped"},
 	}, all)
 
-	unmapped, err := srv.GetUsers(db)
+	unmapped, err := srv.GetUsers(&store{db: db})
 	require.NoError(t, err)
 	assert.Equal(t, all[:3], unmapped)
 
@@ -124,7 +124,7 @@ func TestCanvasUsersError(t *testing.T) {
 	fc.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "nope", http.StatusUnauthorized)
 	})
-	_, err := newCanvasService(p, nil).GetUsers(db)
+	_, err := newCanvasService(p, nil).GetUsers(&store{db: db})
 	assert.EqualError(t, err, "canvas API returned status 401")
 }
 
@@ -140,7 +140,7 @@ func TestCanvasImportCourses(t *testing.T) {
 	p := createCanvasProvider(t, db, fc)
 	require.NoError(t, db.Create(&Course{ProviderPlatformID: p.ID, ExternalID: "103", Name: "Kept"}).Error)
 
-	require.NoError(t, newCanvasService(p, nil).ImportCourses(db))
+	require.NoError(t, newCanvasService(p, nil).ImportCourses(&store{db: db}))
 
 	var courses []Course
 	require.NoError(t, db.Order("external_id").Find(&courses).Error)
@@ -192,7 +192,7 @@ func TestCanvasImportMilestones(t *testing.T) {
 	}
 	pair := map[string]any{"course_id": int64(course.ID), "external_course_id": "101"}
 
-	require.NoError(t, newCanvasService(p, nil).ImportMilestones(pair, users, db, lastRun))
+	require.NoError(t, newCanvasService(p, nil).ImportMilestones(pair, users, &store{db: db}, lastRun))
 
 	type row struct {
 		UserID      uint
@@ -257,18 +257,21 @@ func TestCanvasImportActivity(t *testing.T) {
 	require.NoError(t, db.Create(&course).Error)
 	createResident(t, db, p.ID, 1, "student", "21")
 	createResident(t, db, p.ID, 2, "student", "22")
+	// Another provider's student with the same external id isn't this one.
+	other := createProvider(t, db, ProviderPlatform{Type: CanvasCloud, Name: "other"})
+	createResident(t, db, other.ID, 3, "student", "99")
 	require.NoError(t, db.Create(&UserEnrollment{UserID: 2, CourseID: course.ID}).Error)
 	calls := recordCalls(t, db)
 
 	pair := map[string]any{"course_id": int64(course.ID), "external_course_id": "101"}
-	require.NoError(t, newCanvasService(p, nil).ImportActivityForCourse(pair, db))
+	require.NoError(t, newCanvasService(p, nil).ImportActivityForCourse(pair, &store{db: db}))
 
 	var enrolled []uint
 	require.NoError(t, db.Model(&UserEnrollment{}).Order("user_id").Pluck("user_id", &enrolled).Error)
 	assert.Equal(t, []uint{1, 2}, enrolled)
 	assert.Equal(t, []procedureCall{
-		{"insert_daily_activity_canvas", []any{uint(1), course.ID, "course_interaction", uint(600), "101"}},
-		{"insert_daily_activity_canvas", []any{uint(2), course.ID, "course_interaction", uint(60), "101"}},
+		{"insert_daily_activity_canvas", []any{uint(1), course.ID, ActivityType("course_interaction"), uint(600), "101"}},
+		{"insert_daily_activity_canvas", []any{uint(2), course.ID, ActivityType("course_interaction"), uint(60), "101"}},
 	}, *calls)
 	assert.Contains(t, fc.Requests(), "GET /api/v1/courses/101/enrollments?state[]=active&state[]=invited&type[]=StudentEnrollment auth=Bearer token-123")
 }

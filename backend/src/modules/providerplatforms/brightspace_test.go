@@ -129,7 +129,7 @@ func createBrightspaceProvider(t *testing.T, db *gorm.DB, fb *fakeBrightspace) *
 
 func newTestBrightspaceService(t *testing.T, db *gorm.DB, p *ProviderPlatform) *BrightspaceService {
 	t.Helper()
-	srv, err := newBrightspaceService(p, db, nil)
+	srv, err := newBrightspaceService(p, &store{db: db}, nil)
 	require.NoError(t, err)
 	return srv
 }
@@ -167,21 +167,21 @@ func TestBrightspaceStartErrors(t *testing.T) {
 
 	p := createBrightspaceProvider(t, db, fb)
 	p.AccessKey = "no-refresh-token"
-	_, err := newBrightspaceService(p, db, nil)
+	_, err := newBrightspaceService(p, &store{db: db}, nil)
 	assert.EqualError(t, err, "unable to find refresh token, unable to intialize BrightspaceService")
 
 	CsvDownloadPath = filepath.Join(dir, "missing")
-	_, err = newBrightspaceService(createBrightspaceProvider(t, db, fb), db, nil)
+	_, err = newBrightspaceService(createBrightspaceProvider(t, db, fb), &store{db: db}, nil)
 	assert.EqualError(t, err, "unable to find csv download directory path "+CsvDownloadPath+", unable to intialize BrightspaceService")
 	CsvDownloadPath = dir
 
 	fb.tokenStatus = http.StatusBadRequest
 	fb.tokenBody = map[string]any{"error": "invalid_grant", "error_description": "expired"}
-	_, err = newBrightspaceService(createBrightspaceProvider(t, db, fb), db, nil)
+	_, err = newBrightspaceService(createBrightspaceProvider(t, db, fb), &store{db: db}, nil)
 	assert.EqualError(t, err, "unable to request new refresh token from brightspace, response error message is: invalid_grant: expired")
 
 	fb.tokenBody = map[string]any{}
-	_, err = newBrightspaceService(createBrightspaceProvider(t, db, fb), db, nil)
+	_, err = newBrightspaceService(createBrightspaceProvider(t, db, fb), &store{db: db}, nil)
 	assert.EqualError(t, err, "unable to request new refresh token from brightspace")
 }
 
@@ -196,7 +196,7 @@ func TestBrightspaceGetUsers(t *testing.T) {
 	p := createBrightspaceProvider(t, db, fb)
 	createResident(t, db, p.ID, 1, "student", "3")
 
-	users, err := newTestBrightspaceService(t, db, p).GetUsers(db)
+	users, err := newTestBrightspaceService(t, db, p).GetUsers(&store{db: db})
 	require.NoError(t, err)
 	assert.Equal(t, []ImportUser{
 		{Username: "ada", NameFirst: "Ada", NameLast: "Lovelace", Email: "ada@example.com", ExternalUserID: "1"},
@@ -227,7 +227,7 @@ func TestBrightspaceImportCourses(t *testing.T) {
 	p := createBrightspaceProvider(t, db, fb)
 	require.NoError(t, db.Create(&Course{ProviderPlatformID: p.ID, ExternalID: "17", Name: "Existing", TotalProgressMilestones: 1}).Error)
 
-	require.NoError(t, newTestBrightspaceService(t, db, p).ImportCourses(db))
+	require.NoError(t, newTestBrightspaceService(t, db, p).ImportCourses(&store{db: db}))
 
 	var courses []Course
 	require.NoError(t, db.Order("external_id").Find(&courses).Error)
@@ -281,7 +281,7 @@ func TestBrightspaceImportMilestones(t *testing.T) {
 	}
 	course := map[string]any{"course_id": int64(5), "external_course_id": "10"}
 
-	require.NoError(t, srv.ImportMilestones(course, users, db, lastRun))
+	require.NoError(t, srv.ImportMilestones(course, users, &store{db: db}, lastRun))
 
 	var enrolled []uint
 	require.NoError(t, db.Model(&UserEnrollment{}).Order("user_id").Pluck("user_id", &enrolled).Error)
@@ -305,10 +305,26 @@ func TestBrightspaceImportMilestones(t *testing.T) {
 	}, got)
 
 	// Later courses in the same job reuse the downloaded files.
-	require.NoError(t, srv.ImportMilestones(map[string]any{"course_id": int64(6), "external_course_id": "11"}, users, db, lastRun))
+	require.NoError(t, srv.ImportMilestones(map[string]any{"course_id": int64(6), "external_course_id": "11"}, users, &store{db: db}, lastRun))
 	assert.Equal(t, []string{"User Enrollments", "Assignment Submissions", "Quiz Attempts"}, fb.Downloads())
 	require.NoError(t, db.Model(&UserEnrollment{}).Where("course_id = 6").Pluck("user_id", &enrolled).Error)
 	assert.Equal(t, []uint{101}, enrolled)
+
+	// The next run finds the graded milestones and adds the submissions they
+	// were graded for.
+	require.NoError(t, srv.ImportMilestones(course, users, &store{db: db}, lastRun))
+	got = nil
+	require.NoError(t, db.Model(&Milestone{}).Where("course_id = 5").Order("id").Find(&got).Error)
+	assert.Equal(t, []row{
+		{101, "d1-10-1", "assignment_submission"},
+		{102, "101-assign-d2-10-2", "grade_received"},
+		{101, "102-assign-d3-10-1", "grade_received"},
+		{101, "q1", "quiz_submission"},
+		{102, "101-quiz-q2", "grade_received"},
+		{102, "d2-10-2", "assignment_submission"},
+		{101, "d3-10-1", "assignment_submission"},
+		{102, "q2", "quiz_submission"},
+	}, got)
 }
 
 // The activity import records each mapped user's time on the course's
@@ -329,13 +345,13 @@ func TestBrightspaceActivity(t *testing.T) {
 	createResident(t, db, p.ID, 101, "student", "1")
 	srv := newTestBrightspaceService(t, db, p)
 
-	got := srv.getUsersActivity(db, "10", writeDataset(t, fb, "Content Objects"), writeDataset(t, fb, "Content User Progress"))
+	got := srv.getUsersActivity(&store{db: db}, "10", writeDataset(t, fb, "Content Objects"), writeDataset(t, fb, "Content User Progress"))
 	assert.Equal(t, map[uint][]BrightspaceUserContentDto{
 		101: {{OrgUnitId: "10", ContentObjectId: "c1", TotalTime: "120", Title: "Intro", ContentObjectType: "Topic", ExternalId: "1-c1-1-2026-03-02"}},
 	}, got)
 
 	calls := recordCalls(t, db)
-	require.NoError(t, srv.ImportActivityForCourse(map[string]any{"course_id": int64(5), "external_course_id": "10"}, db))
+	require.NoError(t, srv.ImportActivityForCourse(map[string]any{"course_id": int64(5), "external_course_id": "10"}, &store{db: db}))
 	assert.Equal(t, []procedureCall{
 		{"insert_daily_activity_brightspace", []any{uint(101), uint(5), ContentInteraction, "120", "1-c1-1-2026-03-02"}},
 	}, *calls)

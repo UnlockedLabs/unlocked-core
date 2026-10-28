@@ -17,7 +17,7 @@ var lastRun = time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
 func reloadTask(t *testing.T, w *worker, id uint) runnableTask {
 	t.Helper()
 	var task runnableTask
-	require.NoError(t, w.db.First(&task, id).Error)
+	require.NoError(t, w.store.db.First(&task, id).Error)
 	return task
 }
 
@@ -25,7 +25,7 @@ func reloadTask(t *testing.T, w *worker, id uint) runnableTask {
 // when it succeeded, so a failed run is retried from the same point.
 func TestCleanupJob(t *testing.T) {
 	db := newTestDB(t)
-	w := &worker{db: db}
+	w := &worker{store: &store{db: db}}
 	p1 := createProvider(t, db, ProviderPlatform{Type: CanvasCloud, Name: "one"})
 	p2 := createProvider(t, db, ProviderPlatform{Type: CanvasCloud, Name: "two"})
 	cj, task1 := createTask(t, db, jobs.GetCourses, p1.ID, lastRun)
@@ -51,7 +51,7 @@ func TestCleanupJob(t *testing.T) {
 // and job id are read, a missing provider also releases the task.
 func TestInitProviderPlatformServiceBadMessages(t *testing.T) {
 	db := newTestDB(t)
-	w := &worker{db: db}
+	w := &worker{store: &store{db: db}}
 	tests := []struct {
 		name string
 		data string
@@ -88,7 +88,7 @@ func TestInitProviderPlatformServiceBadMessages(t *testing.T) {
 
 func TestHandleCourses(t *testing.T) {
 	db := newTestDB(t)
-	w := &worker{db: db}
+	w := &worker{store: &store{db: db}}
 	fc := newFakeCanvas(t)
 	fc.courses = []map[string]any{{"id": float64(101), "name": "Algebra", "course_code": "ALG-1"}}
 	p := createCanvasProvider(t, db, fc)
@@ -107,7 +107,7 @@ func TestHandleCourses(t *testing.T) {
 // A failed import releases the task without moving last_run.
 func TestHandleCoursesFailure(t *testing.T) {
 	db := newTestDB(t)
-	w := &worker{db: db}
+	w := &worker{store: &store{db: db}}
 	fc := newFakeCanvas(t)
 	fc.Close()
 	p := createCanvasProvider(t, db, fc)
@@ -124,7 +124,7 @@ func TestHandleCoursesFailure(t *testing.T) {
 // provider's students only, and waits rateLimitWait after each course.
 func TestHandleMilestones(t *testing.T) {
 	db := newTestDB(t)
-	w := &worker{db: db}
+	w := &worker{store: &store{db: db}}
 	fc := newFakeCanvas(t)
 	fc.submissions = []map[string]any{
 		{"id": float64(1), "user_id": float64(21), "workflow_state": "submitted", "submitted_at": "2026-03-02T00:00:00Z"},
@@ -155,7 +155,7 @@ func TestHandleMilestones(t *testing.T) {
 // A canceled job stops between courses and leaves its task running.
 func TestHandleMilestonesCanceled(t *testing.T) {
 	db := newTestDB(t)
-	w := &worker{db: db}
+	w := &worker{store: &store{db: db}}
 	fc := newFakeCanvas(t)
 	p := createCanvasProvider(t, db, fc)
 	require.NoError(t, db.Create(&Course{ProviderPlatformID: p.ID, ExternalID: "101"}).Error)
@@ -175,7 +175,7 @@ func TestHandleMilestonesCanceled(t *testing.T) {
 func TestImportMilestonesMappedStudent(t *testing.T) {
 	t.Run("kolibri", func(t *testing.T) {
 		db := newTestDB(t)
-		w := &worker{db: db}
+		w := &worker{store: &store{db: db}}
 		ks, kdb := newTestKolibriService(t, db)
 		createResident(t, db, ks.ProviderPlatformID, 1, "student", "k1")
 		require.NoError(t, kdb.Exec(`INSERT INTO kolibriauth_facilityuser VALUES ('k1', 'A', 'a', 'facility-1')`).Error)
@@ -187,7 +187,7 @@ func TestImportMilestonesMappedStudent(t *testing.T) {
 		users = append(users, map[string]any{"user_id": "bad", "external_user_id": "k2"})
 
 		course := map[string]any{"course_id": int64(5), "external_course_id": "ch"}
-		require.NoError(t, ks.ImportMilestones(course, users, db, lastRun))
+		require.NoError(t, ks.ImportMilestones(course, users, &store{db: db}, lastRun))
 
 		var enrolled []uint
 		require.NoError(t, db.Model(&UserEnrollment{}).Pluck("user_id", &enrolled).Error)
@@ -196,7 +196,7 @@ func TestImportMilestonesMappedStudent(t *testing.T) {
 
 	t.Run("brightspace", func(t *testing.T) {
 		db := newTestDB(t)
-		w := &worker{db: db}
+		w := &worker{store: &store{db: db}}
 		useTempDir(t)
 		fb := newFakeBrightspace(t)
 		fb.datasets["User Enrollments"] = "OrgUnitId,UserId\n10,b1\n"
@@ -210,7 +210,7 @@ func TestImportMilestonesMappedStudent(t *testing.T) {
 		users = append(users, map[string]any{"user_id": "bad", "external_user_id": "b2"})
 
 		course := map[string]any{"course_id": int64(5), "external_course_id": "10"}
-		require.NoError(t, newTestBrightspaceService(t, db, p).ImportMilestones(course, users, db, lastRun))
+		require.NoError(t, newTestBrightspaceService(t, db, p).ImportMilestones(course, users, &store{db: db}, lastRun))
 
 		var enrolled []uint
 		require.NoError(t, db.Model(&UserEnrollment{}).Pluck("user_id", &enrolled).Error)
@@ -222,7 +222,7 @@ func TestImportMilestonesMappedStudent(t *testing.T) {
 // call (as on SQLite) is logged and doesn't fail the job.
 func TestHandleActivity(t *testing.T) {
 	db := newTestDB(t)
-	w := &worker{db: db}
+	w := &worker{store: &store{db: db}}
 	fc := newFakeCanvas(t)
 	fc.enrollments = []map[string]any{{"user_id": float64(21), "total_activity_time": float64(600)}}
 	p := createCanvasProvider(t, db, fc)
@@ -238,8 +238,8 @@ func TestHandleActivity(t *testing.T) {
 	require.NoError(t, db.Order("course_id").Find(&enrollments).Error)
 	require.Len(t, enrollments, 2)
 	assert.Equal(t, []procedureCall{
-		{"insert_daily_activity_canvas", []any{uint(1), uint(1), "course_interaction", uint(600), "101"}},
-		{"insert_daily_activity_canvas", []any{uint(1), uint(2), "course_interaction", uint(600), "102"}},
+		{"insert_daily_activity_canvas", []any{uint(1), uint(1), ActivityType("course_interaction"), uint(600), "101"}},
+		{"insert_daily_activity_canvas", []any{uint(1), uint(2), ActivityType("course_interaction"), uint(600), "102"}},
 	}, *calls)
 	got := reloadTask(t, w, task.ID)
 	assert.Equal(t, taskPending, got.Status)
@@ -250,7 +250,7 @@ func TestHandleActivity(t *testing.T) {
 // last_run stays where it was.
 func TestHandleActivityFailure(t *testing.T) {
 	db := newTestDB(t)
-	w := &worker{db: db}
+	w := &worker{store: &store{db: db}}
 	fc := newFakeCanvas(t)
 	fc.Close()
 	p := createCanvasProvider(t, db, fc)
@@ -266,7 +266,7 @@ func TestHandleActivityFailure(t *testing.T) {
 
 func TestLookupMappings(t *testing.T) {
 	db := newTestDB(t)
-	w := &worker{db: db}
+	w := &worker{store: &store{db: db}}
 	p := createProvider(t, db, ProviderPlatform{Type: CanvasCloud, Name: "p"})
 	other := createProvider(t, db, ProviderPlatform{Type: CanvasCloud, Name: "o"})
 	createResident(t, db, p.ID, 1, "student", "a")

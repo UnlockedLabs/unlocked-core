@@ -60,7 +60,7 @@ func (ks *KolibriService) GetJobParams() map[string]any {
 * @info - GET /api/auth/facilityuser?member_of=<facilityID>
 * @return - List of KolibriUser objects, representing all users in the facility
 **/
-func (ks *KolibriService) GetUsers(db *gorm.DB) ([]ImportUser, error) {
+func (ks *KolibriService) GetUsers(st *store) ([]ImportUser, error) {
 	// query kolibri database directly for users
 	query := `SELECT full_name, username, id FROM kolibriauth_facilityuser WHERE facility_id = ?`
 	var users []map[string]interface{}
@@ -70,7 +70,12 @@ func (ks *KolibriService) GetUsers(db *gorm.DB) ([]ImportUser, error) {
 	}
 	var importUsers []ImportUser
 	for _, user := range users {
-		if db.Where("provider_platform_id = ? AND external_user_id = ?", ks.ProviderPlatformID, user["id"]).First(&ProviderUserMapping{}).Error == nil {
+		mapped, err := st.isUserMapped(ks.ProviderPlatformID, user["id"].(string))
+		if err != nil {
+			log.Errorf("error checking the user mapping for %v: %v", user["id"], err)
+			continue
+		}
+		if mapped {
 			continue
 		}
 		split := strings.Split(user["full_name"].(string), " ")
@@ -96,7 +101,7 @@ func (ks *KolibriService) GetUsers(db *gorm.DB) ([]ImportUser, error) {
 * @info - GET /api/content/channel?available=true
 * @return - List of maps, each containing the details of a Content object
 **/
-func (ks *KolibriService) ImportCourses(db *gorm.DB) error { //add more to this:::
+func (ks *KolibriService) ImportCourses(st *store) error { //add more to this:::
 	log.Println("Importing channel and classroom courses from Kolibri")
 	var courses []map[string]interface{} //modified to left join as quizzes only activate when teachers click 'START QUIZ'
 	sql := `SELECT id, name, description, thumbnail, total_resource_count, root_id, 'channel' as course_type FROM content_channelmetadata
@@ -122,29 +127,26 @@ func (ks *KolibriService) ImportCourses(db *gorm.DB) error { //add more to this:
 	}
 	for _, course := range courses {
 		id := course["id"].(string)
-		if db.Where("provider_platform_id = ? AND external_id = ?", ks.ProviderPlatformID, id).First(&Course{}).Error == nil {
+		exists, err := st.courseExists(ks.ProviderPlatformID, id)
+		if err != nil {
+			log.Errorf("error checking for course %s in db, error is: %v", id, err)
+			continue
+		}
+		if exists {
 			if course["course_type"].(string) == "class" {
-				updateTotalProgress(db, ks.ProviderPlatformID, course)
+				if err := st.setTotalProgressMilestones(ks.ProviderPlatformID, id, course["total_resource_count"].(int64)); err != nil {
+					log.Errorln("error updating course total_progress_milestones in db, error is: ", err) //just logging the error if it occurs, logic will continue
+				}
 			}
 			continue
 		}
 		prog := ks.IntoCourse(course)
-		if err := db.Create(&prog).Error; err != nil {
+		if err := st.createCourse(prog); err != nil {
 			log.Errorln("error creating course in db")
 			continue
 		}
 	}
 	return nil
-}
-
-func updateTotalProgress(db *gorm.DB, providerPlatformID uint, course map[string]any) {
-	id := course["id"].(string)
-	totalResourceCount := course["total_resource_count"].(int64)
-	if db.Where("provider_platform_id = ? AND external_id = ? AND total_progress_milestones = ?", providerPlatformID, id, totalResourceCount).First(&Course{}).Error != nil {
-		if err := db.Table("courses as c").Where("provider_platform_id = ? AND external_id = ?", providerPlatformID, id).Update("total_progress_milestones", totalResourceCount).Error; err != nil {
-			log.Errorln("error updating course total_progress_milestones in db, error is: ", err) //just logging the error if it occurs, logic will continue
-		}
-	}
 }
 
 type milestonePO struct {
@@ -153,7 +155,7 @@ type milestonePO struct {
 	externalUserIds []string
 }
 
-func (ks *KolibriService) ImportMilestones(course map[string]any, users []map[string]any, db *gorm.DB, lastRun time.Time) error {
+func (ks *KolibriService) ImportMilestones(course map[string]any, users []map[string]any, st *store, lastRun time.Time) error {
 	usersMap := make(map[string]uint)
 	for _, user := range users {
 		userId, ok := dbUint(user, "user_id")
@@ -175,18 +177,18 @@ func (ks *KolibriService) ImportMilestones(course map[string]any, users []map[st
 		usersMap:        usersMap,
 		externalUserIds: externalUserIds,
 	}
-	err := importEnrollmentMilestones(ks, paramObj, db)
+	err := importEnrollmentMilestones(ks, paramObj, st)
 	if err != nil {
 		log.Errorln("error importing enrollment milestones, error is ", err)
 	}
-	err = importAssignmentQuizGradeMilestones(ks, paramObj, db)
+	err = importAssignmentQuizGradeMilestones(ks, paramObj, st)
 	if err != nil {
 		log.Errorln("error importing enrollment milestones, error is ", err)
 	}
 	return err
 }
 
-func importEnrollmentMilestones(ks *KolibriService, paramObj milestonePO, db *gorm.DB) error {
+func importEnrollmentMilestones(ks *KolibriService, paramObj milestonePO, st *store) error {
 	var enrollments []map[string]interface{}
 	sql := `select meta.name, meta.id as course_id, sess.milestone_ex_id, kf.id as user_id 
 		from kolibriauth_facilityuser kf
@@ -224,8 +226,13 @@ func importEnrollmentMilestones(ks *KolibriService, paramObj milestonePO, db *go
 	courseId := uint(course["course_id"].(int64))
 	for _, enrollment := range enrollments {
 		userID := usersMap[enrollment["user_id"].(string)]
-		if db.Model(&UserEnrollment{}).First(&UserEnrollment{}, "user_id = ? AND course_id = ?", userID, courseId).RowsAffected == 0 {
-			if err := db.Create(&UserEnrollment{UserID: userID, CourseID: uint(courseId)}).Error; err != nil {
+		enrolled, err := st.enrollmentExists(userID, courseId)
+		if err != nil {
+			log.WithFields(log.Fields{"userId": userID, "course_id": courseId, "error": err}).Error("Failed to check enrollment")
+			continue
+		}
+		if !enrolled {
+			if err := st.createEnrollment(userID, courseId); err != nil {
 				log.WithFields(log.Fields{"userId": userID, "course_id": courseId, "error": err}).Error("Failed to create enrollment")
 				continue
 			}
@@ -234,7 +241,7 @@ func importEnrollmentMilestones(ks *KolibriService, paramObj milestonePO, db *go
 	return nil
 }
 
-func importAssignmentQuizGradeMilestones(ks *KolibriService, paramObj milestonePO, db *gorm.DB) error {
+func importAssignmentQuizGradeMilestones(ks *KolibriService, paramObj milestonePO, st *store) error {
 	var aqgMilestones []map[string]any
 	sql := `select col.name, prog.id as milestone_ex_id, prog.user_id, col.id as course_id, prog.notification_object as submission_type, 
 				prog.notification_event as is_complete, quiz_num_correct, quiz_num_answered
@@ -259,7 +266,12 @@ func importAssignmentQuizGradeMilestones(ks *KolibriService, paramObj milestoneP
 		userId := usersMap[aqgMilestone["user_id"].(string)]
 		id := strconv.Itoa(int(aqgMilestone["milestone_ex_id"].(int32)))
 		//concatenated the user id to external id for graded milestones because these are actual quiz submissions and need a way to distinguish graded milestones
-		if db.Where("user_id = ? AND course_id = ? AND (external_id = ? OR external_id = ?)", userId, courseId, id, strconv.Itoa(int(userId))+"-"+id).First(&Milestone{}).Error == nil {
+		exists, err := st.milestoneExists(userId, courseId, id, strconv.Itoa(int(userId))+"-"+id)
+		if err != nil {
+			log.Errorln("error checking for milestone in db, error is ", err)
+			continue
+		}
+		if exists {
 			continue
 		}
 		submissionType := aqgMilestone["submission_type"].(string)
@@ -274,7 +286,7 @@ func importAssignmentQuizGradeMilestones(ks *KolibriService, paramObj milestoneP
 		} else {
 			milestone.Type = AssignmentSubmission
 		}
-		if err := db.Create(&milestone).Error; err != nil {
+		if err := st.createMilestone(&milestone); err != nil {
 			log.Errorln("error creating milestone in db")
 			continue
 		}
@@ -282,7 +294,7 @@ func importAssignmentQuizGradeMilestones(ks *KolibriService, paramObj milestoneP
 			milestone.ID = 0
 			milestone.Type = GradeReceived
 			milestone.ExternalID = strconv.Itoa(int(userId)) + "-" + milestone.ExternalID
-			if err := db.Create(&milestone).Error; err != nil {
+			if err := st.createMilestone(&milestone); err != nil {
 				log.Errorln("error creating milestone in db")
 				continue
 			}
@@ -301,8 +313,8 @@ type KolibriActivity struct {
 	Kind                string `json:"kind"`
 }
 
-func (ks *KolibriService) ImportActivityForCourse(courseIdPair map[string]any, db *gorm.DB) error {
-	courseId := int(courseIdPair["course_id"].(int64))
+func (ks *KolibriService) ImportActivityForCourse(courseIdPair map[string]any, st *store) error {
+	courseId := uint(courseIdPair["course_id"].(int64))
 	externalId := courseIdPair["external_course_id"].(string)
 	sql := `SELECT id, user_id, time_spent, completion_timestamp, content_id, progress, kind FROM logger_contentsummarylog WHERE channel_id = ?`
 	var activities []KolibriActivity
@@ -311,8 +323,8 @@ func (ks *KolibriService) ImportActivityForCourse(courseIdPair map[string]any, d
 		return err
 	}
 	for _, activity := range activities {
-		var user_id uint
-		if err := db.Model(&ProviderUserMapping{}).Select("user_id").First(&user_id, "external_user_id = ?", activity.UserId).Error; err != nil {
+		user_id, err := st.getMappedUserIDAnyProvider(activity.UserId)
+		if err != nil {
 			log.Errorln("error finding user by external id in ImportActivityForCourse")
 			continue
 		}
@@ -333,11 +345,15 @@ func (ks *KolibriService) ImportActivityForCourse(courseIdPair map[string]any, d
 			kind = ContentInteraction
 		}
 		//checking if activity record was already inserted
-		var acts []map[string]any
-		if db.Raw("select external_id from activities where course_id = ? AND external_id = ?", courseId, activity.ID).First(&acts).Error == nil {
+		exists, err := st.activityExists(courseId, activity.ID)
+		if err != nil {
+			log.WithFields(log.Fields{"userId": user_id, "course_id": courseId, "error": err}).Error("Failed to check for activity")
 			continue
 		}
-		if err := db.Exec("CALL insert_daily_activity_kolibri(?, ?, ?, ?, ?, ?)", user_id, courseId, kind, timeSpent, activity.ID, time.Now()).Error; err != nil {
+		if exists {
+			continue
+		}
+		if err := st.insertDailyActivity("insert_daily_activity_kolibri", user_id, courseId, kind, timeSpent, activity.ID); err != nil {
 			log.WithFields(log.Fields{"userId": user_id, "course_id": courseId, "error": err}).Error("Failed to create activity")
 			continue
 		}

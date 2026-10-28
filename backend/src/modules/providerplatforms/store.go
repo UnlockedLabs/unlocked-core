@@ -568,3 +568,194 @@ func (s *store) setTaskStatus(ctx context.Context, taskID uint, status taskStatu
 	}
 	return nil
 }
+
+// LMS sync
+
+// The worker's queries, for the LMS jobs and the provider user lists. The
+// jobs run as no one, so their writes record no user.
+
+// getProviderPlatform returns gorm.ErrRecordNotFound as it is, unlike
+// getProviderPlatformByID, so the user list routes can answer 404.
+func (s *store) getProviderPlatform(ctx context.Context, id int) (*ProviderPlatform, error) {
+	var provider ProviderPlatform
+	if err := s.db.WithContext(ctx).First(&provider, "id = ?", id).Error; err != nil {
+		return nil, err
+	}
+	return &provider, nil
+}
+
+func (s *store) saveProviderPlatform(provider *ProviderPlatform) error {
+	if err := s.db.Save(provider).Error; err != nil {
+		return newUpdateDBError(err, "provider_platforms")
+	}
+	return nil
+}
+
+func (s *store) getTask(ctx context.Context, providerID int, jobID string) (*runnableTask, error) {
+	var task runnableTask
+	if err := s.db.WithContext(ctx).
+		Where("provider_platform_id = ? AND job_id = ?", providerID, jobID).
+		First(&task).Error; err != nil {
+		return nil, newNotFoundDBError(err, "runnable_tasks")
+	}
+	return &task, nil
+}
+
+func (s *store) saveTask(ctx context.Context, task *runnableTask) error {
+	if err := s.db.WithContext(ctx).Save(task).Error; err != nil {
+		return newUpdateDBError(err, "runnable_tasks")
+	}
+	return nil
+}
+
+// getStudentMappings returns the user_id and external_user_id of each of the
+// provider's students.
+func (s *store) getStudentMappings(providerID int) ([]map[string]any, error) {
+	users := make([]map[string]any, 0, 25) // rough class size estimate
+	if err := s.db.Model(ProviderUserMapping{}).Select("user_id, external_user_id").
+		Joins("JOIN users u on provider_user_mappings.user_id = u.id").
+		Find(&users, "provider_platform_id = ? AND u.role = 'student'", providerID).
+		Error; err != nil {
+		return nil, newGetRecordsDBError(err, "provider_user_mappings")
+	}
+	return users, nil
+}
+
+// getCourseMappings returns the course_id and external_course_id of each of
+// the provider's courses.
+func (s *store) getCourseMappings(providerID int) ([]map[string]any, error) {
+	courses := make([]map[string]any, 0, 10)
+	if err := s.db.Model(Course{}).Select("id as course_id, external_id as external_course_id").
+		Find(&courses, "provider_platform_id = ?", providerID).
+		Error; err != nil {
+		return nil, newGetRecordsDBError(err, "courses")
+	}
+	return courses, nil
+}
+
+func (s *store) isUserMapped(providerID uint, externalUserID string) (bool, error) {
+	var count int64
+	if err := s.db.Model(&ProviderUserMapping{}).
+		Where("provider_platform_id = ? AND external_user_id = ?", providerID, externalUserID).
+		Count(&count).Error; err != nil {
+		return false, newGetRecordsDBError(err, "provider_user_mappings")
+	}
+	return count > 0, nil
+}
+
+func (s *store) getMappedUserID(providerID uint, externalUserID string) (uint, error) {
+	var userID uint
+	if err := s.db.Model(&ProviderUserMapping{}).Select("user_id").
+		First(&userID, "provider_platform_id = ? AND external_user_id = ?", providerID, externalUserID).Error; err != nil {
+		return 0, newNotFoundDBError(err, "provider_user_mappings")
+	}
+	return userID, nil
+}
+
+// getMappedUserIDAnyProvider is getMappedUserID without the provider check,
+// as Kolibri's activity import has always looked users up.
+func (s *store) getMappedUserIDAnyProvider(externalUserID string) (uint, error) {
+	var userID uint
+	if err := s.db.Model(&ProviderUserMapping{}).Select("user_id").
+		First(&userID, "external_user_id = ?", externalUserID).Error; err != nil {
+		return 0, newNotFoundDBError(err, "provider_user_mappings")
+	}
+	return userID, nil
+}
+
+func (s *store) courseExists(providerID uint, externalID string) (bool, error) {
+	var count int64
+	if err := s.db.Model(&Course{}).
+		Where("provider_platform_id = ? AND external_id = ?", providerID, externalID).
+		Count(&count).Error; err != nil {
+		return false, newGetRecordsDBError(err, "courses")
+	}
+	return count > 0, nil
+}
+
+func (s *store) createCourse(course *Course) error {
+	if err := s.db.Create(course).Error; err != nil {
+		return newCreateDBError(err, "courses")
+	}
+	return nil
+}
+
+// setTotalProgressMilestones updates the course only when its total differs.
+func (s *store) setTotalProgressMilestones(providerID uint, externalID string, total int64) error {
+	if err := s.db.Model(&Course{}).
+		Where("provider_platform_id = ? AND external_id = ? AND total_progress_milestones <> ?", providerID, externalID, total).
+		Update("total_progress_milestones", total).Error; err != nil {
+		return newUpdateDBError(err, "courses")
+	}
+	return nil
+}
+
+func (s *store) enrollmentExists(userID, courseID uint) (bool, error) {
+	var count int64
+	if err := s.db.Model(&UserEnrollment{}).
+		Where("user_id = ? AND course_id = ?", userID, courseID).
+		Count(&count).Error; err != nil {
+		return false, newGetRecordsDBError(err, "user_enrollments")
+	}
+	return count > 0, nil
+}
+
+// enrollmentExistsWithExternalID is enrollmentExists that also matches the
+// enrollment's external id, as Brightspace's enrollment import checks.
+func (s *store) enrollmentExistsWithExternalID(userID, courseID uint, externalID string) (bool, error) {
+	var count int64
+	if err := s.db.Model(&UserEnrollment{}).
+		Where("user_id = ? AND course_id = ? AND external_id = ?", userID, courseID, externalID).
+		Count(&count).Error; err != nil {
+		return false, newGetRecordsDBError(err, "user_enrollments")
+	}
+	return count > 0, nil
+}
+
+func (s *store) createEnrollment(userID, courseID uint) error {
+	if err := s.db.Create(&UserEnrollment{UserID: userID, CourseID: courseID}).Error; err != nil {
+		return newCreateDBError(err, "user_enrollments")
+	}
+	return nil
+}
+
+// milestoneExists reports whether the user has a milestone in the course
+// with any of externalIDs.
+func (s *store) milestoneExists(userID, courseID uint, externalIDs ...string) (bool, error) {
+	var count int64
+	if err := s.db.Model(&Milestone{}).
+		Where("user_id = ? AND course_id = ? AND external_id IN ?", userID, courseID, externalIDs).
+		Count(&count).Error; err != nil {
+		return false, newGetRecordsDBError(err, "milestones")
+	}
+	return count > 0, nil
+}
+
+func (s *store) createMilestone(milestone *Milestone) error {
+	if err := s.db.Create(milestone).Error; err != nil {
+		return newCreateDBError(err, "milestones")
+	}
+	return nil
+}
+
+// activityExists counts deleted activity too, as the imports always have.
+func (s *store) activityExists(courseID uint, externalID string) (bool, error) {
+	var count int64
+	if err := s.db.Table("activities").
+		Where("course_id = ? AND external_id = ?", courseID, externalID).
+		Count(&count).Error; err != nil {
+		return false, newGetRecordsDBError(err, "activities")
+	}
+	return count > 0, nil
+}
+
+// insertDailyActivity records a user's time on a course through procedure,
+// one of the insert_daily_activity_* procedures, which work out the time
+// since the user's last record. totalTime is as the provider reports it; the
+// procedure takes it as an integer.
+func (s *store) insertDailyActivity(procedure string, userID, courseID uint, kind ActivityType, totalTime any, externalID string) error {
+	if err := s.db.Exec("CALL "+procedure+"(?, ?, ?, ?, ?, ?)", userID, courseID, kind, totalTime, externalID, time.Now()).Error; err != nil {
+		return newCreateDBError(err, "activities")
+	}
+	return nil
+}

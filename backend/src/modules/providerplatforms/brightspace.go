@@ -12,7 +12,6 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"gorm.io/gorm"
 )
 
 const (
@@ -38,7 +37,7 @@ type BrightspaceService struct {
 	CsvFileMap         map[string]string
 }
 
-func newBrightspaceService(provider *ProviderPlatform, db *gorm.DB, params map[string]any) (*BrightspaceService, error) {
+func newBrightspaceService(provider *ProviderPlatform, st *store, params map[string]any) (*BrightspaceService, error) {
 	keysSplit := strings.Split(provider.AccessKey, ";")
 	if len(keysSplit) < 2 {
 		return nil, errors.New("unable to find refresh token, unable to intialize BrightspaceService")
@@ -86,7 +85,7 @@ func newBrightspaceService(provider *ProviderPlatform, db *gorm.DB, params map[s
 	brightspaceService.AccessToken = tokenMap["access_token"].(string)
 	brightspaceService.RefreshToken = tokenMap["refresh_token"].(string)
 	provider.AccessKey = brightspaceService.ClientSecret + ";" + brightspaceService.RefreshToken
-	if err := db.Save(&provider).Error; err != nil {
+	if err := st.saveProviderPlatform(provider); err != nil {
 		log.Errorf("error trying to update provider access_key with new refresh token, error is %v", err)
 		return nil, err
 	}
@@ -149,7 +148,7 @@ func (srv *BrightspaceService) getBrightspaceBulkData(pluginName, zipFileName st
 	return csvFile, err
 }
 
-func (srv *BrightspaceService) GetUsers(db *gorm.DB) ([]ImportUser, error) {
+func (srv *BrightspaceService) GetUsers(st *store) ([]ImportUser, error) {
 	csvFile, err := srv.getBrightspaceBulkData("Users", "users/Users.zip")
 	if err != nil {
 		log.Errorf("error attempting to get bulk data for Brightspace courses, error is: %v", err)
@@ -163,7 +162,12 @@ func (srv *BrightspaceService) GetUsers(db *gorm.DB) ([]ImportUser, error) {
 	log.WithFields(fields).Info("importing users from provider using csv file")
 	for _, bsUser := range bsUsers {
 		if strings.ToUpper(bsUser.IsActive) == "TRUE" {
-			if db.Where("provider_platform_id = ? AND external_user_id = ?", srv.ProviderPlatformID, bsUser.UserId).First(&ProviderUserMapping{}).RowsAffected > 0 {
+			mapped, err := st.isUserMapped(srv.ProviderPlatformID, bsUser.UserId)
+			if err != nil {
+				log.WithFields(fields).Errorf("error checking the user mapping for %s: %v", bsUser.UserId, err)
+				continue
+			}
+			if mapped {
 				continue
 			}
 			user := srv.IntoImportUser(bsUser)
@@ -174,7 +178,7 @@ func (srv *BrightspaceService) GetUsers(db *gorm.DB) ([]ImportUser, error) {
 	return importUsers, nil
 }
 
-func (srv *BrightspaceService) ImportCourses(db *gorm.DB) error {
+func (srv *BrightspaceService) ImportCourses(st *store) error {
 	contentObjCsvFile, err := srv.getBrightspaceBulkData("Content Objects", "courses/ContentObjects.zip")
 	if err != nil {
 		log.Errorf("error attempting to get bulk data for Brightspace content objects for importing activities, error is: %v", err)
@@ -203,13 +207,20 @@ func (srv *BrightspaceService) ImportCourses(db *gorm.DB) error {
 	for _, bsCourse := range bsCourses {
 		if strings.ToUpper(bsCourse.IsActive) == "TRUE" && strings.ToUpper(bsCourse.IsDeleted) == "FALSE" && bsCourse.Type == "Course Offering" && totalProgressMilestonesMap[bsCourse.OrgUnitId] > 0 {
 			bsCourse.TotalContentCount = totalProgressMilestonesMap[bsCourse.OrgUnitId]
-			if db.Where("provider_platform_id = ? AND external_id = ?", srv.ProviderPlatformID, bsCourse.OrgUnitId).First(&Course{}).RowsAffected > 0 {
-				srv.updateTotalProgress(db, bsCourse.TotalContentCount, bsCourse.OrgUnitId)
+			exists, err := st.courseExists(srv.ProviderPlatformID, bsCourse.OrgUnitId)
+			if err != nil {
+				log.Errorf("error checking for course with external id %v, error is: %v", bsCourse.OrgUnitId, err)
+				continue
+			}
+			if exists {
+				if err := st.setTotalProgressMilestones(srv.ProviderPlatformID, bsCourse.OrgUnitId, int64(bsCourse.TotalContentCount)); err != nil {
+					log.Errorln("error updating course total_progress_milestones in db, error is: ", err) //just logging the error if it occurs, logic will continue
+				}
 				continue
 			}
 			log.Infof("importing course named %v with external id %v", bsCourse.Name, bsCourse.OrgUnitId)
 			course := srv.IntoCourse(bsCourse)
-			if err := db.Create(&course).Error; err != nil {
+			if err := st.createCourse(course); err != nil {
 				log.Errorf("error creating course in db, error is: %v", err)
 				continue
 			}
@@ -218,15 +229,7 @@ func (srv *BrightspaceService) ImportCourses(db *gorm.DB) error {
 	return nil
 }
 
-func (srv *BrightspaceService) updateTotalProgress(db *gorm.DB, totalProgressMilestones int, externalId string) {
-	if db.Where("provider_platform_id = ? AND external_id = ? AND total_progress_milestones = ?", srv.ProviderPlatformID, externalId, totalProgressMilestones).First(&Course{}).RowsAffected == 0 {
-		if err := db.Model(&Course{}).Where("provider_platform_id = ? AND external_id = ?", srv.ProviderPlatformID, externalId).Update("total_progress_milestones", totalProgressMilestones).Error; err != nil {
-			log.Errorln("error updating course total_progress_milestones in db, error is: ", err) //just logging the error if it occurs, logic will continue
-		}
-	}
-}
-
-func (srv *BrightspaceService) ImportMilestones(course map[string]interface{}, users []map[string]interface{}, db *gorm.DB, lastRun time.Time) error {
+func (srv *BrightspaceService) ImportMilestones(course map[string]interface{}, users []map[string]interface{}, st *store, lastRun time.Time) error {
 	usersMap := make(map[string]uint)
 	for _, user := range users {
 		userId, ok := dbUint(user, "user_id")
@@ -244,15 +247,15 @@ func (srv *BrightspaceService) ImportMilestones(course map[string]interface{}, u
 	if !srv.IsDownloaded {
 		cleanUpCsvFiles("milestones")
 	}
-	err := importBSEnrollmentMilestones(srv, paramObj, db)
+	err := importBSEnrollmentMilestones(srv, paramObj, st)
 	if err != nil {
 		log.Errorln("error importing enrollment milestones, error is ", err)
 	}
-	err = importBSAssignmentSubmissionMilestones(srv, paramObj, db)
+	err = importBSAssignmentSubmissionMilestones(srv, paramObj, st)
 	if err != nil {
 		log.Errorln("error importing assignment submission milestones, error is ", err)
 	}
-	err = importBSQuizSubmissionMilestones(srv, paramObj, db)
+	err = importBSQuizSubmissionMilestones(srv, paramObj, st)
 	if err != nil {
 		log.Errorln("error importing quiz submission milestones, error is ", err)
 	}
@@ -260,7 +263,7 @@ func (srv *BrightspaceService) ImportMilestones(course map[string]interface{}, u
 	return nil
 }
 
-func importBSEnrollmentMilestones(srv *BrightspaceService, po milestonePO, db *gorm.DB) error {
+func importBSEnrollmentMilestones(srv *BrightspaceService, po milestonePO, st *store) error {
 	var (
 		csvFile string
 		err     error
@@ -295,8 +298,13 @@ func importBSEnrollmentMilestones(srv *BrightspaceService, po milestonePO, db *g
 	for _, bsEnrollment := range filteredBSEnrollments {
 		id = bsEnrollment.getCompositeKeyId()
 		userId = usersMap[bsEnrollment.UserId]
-		if db.Model(&UserEnrollment{}).First(&UserEnrollment{}, "user_id = ? AND course_id = ? AND external_id = ?", userId, courseId, id).RowsAffected == 0 {
-			if err := db.Create(&UserEnrollment{UserID: userId, CourseID: uint(courseId)}).Error; err != nil {
+		enrolled, err := st.enrollmentExistsWithExternalID(userId, courseId, id)
+		if err != nil {
+			log.WithFields(log.Fields{"userId": userId, "course_id": courseId, "error": err}).Error("Failed to check enrollment")
+			continue
+		}
+		if !enrolled {
+			if err := st.createEnrollment(userId, courseId); err != nil {
 				log.WithFields(log.Fields{"userId": userId, "course_id": courseId, "error": err}).Error("Failed to create enrollment")
 				continue
 			}
@@ -305,7 +313,7 @@ func importBSEnrollmentMilestones(srv *BrightspaceService, po milestonePO, db *g
 	return nil
 }
 
-func importBSAssignmentSubmissionMilestones(srv *BrightspaceService, po milestonePO, db *gorm.DB) error {
+func importBSAssignmentSubmissionMilestones(srv *BrightspaceService, po milestonePO, st *store) error {
 	var (
 		csvFile string
 		err     error
@@ -344,12 +352,22 @@ func importBSAssignmentSubmissionMilestones(srv *BrightspaceService, po mileston
 		userId = usersMap[bsAssignment.UserId]
 		switch strings.ToUpper(bsAssignment.IsGraded) {
 		case "TRUE":
-			if db.Where("user_id = ? AND course_id = ? AND external_id = ?", userId, courseId, gradedId).First(&Milestone{}).RowsAffected > 0 {
-				addAssignmentMilestoneIfNotExists(db, userId, courseId, bsAssignment)
+			exists, err := st.milestoneExists(userId, courseId, gradedId)
+			if err != nil {
+				log.Errorln("error checking for milestone in db, error is ", err)
+				continue
+			}
+			if exists {
+				addAssignmentMilestoneIfNotExists(st, userId, courseId, bsAssignment)
 				continue
 			}
 		case "FALSE":
-			if db.Where("user_id = ? AND course_id = ? AND external_id = ?", userId, courseId, id).First(&Milestone{}).RowsAffected > 0 {
+			exists, err := st.milestoneExists(userId, courseId, id)
+			if err != nil {
+				log.Errorln("error checking for milestone in db, error is ", err)
+				continue
+			}
+			if exists {
 				continue
 			}
 		}
@@ -367,7 +385,7 @@ func importBSAssignmentSubmissionMilestones(srv *BrightspaceService, po mileston
 			milestone.Type = AssignmentSubmission
 			milestone.ExternalID = id
 		}
-		if err = db.Create(&milestone).Error; err != nil {
+		if err = st.createMilestone(&milestone); err != nil {
 			log.Errorln("error creating milestone in db")
 			continue
 		}
@@ -375,7 +393,7 @@ func importBSAssignmentSubmissionMilestones(srv *BrightspaceService, po mileston
 	return nil
 }
 
-func importBSQuizSubmissionMilestones(srv *BrightspaceService, po milestonePO, db *gorm.DB) error {
+func importBSQuizSubmissionMilestones(srv *BrightspaceService, po milestonePO, st *store) error {
 	var (
 		csvFile string
 		err     error
@@ -414,12 +432,22 @@ func importBSQuizSubmissionMilestones(srv *BrightspaceService, po milestonePO, d
 		userId = usersMap[bsQuiz.UserId]
 		switch strings.ToUpper(bsQuiz.IsGraded) {
 		case "TRUE":
-			if db.Where("user_id = ? AND course_id = ? AND external_id = ?", userId, courseId, gradedId).First(&Milestone{}).RowsAffected > 0 {
-				addQuizMilestoneIfNotExists(db, userId, courseId, bsQuiz)
+			exists, err := st.milestoneExists(userId, courseId, gradedId)
+			if err != nil {
+				log.Errorln("error checking for milestone in db, error is ", err)
+				continue
+			}
+			if exists {
+				addQuizMilestoneIfNotExists(st, userId, courseId, bsQuiz)
 				continue
 			}
 		case "FALSE":
-			if db.Where("user_id = ? AND course_id = ? AND external_id = ?", userId, courseId, id).First(&Milestone{}).RowsAffected > 0 {
+			exists, err := st.milestoneExists(userId, courseId, id)
+			if err != nil {
+				log.Errorln("error checking for milestone in db, error is ", err)
+				continue
+			}
+			if exists {
 				continue
 			}
 		}
@@ -436,7 +464,7 @@ func importBSQuizSubmissionMilestones(srv *BrightspaceService, po milestonePO, d
 			milestone.Type = QuizSubmission
 			milestone.ExternalID = id
 		}
-		if err = db.Create(&milestone).Error; err != nil {
+		if err = st.createMilestone(&milestone); err != nil {
 			log.Errorln("error creating milestone in db")
 			continue
 		}
@@ -444,8 +472,13 @@ func importBSQuizSubmissionMilestones(srv *BrightspaceService, po milestonePO, d
 	return nil
 }
 
-func addAssignmentMilestoneIfNotExists(db *gorm.DB, userId, courseId uint, bsAssignment BrightspaceAssignmentSubmission) {
-	if db.Where("user_id = ? AND course_id = ? AND external_id = ?", userId, courseId, bsAssignment.getCompositeKeyId()).First(&Milestone{}).RowsAffected == 0 {
+func addAssignmentMilestoneIfNotExists(st *store, userId, courseId uint, bsAssignment BrightspaceAssignmentSubmission) {
+	exists, err := st.milestoneExists(userId, courseId, bsAssignment.getCompositeKeyId())
+	if err != nil {
+		log.Errorln("error checking for assignment submission milestone in db, error is ", err)
+		return
+	}
+	if !exists {
 		milestone := Milestone{
 			UserID:      userId,
 			CourseID:    courseId,
@@ -453,14 +486,19 @@ func addAssignmentMilestoneIfNotExists(db *gorm.DB, userId, courseId uint, bsAss
 			Type:        AssignmentSubmission,
 			ExternalID:  bsAssignment.getCompositeKeyId(),
 		}
-		if err := db.Create(&milestone).Error; err != nil {
+		if err := st.createMilestone(&milestone); err != nil {
 			log.Errorln("error creating assignment submission milestone in db, error is ", err)
 		}
 	}
 }
 
-func addQuizMilestoneIfNotExists(db *gorm.DB, userId, courseId uint, bsQuiz BrightspaceQuizSubmission) {
-	if db.Where("user_id = ? AND course_id = ? AND external_id = ?", userId, courseId, bsQuiz.AttemptId).First(&Milestone{}).RowsAffected == 0 {
+func addQuizMilestoneIfNotExists(st *store, userId, courseId uint, bsQuiz BrightspaceQuizSubmission) {
+	exists, err := st.milestoneExists(userId, courseId, bsQuiz.AttemptId)
+	if err != nil {
+		log.Errorln("error checking for quiz submission milestone in db, error is ", err)
+		return
+	}
+	if !exists {
 		milestone := Milestone{
 			UserID:      userId,
 			CourseID:    courseId,
@@ -468,13 +506,13 @@ func addQuizMilestoneIfNotExists(db *gorm.DB, userId, courseId uint, bsQuiz Brig
 			Type:        QuizSubmission,
 			ExternalID:  bsQuiz.AttemptId,
 		}
-		if err := db.Create(&milestone).Error; err != nil {
+		if err := st.createMilestone(&milestone); err != nil {
 			log.Errorln("error creating quiz submission milestone in db, error is ", err)
 		}
 	}
 }
 
-func (srv *BrightspaceService) ImportActivityForCourse(course map[string]any, db *gorm.DB) error {
+func (srv *BrightspaceService) ImportActivityForCourse(course map[string]any, st *store) error {
 	if !srv.IsDownloaded {
 		cleanUpCsvFiles("activities")
 	}
@@ -504,18 +542,22 @@ func (srv *BrightspaceService) ImportActivityForCourse(course map[string]any, db
 	}
 	courseId := uint(course["course_id"].(int64))
 	externalCourseId := course["external_course_id"].(string)
-	bsContentDtoMap := srv.getUsersActivity(db, externalCourseId, contentObjCsvFile, userProgressCsvFile)
+	bsContentDtoMap := srv.getUsersActivity(st, externalCourseId, contentObjCsvFile, userProgressCsvFile)
 	fields := log.Fields{"provider": srv.ProviderPlatformID, "Function": "ImportActivityForCourse", "contentObjCsvFile": contentObjCsvFile, "userProgressCsvFile": userProgressCsvFile}
 	log.WithFields(fields).Info("importing activities from provider using csv file")
 	for userId, bsUserContentDtos := range bsContentDtoMap {
 		for _, bsDto := range bsUserContentDtos {
-			var acts []map[string]any
-			if db.Raw("select external_id from activities where course_id = ? AND external_id = ?", courseId, bsDto.ExternalId).First(&acts).RowsAffected > 0 {
+			exists, err := st.activityExists(courseId, bsDto.ExternalId)
+			if err != nil {
+				log.WithFields(log.Fields{"user_id": userId, "course_id": courseId, "error": err}).Error("Failed to check for activity")
+				continue
+			}
+			if exists {
 				continue
 			}
 			// TODO: check if there is a timestamp we can use to get the exact time /date of the activity being entered
-			if err = db.Exec("CALL insert_daily_activity_brightspace(?, ?, ?, ?, ?, ?)",
-				userId, courseId, ContentInteraction, bsDto.TotalTime, bsDto.ExternalId, time.Now()).Error; err != nil {
+			if err = st.insertDailyActivity("insert_daily_activity_brightspace",
+				userId, courseId, ContentInteraction, bsDto.TotalTime, bsDto.ExternalId); err != nil {
 				log.WithFields(log.Fields{"user_id": userId, "course_id": courseId, "error": err}).Error("Failed to create activity using brightspace data")
 				continue
 			}
@@ -524,7 +566,7 @@ func (srv *BrightspaceService) ImportActivityForCourse(course map[string]any, db
 	return nil
 }
 
-func (srv *BrightspaceService) getUsersActivity(db *gorm.DB, externalCourseId, contentObjCsvFile, userProgressCsvFile string) map[uint][]BrightspaceUserContentDto {
+func (srv *BrightspaceService) getUsersActivity(st *store, externalCourseId, contentObjCsvFile, userProgressCsvFile string) map[uint][]BrightspaceUserContentDto {
 	bsContentDtoMap := make(map[uint][]BrightspaceUserContentDto)
 	bsContentObjects := []BrightspaceContentObject{}
 	readCSV(&bsContentObjects, contentObjCsvFile)
@@ -538,8 +580,8 @@ func (srv *BrightspaceService) getUsersActivity(db *gorm.DB, externalCourseId, c
 	bsContentUserProgress := []BrightspaceContentUserProgress{}
 	readCSV(&bsContentUserProgress, userProgressCsvFile)
 	for _, contentUser := range bsContentUserProgress { //separate by user
-		var userId uint //filter out the users
-		if err := db.Model(&ProviderUserMapping{}).Select("user_id").First(&userId, "external_user_id = ? and provider_platform_id = ?", contentUser.UserId, srv.ProviderPlatformID).Error; err != nil {
+		userId, err := st.getMappedUserID(srv.ProviderPlatformID, contentUser.UserId) //filter out the users
+		if err != nil {
 			log.Errorln("error finding brightspace user by external id in ImportActivityForCourse")
 			continue
 		}

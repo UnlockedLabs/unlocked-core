@@ -59,7 +59,7 @@ func TestKolibriGetUsers(t *testing.T) {
 		('u4', 'Other Place', 'other', 'facility-2')`).Error)
 	createResident(t, db, ks.ProviderPlatformID, 1, "student", "u3")
 
-	users, err := ks.GetUsers(db)
+	users, err := ks.GetUsers(&store{db: db})
 	require.NoError(t, err)
 	assert.Equal(t, []ImportUser{
 		{NameFirst: "Ada", NameLast: "Lovelace", Username: "ada", Email: "ada@unlocked.v2", ExternalUserID: "u1"},
@@ -85,7 +85,7 @@ func TestKolibriImportCourses(t *testing.T) {
 	require.NoError(t, db.Create(&Course{ProviderPlatformID: ks.ProviderPlatformID, ExternalID: "bbbb-2222", Name: "Old channel", TotalProgressMilestones: 1}).Error)
 	require.NoError(t, db.Create(&Course{ProviderPlatformID: ks.ProviderPlatformID, ExternalID: "dddd-4444", Name: "Class B", TotalProgressMilestones: 7}).Error)
 
-	require.NoError(t, ks.ImportCourses(db))
+	require.NoError(t, ks.ImportCourses(&store{db: db}))
 
 	var courses []Course
 	require.NoError(t, db.Order("external_id").Find(&courses).Error)
@@ -129,12 +129,31 @@ func TestKolibriEnrollmentMilestones(t *testing.T) {
 		externalUserIds: []string{"u1", "u2"},
 	}
 
-	require.NoError(t, importEnrollmentMilestones(ks, po, db))
-	require.NoError(t, importEnrollmentMilestones(ks, po, db))
+	require.NoError(t, importEnrollmentMilestones(ks, po, &store{db: db}))
+	require.NoError(t, importEnrollmentMilestones(ks, po, &store{db: db}))
 
 	var enrolled []uint
 	require.NoError(t, db.Model(&UserEnrollment{}).Pluck("user_id", &enrolled).Error)
 	assert.Equal(t, []uint{101}, enrolled)
+}
+
+// The quiz import skips a quiz it has recorded under either id: the
+// submission's, or the grade's ("<user id>-<id>"). SQLite can't run the
+// import itself, which reads Postgres's int32 ids, so this checks the query.
+func TestMilestoneExistsAnyID(t *testing.T) {
+	db := newTestDB(t)
+	st := &store{db: db}
+	require.NoError(t, st.createMilestone(&Milestone{UserID: 101, CourseID: 5, ExternalID: "101-7", Type: GradeReceived}))
+
+	exists, err := st.milestoneExists(101, 5, "7", "101-7")
+	require.NoError(t, err)
+	assert.True(t, exists)
+	exists, err = st.milestoneExists(101, 5, "7")
+	require.NoError(t, err)
+	assert.False(t, exists)
+	exists, err = st.milestoneExists(102, 5, "7", "101-7")
+	require.NoError(t, err)
+	assert.False(t, exists, "another user's milestone")
 }
 
 // The activity import skips activity it has recorded before and rows it
@@ -157,12 +176,12 @@ func TestKolibriActivity(t *testing.T) {
 	require.NoError(t, db.Exec(`INSERT INTO activities (course_id, user_id, type, total_time, time_delta, external_id) VALUES (5, 101, 'content_interaction', 1, 1, 'a1')`).Error)
 	calls := recordCalls(t, db)
 
-	require.NoError(t, ks.ImportActivityForCourse(map[string]any{"course_id": int64(5), "external_course_id": "ch"}, db))
+	require.NoError(t, ks.ImportActivityForCourse(map[string]any{"course_id": int64(5), "external_course_id": "ch"}, &store{db: db}))
 
 	assert.Equal(t, []procedureCall{
-		{"insert_daily_activity_kolibri", []any{uint(109), 5, ContentInteraction, 1.0, "a3"}},
-		{"insert_daily_activity_kolibri", []any{uint(101), 5, CourseInteraction, 3.0, "a4"}},
-		{"insert_daily_activity_kolibri", []any{uint(101), 5, ContentInteraction, 4.0, "a5"}},
+		{"insert_daily_activity_kolibri", []any{uint(109), uint(5), ContentInteraction, 1.0, "a3"}},
+		{"insert_daily_activity_kolibri", []any{uint(101), uint(5), CourseInteraction, 3.0, "a4"}},
+		{"insert_daily_activity_kolibri", []any{uint(101), uint(5), ContentInteraction, 4.0, "a5"}},
 	}, *calls)
 }
 

@@ -13,7 +13,7 @@ import (
 // doesn't check the Authorization header: only the server can reach it.
 func TestUserRoutes(t *testing.T) {
 	db := newTestDB(t)
-	w := &worker{db: db}
+	w := &worker{store: &store{db: db}}
 	routes := w.routes()
 	fc := newFakeCanvas(t)
 	fc.users = []map[string]any{

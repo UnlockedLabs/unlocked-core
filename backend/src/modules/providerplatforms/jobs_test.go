@@ -211,7 +211,7 @@ func TestJobPublisherRunExistingRows(t *testing.T) {
 	require.NoError(t, json.Unmarshal(pub.msgs[0].Data, &body))
 	assert.Equal(t, cj.ID, body["job_id"])
 	assert.Equal(t, "2026-03-01T00:00:00Z", body["last_run"])
-	assert.Equal(t, taskRunning, reloadTask(t, &worker{db: db}, task.ID).Status)
+	assert.Equal(t, taskRunning, reloadTask(t, &worker{store: &store{db: db}}, task.ID).Status)
 	var saved cronJob
 	require.NoError(t, db.First(&saved, "id = ?", cj.ID).Error)
 	assert.Equal(t, "0 3 * * *", saved.Schedule)
@@ -227,7 +227,7 @@ func TestJobPublisherRunPublishFails(t *testing.T) {
 
 	(&jobPublisher{store: &store{db: db}, publish: pub.publish}).run(context.Background(), jobs.GetCourses, p.ID)
 
-	assert.Equal(t, taskRunning, reloadTask(t, &worker{db: db}, task.ID).Status)
+	assert.Equal(t, taskRunning, reloadTask(t, &worker{store: &store{db: db}}, task.ID).Status)
 }
 
 func TestWorkerSubscriptions(t *testing.T) {
