@@ -166,6 +166,9 @@ type ActivityHistoryResponse struct {
 	AttendanceStatus        *string               `json:"attendance_status"`
 	ClassName               *string               `json:"class_name"`
 	SessionDate             *time.Time            `json:"session_date"`
+	// ClassHistoryID is the program_classes_history row the action logged,
+	// whose time Programs gives the handler. The response has never sent it.
+	ClassHistoryID *uint `json:"-"`
 }
 
 func NewUserAccountHistory(userID uint, action ActivityHistoryAction, adminID *uint, programClassesHistoryID *uint, facilityID *uint) *UserAccountHistory {

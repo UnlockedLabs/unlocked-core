@@ -34,14 +34,21 @@ func (srv *Server) handleIndexFacilities(w http.ResponseWriter, r *http.Request,
 	for i, f := range facilities {
 		ids[i] = f.ID
 	}
+	progs, err := srv.programs.FacilityPrograms(r.Context(), ids)
+	if err != nil {
+		return newDatabaseServiceError(database.NewDBError(err, "error getting facilities"))
+	}
 	content, err := srv.openContent.FacilityContent(r.Context(), ids)
 	if err != nil {
 		return newDatabaseServiceError(database.NewDBError(err, "error getting facilities"))
 	}
 	for i := range facilities {
-		// Open Content's activity and favorites block a delete, as in
-		// FacilityBlockingChildren.HasAny.
-		if c := content[facilities[i].ID]; c.Activities > 0 || c.Favorites > 0 {
+		p := progs[facilities[i].ID]
+		facilities[i].ActivePrograms = p.ActivePrograms
+		facilities[i].ActiveClasses = p.ActiveClasses
+		// Programs' classes, programs and rooms, and Open Content's activity
+		// and favorites, block a delete, as in FacilityBlockingChildren.HasAny.
+		if c := content[facilities[i].ID]; p.Classes > 0 || p.Programs > 0 || p.Rooms > 0 || c.Activities > 0 || c.Favorites > 0 {
 			facilities[i].CanDelete = false
 		}
 	}
@@ -149,12 +156,20 @@ func (srv *Server) handleDeleteFacility(w http.ResponseWriter, r *http.Request, 
 }
 
 // facilityBlockers counts the rows that point at a facility: core's, and
-// Open Content's from its api.
+// Programs' and Open Content's from their apis.
 func (srv *Server) facilityBlockers(ctx context.Context, id int) (models.FacilityBlockingChildren, error) {
 	blockers, err := srv.Db.FacilityBlockingChildren(id)
 	if err != nil {
 		return blockers, newDatabaseServiceError(err)
 	}
+	progs, err := srv.programs.FacilityPrograms(ctx, []uint{uint(id)})
+	if err != nil {
+		return blockers, newDatabaseServiceError(database.NewDBError(err, "error getting delete_guard_facility_counts"))
+	}
+	p := progs[uint(id)]
+	blockers.Classes = p.Classes
+	blockers.Programs = p.Programs
+	blockers.Rooms = p.Rooms
 	content, err := srv.openContent.FacilityContent(ctx, []uint{uint(id)})
 	if err != nil {
 		return blockers, newDatabaseServiceError(database.NewDBError(err, "error getting delete_guard_facility_counts"))

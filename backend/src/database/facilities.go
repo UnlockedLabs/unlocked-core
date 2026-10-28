@@ -28,25 +28,15 @@ func (db *DB) GetAllFacilitiesWithStats(args *models.QueryContext) ([]models.Fac
 		return nil, newGetRecordsDBError(err, "facilities")
 	}
 
+	// The handler adds the Programs and Open Content numbers from their apis.
 	const query = `SELECT
 			f.id, f.name, f.timezone, f.created_at, f.updated_at,
-			COUNT(DISTINCT CASE WHEN p.is_active = true AND p.archived_at IS NULL AND p.deleted_at IS NULL THEN p.id END) AS active_programs,
-			COUNT(DISTINCT CASE WHEN pc.status IN ('Active') AND pc.archived_at IS NULL AND pc.deleted_at IS NULL THEN pc.id END) AS active_classes,
 			COUNT(DISTINCT CASE WHEN u.role = 'student' AND u.deleted_at IS NULL AND u.deactivated_at IS NULL THEN u.id END) AS total_residents,
 			NOT (
 				EXISTS(SELECT 1 FROM users WHERE facility_id = f.id AND deleted_at IS NULL)
-				OR EXISTS(SELECT 1 FROM program_classes WHERE facility_id = f.id AND deleted_at IS NULL)
-				OR EXISTS(SELECT 1 FROM facilities_programs WHERE facility_id = f.id AND deleted_at IS NULL)
-				OR EXISTS(SELECT 1 FROM rooms WHERE facility_id = f.id AND deleted_at IS NULL)
 				OR EXISTS(SELECT 1 FROM user_account_history WHERE facility_id = f.id)
 			) AS can_delete
 		FROM facilities f
-		LEFT JOIN facilities_programs fp ON fp.facility_id = f.id
-			AND fp.deleted_at IS NULL
-		LEFT JOIN programs p ON p.id = fp.program_id
-			AND p.deleted_at IS NULL
-		LEFT JOIN program_class_cohorts pc ON pc.facility_id = f.id
-			AND pc.deleted_at IS NULL
 		LEFT JOIN users u ON u.facility_id = f.id
 		WHERE f.deleted_at IS NULL
 		GROUP BY f.id, f.name, f.timezone, f.created_at, f.updated_at

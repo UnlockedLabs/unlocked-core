@@ -658,11 +658,10 @@ func (db *DB) GetUserAccountHistory(args *models.QueryContext, userID uint, cate
 				admins.username AS admin_username,
 				facilities.name AS facility_name,
 				uah.attendance_status, uah.class_name, uah.session_date,
-				psh.*`).
+				uah.program_classes_history_id AS class_history_id`).
 		Joins("INNER JOIN users ON uah.user_id = users.id").
 		Joins("LEFT JOIN users admins ON uah.admin_id = admins.id").
 		Joins("LEFT JOIN facilities ON uah.facility_id = facilities.id").
-		Joins("LEFT JOIN program_classes_history psh ON uah.program_classes_history_id = psh.id").
 		Where("uah.user_id = ?", userID)
 
 	if len(categories) > 0 {

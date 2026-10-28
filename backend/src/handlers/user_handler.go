@@ -516,6 +516,26 @@ func (srv *Server) handleGetUserAccountHistory(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		return newDatabaseServiceError(err)
 	}
+	var classHistoryIDs []uint
+	for _, h := range history {
+		if h.ClassHistoryID != nil {
+			classHistoryIDs = append(classHistoryIDs, *h.ClassHistoryID)
+		}
+	}
+	times, err := srv.programs.ClassHistoryCreatedAt(r.Context(), classHistoryIDs)
+	if err != nil {
+		return newDatabaseServiceError(database.NewDBError(err, "error getting user_account_history"))
+	}
+	// An action that logged a class change shows the change's time, as it did
+	// when core joined program_classes_history itself.
+	for i, h := range history {
+		if h.ClassHistoryID == nil {
+			continue
+		}
+		if t, ok := times[*h.ClassHistoryID]; ok {
+			history[i].CreatedAt = &t
+		}
+	}
 	return writePaginatedResponse(w, http.StatusOK, history, args.IntoMeta())
 }
 
