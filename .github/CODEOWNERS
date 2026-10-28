@@ -1,4 +1,3 @@
 backend/**/* @UnlockedLabs/reviewers 
-provider-middleware/**/* @UnlockedLabs/reviewers 
 config/**/* @UnlockedLabs/reviewers
 frontend/**/* @UnlockedLabs/reviewers

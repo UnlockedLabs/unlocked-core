@@ -8,9 +8,6 @@ on:
       - "backend/**"
       - "backend/go.mod"
       - "backend/go.sum"
-      - "provider-middleware/**"
-      - "provider-middleware/go.mod"
-      - "provider-middleware/go.sum"
       - ".github/workflows/security-go.yml"
 
 permissions:
@@ -37,7 +34,6 @@ jobs:
             backend/go.sum
             backend/migrations/go.sum
             backend/seeder/go.sum
-            provider-middleware/go.sum
 
       - name: Install govulncheck
         run: |
@@ -48,10 +44,9 @@ jobs:
         id: vuln-scan
         timeout-minutes: 5
         run: |
-          echo "Running govulncheck on both Go modules..."
+          echo "Running govulncheck on the backend module..."
 
           backend_vuln=false
-          middleware_vuln=false
 
           echo "Scanning backend module..."
           cd backend
@@ -63,17 +58,7 @@ jobs:
           fi
           cd ..
 
-          echo "Scanning provider-middleware module..."
-          cd provider-middleware
-          if govulncheck ./... > ../middleware_vuln_output.txt 2>&1; then
-            echo "No vulnerabilities found in provider-middleware"
-          else
-            middleware_vuln=true
-            echo "Vulnerabilities found in provider-middleware"
-          fi
-          cd ..
-
-          if [ "$backend_vuln" = true ] || [ "$middleware_vuln" = true ]; then
+          if [ "$backend_vuln" = true ]; then
             echo "vulnerabilities_found=true" >> $GITHUB_OUTPUT
             echo "Security vulnerabilities detected - this PR cannot be merged"
             exit 1
@@ -85,11 +70,9 @@ jobs:
       - name: Send Slack notification
         if: failure() && steps.vuln-scan.outputs.vulnerabilities_found == 'true'
         run: |
-          # Collect vulnerability output from both modules
           BACKEND_VULN=$(cat backend_vuln_output.txt 2>/dev/null || echo "No backend vulnerabilities output")
-          MIDDLEWARE_VULN=$(cat middleware_vuln_output.txt 2>/dev/null || echo "No provider-middleware vulnerabilities output")
 
-          VULN_OUTPUT=$(printf "=== BACKEND VULNERABILITIES ===\n%s\n\n=== PROVIDER-MIDDLEWARE VULNERABILITIES ===\n%s" "$BACKEND_VULN" "$MIDDLEWARE_VULN")
+          VULN_OUTPUT=$(printf "=== BACKEND VULNERABILITIES ===\n%s" "$BACKEND_VULN")
 
           VULN_ESCAPED=$(echo "$VULN_OUTPUT" | sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/' | tr -d '\n' | head -c 2000)
           if [ ${#VULN_OUTPUT} -gt 2000 ]; then
@@ -141,11 +124,6 @@ jobs:
             echo "To fix these vulnerabilities:"
             echo "  For backend module:"
             echo "    1. cd backend"
-            echo "    2. go get -u <package>@<safe-version>"
-            echo "    3. Push updates to your PR"
-            echo ""
-            echo "  For provider-middleware module:"
-            echo "    1. cd provider-middleware"
             echo "    2. go get -u <package>@<safe-version>"
             echo "    3. Push updates to your PR"
             echo ""

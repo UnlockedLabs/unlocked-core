@@ -21,12 +21,8 @@ jar
 /frontend/public/videos/*
 *.tsbuildinfo
 /migrations/migrations
-/provider-middleware/providers.db
 /backend/server
 /backend/seeder/seeder
-/provider-middleware/middleware
-/provider-middleware/provider-middleware
-/provider-middleware/bin
 /backend/bin
 /bin/*
 /tmp

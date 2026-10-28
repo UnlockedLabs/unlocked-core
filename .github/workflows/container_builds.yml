@@ -83,7 +83,7 @@ jobs:
 
       - id: build-images
         run: |
-          # Every push builds and tags all three images — a partial set (gated
+          # Every push builds and tags both images — a partial set (gated
           # on which folder changed) can't be pinned per-site, can't tell you
           # what staging actually tested, and drops a build's changes entirely
           # if a later push's run replaces it in the concurrency queue.
@@ -116,16 +116,7 @@ jobs:
             --build-arg GIT_COMMIT="$GITHUB_SHA" --build-arg GIT_BRANCH="$IMAGE_GIT_BRANCH" --build-arg APP_VERSION="$IMAGE_VERSION" \
             "${LABELS[@]}" "${TAGS[@]}" --push -f backend/Dockerfile .
 
-          echo "Building middleware image"
-          TAGS=(-t "$REGISTRY/provider_middleware:${IMAGE_VERSION}")
-          if [[ -n "$EXTRA_TAG" ]]; then
-            TAGS+=(-t "$REGISTRY/provider_middleware:${EXTRA_TAG}")
-          fi
-          docker buildx build --platform linux/amd64 \
-            --cache-from type=gha,scope=middleware --cache-to type=gha,scope=middleware,mode=max \
-            "${LABELS[@]}" "${TAGS[@]}" --push -f provider-middleware/Dockerfile .
-
-          echo "deployments=frontend server provider-service opencontent-worker" >> $GITHUB_OUTPUT
+          echo "deployments=frontend server opencontent-worker providerplatforms-worker" >> $GITHUB_OUTPUT
 
   restart-deployments:
     if: github.repository == 'UnlockedLabs/unlocked-core' || github.repository == 'PThorpe92/UnlockEdv2'

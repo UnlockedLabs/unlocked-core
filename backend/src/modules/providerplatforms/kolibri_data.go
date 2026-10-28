@@ -1,4 +1,4 @@
-package main
+package providerplatforms
 
 import (
 	"bytes"
@@ -6,83 +6,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 
-	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms"
+	log "github.com/sirupsen/logrus"
 )
-
-type KolibriResponse[T any] struct {
-	Results    []T `json:"results"`
-	Page       int `json:"page"`
-	Count      int `json:"count"`
-	TotalPages int `json:"total_pages"`
-}
-
-type KolibriUser struct {
-	Roles       []Role `json:"roles"`
-	Id          string `json:"id"`
-	Username    string `json:"username"`
-	Fullname    string `json:"full_name"`
-	Facility    string `json:"facility"`
-	IdNumber    string `json:"id_number"`
-	Gender      string `json:"gender"`
-	BirthYear   string `json:"birth_year"`
-	IsSuperuser bool   `json:"is_superuser"`
-	Password    string `json:"password"`
-}
-
-func (ku *KolibriUser) IntoImportUser() (*providerplatforms.ImportUser, error) {
-	var first, last string
-
-	splitName := strings.Split(ku.Fullname, " ")
-	if len(splitName) > 1 {
-		first = strings.Split(ku.Fullname, " ")[0]
-		last = strings.Split(ku.Fullname, " ")[1]
-	} else if len(splitName) > 2 {
-		last = strings.Join(strings.Split(ku.Fullname, " ")[1:], " ")
-	} else {
-		first = ku.Fullname
-		last = ku.Username
-	}
-	email := ku.Username + "@unlocked.v2"
-	if first == "" && last == "" && ku.Username == "" {
-		return nil, errors.New("invalid user")
-	}
-	user := providerplatforms.ImportUser{
-		Username:         ku.Username,
-		NameFirst:        first,
-		NameLast:         last,
-		Email:            email,
-		ExternalUserID:   ku.Id,
-		ExternalUsername: ku.Username,
-	}
-	log.Printf("user to return: %v", user)
-	return &user, nil
-}
-
-type KolibriContent struct {
-	Author             string `json:"author"`
-	Description        string `json:"description"`
-	ID                 string `json:"id"`
-	Name               string `json:"name"`
-	Root               string `json:"root_id"`
-	Thumbnail          string `json:"thumbnail"`
-	Version            int    `json:"version"`
-	Public             bool   `json:"public"`
-	TotalResourceCount int    `json:"total_resource_count"`
-}
 
 func stripUuidForUrl(uuid string) string {
 	return strings.ReplaceAll(uuid, "-", "")
 }
 
-func (kc *KolibriService) IntoCourse(data map[string]interface{}) *providerplatforms.Course {
+func (kc *KolibriService) IntoCourse(data map[string]interface{}) *Course {
 	courseType := data["course_type"].(string)
 	thumbnail := data["thumbnail"].(string)
 	root := data["root_id"].(string)
@@ -93,12 +30,12 @@ func (kc *KolibriService) IntoCourse(data map[string]interface{}) *providerplatf
 		description = description[:255]
 	}
 	totalResourceCount := data["total_resource_count"].(int64)
-	course := providerplatforms.Course{
+	course := Course{
 		ProviderPlatformID:      kc.ProviderPlatformID,
 		ExternalID:              id,
 		Name:                    name,
 		Type:                    "open_content",
-		OutcomeTypes:            models.StringPtr("completion"),
+		OutcomeTypes:            stringPtr("completion"),
 		TotalProgressMilestones: uint(totalResourceCount),
 	}
 
@@ -108,17 +45,17 @@ func (kc *KolibriService) IntoCourse(data map[string]interface{}) *providerplatf
 			log.Printf("Failed to upload image %v", err)
 			imgUrl = ""
 		}
-		course.Description = models.NilIfBlank(description)
-		course.ThumbnailURL = models.NilIfBlank(imgUrl)
+		course.Description = nilIfBlank(description)
+		course.ThumbnailURL = nilIfBlank(imgUrl)
 		if externalUrl, err := url.JoinPath(kc.BaseURL, "en/learn/#/topics/t/", stripUuidForUrl(id), "/folders?last=HOME"); err == nil {
-			course.ExternalURL = models.StringPtr(externalUrl)
+			course.ExternalURL = stringPtr(externalUrl)
 		}
 	} else {
-		course.Description = models.StringPtr("Kolibri managed course")
+		course.Description = stringPtr("Kolibri managed course")
 		if externUrl, err := url.JoinPath(kc.BaseURL, "/en/learn/#/home/classes/", stripUuidForUrl(id)); err == nil {
-			course.ExternalURL = models.StringPtr(externUrl)
+			course.ExternalURL = stringPtr(externUrl)
 		} else {
-			course.ExternalURL = models.StringPtr(kc.BaseURL + "/en/learn/#/home/classes/" + stripUuidForUrl(id))
+			course.ExternalURL = stringPtr(kc.BaseURL + "/en/learn/#/home/classes/" + stripUuidForUrl(id))
 		}
 	}
 	return &course
@@ -166,7 +103,7 @@ func UploadImage(thumbnail, root, id string) (string, error) {
 	}
 	defer func() {
 		if response.Body.Close() != nil {
-			logger().Error("Failed to close response body")
+			log.Error("Failed to close response body")
 		}
 	}()
 	if response.StatusCode != http.StatusOK {
@@ -183,10 +120,4 @@ func UploadImage(thumbnail, root, id string) (string, error) {
 		return "", err
 	}
 	return urlRes.Data.Url, nil
-}
-
-type Role struct {
-	Collection string `json:"collection"`
-	Kind       string `json:"kind"`
-	Id         string `json:"id"`
 }

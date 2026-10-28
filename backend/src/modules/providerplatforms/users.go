@@ -290,7 +290,7 @@ func (srv *server) handleDeleteProviderUserMapping(w http.ResponseWriter, r *htt
 	return writeJsonResponse(w, http.StatusNoContent, "Mapping deleted successfully")
 }
 
-// Actions: provider-middleware's users and matching them to residents
+// Actions: the worker's provider users and matching them to residents
 
 func (srv *server) handleImportUsers(w http.ResponseWriter, r *http.Request, log sLog) error {
 	log.add("file", "actions")
@@ -456,8 +456,8 @@ func (srv *server) allProviderUsers(ctx context.Context, provider *ProviderPlatf
 }
 
 // listProviderUsers reads the provider's unmapped users. Providers that can list
-// their own users (Essential Ed) are read directly; the rest go through
-// provider-middleware as before.
+// their own users (Essential Ed) are read directly; the rest come from the
+// worker (worker.go).
 func (srv *server) listProviderUsers(ctx context.Context, provider *ProviderPlatform) ([]ImportUser, error) {
 	liveUsers, live, err := srv.live.Users(ctx, provider.ID)
 	if err != nil {
@@ -470,7 +470,7 @@ func (srv *server) listProviderUsers(ctx context.Context, provider *ProviderPlat
 	if err != nil {
 		return nil, err
 	}
-	// provider-middleware already filters out mapped users for these providers.
+	// The worker already filters out mapped users for these providers.
 	return service.GetUsers()
 }
 

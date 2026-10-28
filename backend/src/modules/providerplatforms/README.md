@@ -21,36 +21,41 @@ let residents log in to them. It moved here from core in EN-193.
     those providers' data itself.
 - **It reads core's `users` table** to match and list the users linked to a
   provider (the `user` type in `models.go`).
-- **Two places still import its insides, until EN-197:** provider-middleware
-  (8 files) and `backend/seeder`. depguard doesn't check either one:
-  provider-middleware has no `.golangci.yml`, and `golint.yml` skips the
-  seeder.
+- **`backend/seeder` still imports its insides.** depguard doesn't check it:
+  `golint.yml` skips the seeder.
 - **Programs shows the Canvas and Essential Education live data** on its
   screens, asking `api/` about providers and the users linked to them.
-- **Core still owns:**
-  - the provider jobs (`get_courses`, `get_milestones`, `get_activity`) in
-    core's scheduler and provider-middleware, until EN-197, along with their
-    `cron_jobs`/`runnable_tasks` rows and the
-    `runnable_tasks.provider_platform_id` foreign key into this module's
-    `provider_platforms` (EN-196 did the same for Open Content's jobs);
-  - creating a user with provider accounts (`POST /api/users`), the
-    unmapped-users list (`GET /api/users?include=only_unmapped`), the admin
-    dashboard's course numbers and the demo seed, which ask `api/`.
+- **Its LMS jobs** (`get_courses`, `get_milestones`, `get_activity`) are
+  scheduled by `RegisterJobs` (`jobs.go`) and run by
+  `backend worker providerplatforms` (`worker.go`), which also serves the
+  provider user lists the server asks for on `:8081` (`PROVIDER_SERVICE_URL`).
+  It keeps the jobs' `cron_jobs`/`runnable_tasks` rows through its own types,
+  and `runnable_tasks.provider_platform_id` stays a foreign key into
+  `provider_platforms`.
+- **Core still owns** creating a user with provider accounts
+  (`POST /api/users`), the unmapped-users list
+  (`GET /api/users?include=only_unmapped`), the admin dashboard's course
+  numbers and the demo seed, which ask `api/`.
 
 ## Files
 
-There's no `service.go` or `jobs.go`: the logic is split by topic (`users.go`,
-`matching.go`, `accounts.go`), and the jobs arrive in EN-197.
+There's no `service.go`: the logic is split by topic (`users.go`,
+`matching.go`, `accounts.go`).
 
 | File | What it holds |
 |---|---|
-| `module.go` | Registers the routes, sets up the `oauth_state` bucket, lists the test tables |
+| `module.go` | Registers the routes and the LMS jobs, starts the worker, sets up the `oauth_state` bucket, lists the test tables |
 | `handlers.go` | The routes, with their access levels and feature flags, and the provider, OAuth, OIDC and learning-data handlers |
 | `users.go` | Logins and mappings, importing users and matching them to residents |
 | `matching.go` | The name matching behind the matching screen |
 | `accounts.go` | Creating a user's Canvas or Kolibri account and Canvas login |
-| `providerservice.go` | The client for provider-middleware's user lists |
-| `store.go` | The database queries the routes use |
+| `jobs.go` | Schedules each active provider's LMS jobs and publishes them for the worker |
+| `worker.go` | The worker: runs the LMS jobs and serves the provider user lists |
+| `canvas.go` | Canvas's sync |
+| `brightspace.go`, `brightspace_data.go` | Brightspace's sync, from its data set downloads |
+| `kolibri.go`, `kolibri_data.go` | Kolibri's sync; its queries against Kolibri's own database stay here |
+| `providerservice.go` | The client for the worker's user lists |
+| `store.go` | The database queries the routes and the LMS sync use |
 | `api.go` | The answers to core's questions (`api.ProviderPlatforms`) |
 | `models.go` | Provider Platforms' tables as Go types |
 | `http.go` | Responses, errors, paging and request helpers, matching core's JSON |
@@ -61,7 +66,7 @@ There's no `service.go` or `jobs.go`: the logic is split by topic (`users.go`,
 - `backend/tests/integration/provider_platforms_routes_test.go` pins every
   route's status, JSON, access level and feature flag, and the core routes
   that ask `api/`, against the saved responses in
-  `testdata/provider_platforms/`. Fakes stand in for provider-middleware,
+  `testdata/provider_platforms/`. Fakes stand in for the worker's user lists,
   Kratos, Hydra and Kolibri. After an intended change, regenerate them from
   `backend/` with:
 
@@ -70,8 +75,9 @@ There's no `service.go` or `jobs.go`: the logic is split by topic (`users.go`,
   ```
 
   The changed JSON then shows in the PR for review.
-- The unit tests here cover `api.go` (on SQLite), the name matching and the
-  provider user lists.
+- The unit tests here cover `api.go` (on SQLite), the name matching, the
+  provider user lists and the LMS jobs: each provider's sync on SQLite, with
+  the Postgres procedure calls recorded, plus the worker and the scheduling.
 - The tests run on SQLite without NATS, Canvas, Brightspace or Essential
   Education, so they can't run the Brightspace OAuth flow, creating Canvas
   accounts and logins, or seeding demo data (which calls Postgres

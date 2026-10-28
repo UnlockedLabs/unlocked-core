@@ -17,7 +17,7 @@ jobs:
         env:
           GOWORK: "off"
         run: |
-          for m in backend backend/migrations backend/seeder provider-middleware; do
+          for m in backend backend/migrations backend/seeder; do
             (cd "$m" && go build -o /dev/null ./...)
           done
 

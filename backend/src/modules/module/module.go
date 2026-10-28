@@ -195,7 +195,8 @@ type ReportFilter struct {
 // Essential Education code.
 type LiveProviders interface {
 	// Users is every user a provider's own API lists. ok is false for a
-	// provider that can't list them; its users come from provider-middleware.
+	// provider that can't list them; its users come from Provider Platforms'
+	// worker.
 	Users(ctx context.Context, providerID uint) (users []ProviderUser, ok bool, err error)
 	// MappingsChanged tells Programs that a user's account at a provider was
 	// linked or unlinked, so it can clear its cached Canvas programs.

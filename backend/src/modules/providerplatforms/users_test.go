@@ -32,7 +32,7 @@ func (f fakeLiveProviders) Users(_ context.Context, providerID uint) ([]module.P
 func (fakeLiveProviders) MappingsChanged(uint, uint) {}
 
 // A provider that lists its own users (Essential Ed) is read through core's
-// live code; the rest go through provider-middleware.
+// live code; the rest go through the worker.
 func TestProviderUsers(t *testing.T) {
 	db := openTestDB(t)
 	essentialEd := &ProviderPlatform{Name: "Essential Ed", Type: EssentialEd, State: Enabled}
@@ -74,7 +74,7 @@ func TestProviderUsers(t *testing.T) {
 		assert.Equal(t, []ImportUser{{Username: "new", NameFirst: "New", ExternalUserID: "e-2"}}, users)
 	})
 
-	t.Run("other providers go through provider-middleware", func(t *testing.T) {
+	t.Run("other providers go through the worker", func(t *testing.T) {
 		all, err := srv.allProviderUsers(ctx, kolibri)
 		require.NoError(t, err)
 		assert.Equal(t, []ImportUser{{Username: "from-/api/users/all", ExternalUserID: "k-1"}}, all)

@@ -6,8 +6,8 @@ cmd = "go build -o ./bin/cron_tasks /app/backend/tasks/."
 bin = "bin/cron_tasks"
 include_dir = ["backend", "backend/tasks"]
 include_file = []
-exclude_dir = ["frontend", "provider-middleware"]
-exclude_regex = ["_test\\.go", "frontend/.*", "provider-middleware/.*"]
+exclude_dir = ["frontend"]
+exclude_regex = ["_test\\.go", "frontend/.*"]
 exclude_unchanged = true
 
 log = "logs/tasks.air.log"

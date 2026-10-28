@@ -3,4 +3,3 @@ server.log
 .vscode
 backend
 jar
-/provider-middleware/providers.db

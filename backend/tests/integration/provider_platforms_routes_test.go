@@ -28,7 +28,7 @@ import (
 //	go test ./tests/integration -run 'TestProviderPlatform' -update
 
 // fakeExternal stands in for everything Provider Platforms calls over HTTP:
-// provider-middleware, Kratos, Hydra and Kolibri. IDs it hands out count up,
+// its worker's user lists, Kratos, Hydra and Kolibri. IDs it hands out count up,
 // so the golden files are stable.
 type fakeExternal struct {
 	*httptest.Server
@@ -37,8 +37,7 @@ type fakeExternal struct {
 	clients    int
 }
 
-// providerUser is a user's account at a provider, as provider-middleware sends
-// it.
+// providerUser is a user's account at a provider, as the worker sends it.
 type providerUser struct {
 	Username         string `json:"username"`
 	NameFirst        string `json:"name_first"`
@@ -48,7 +47,7 @@ type providerUser struct {
 	ExternalUsername string `json:"external_username"`
 }
 
-// The users provider-middleware returns for the Kolibri provider. /api/users
+// The users the worker returns for the Kolibri provider. /api/users
 // is the unmapped ones; /api/users/all adds the one mapped to jdoe.
 var (
 	unmappedProviderUsers = []providerUser{
@@ -73,7 +72,7 @@ func newFakeExternal(t *testing.T) *fakeExternal {
 		return map[string]any{"id": id, "schema_id": "default", "schema_url": "http://kratos.test/schema", "traits": map[string]any{}}
 	}
 
-	// provider-middleware
+	// The worker's user lists
 	mux.HandleFunc("GET /api/users", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, unmappedProviderUsers)
 	})
@@ -292,7 +291,7 @@ func TestProviderPlatformRoutes(t *testing.T) {
 			}}, http.StatusOK, []string{"temp_password"}},
 		{"users_import_bad_body", facAdmin, http.MethodPost, "/api/provider-platforms/1/users/import", "not an object", http.StatusBadRequest, nil},
 
-		// Actions: provider-middleware's users and matching them to residents
+		// Actions: the worker's provider users and matching them to residents
 		{"action_get_users", facAdmin, http.MethodGet, "/api/actions/provider-platforms/1/get-users", nil, http.StatusOK, nil},
 		{"action_get_users_search", facAdmin, http.MethodGet, "/api/actions/provider-platforms/1/get-users?search=Jane", nil, http.StatusOK, nil},
 		{"action_get_users_bad_id", facAdmin, http.MethodGet, "/api/actions/provider-platforms/abc/get-users", nil, http.StatusBadRequest, nil},

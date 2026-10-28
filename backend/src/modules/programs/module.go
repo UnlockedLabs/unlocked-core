@@ -8,6 +8,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"os"
 	"sync"
 	"time"
 
@@ -78,9 +79,10 @@ func (m Module) Register(r module.Router, deps module.Deps) {
 	}
 }
 
-// RegisterJobs does nothing yet: activate_scheduled_classes runs from core's
-// scheduler and provider-middleware until EN-197.
-func (Module) RegisterJobs(module.Scheduler, module.Deps) {}
+// RegisterJobs schedules class activation (jobs.go).
+func (Module) RegisterJobs(s module.Scheduler, deps module.Deps) {
+	scheduleJobs(s, &Store{deps.DB}, os.Getenv("APP_ENV") == "dev")
+}
 
 func (Module) Migrations() fs.FS { return migrations }
 

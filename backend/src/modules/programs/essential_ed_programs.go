@@ -478,7 +478,7 @@ func essentialEdUsersURL(provider *ppapi.Provider) string {
 
 // ListUsers returns the district's student accounts. Implementing this lets the
 // user-matching screen read Essential Ed directly instead of going through
-// provider-middleware, which has no Essential Ed service.
+// Provider Platforms' worker, which has no Essential Ed service.
 func (p essentialEdProvider) ListUsers(ctx context.Context) ([]module.ProviderUser, error) {
 	raw, err := p.transport.fetchAll(ctx, p.provider, essentialEdUsersURL(p.provider), 0)
 	if err != nil {

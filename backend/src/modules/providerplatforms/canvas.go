@@ -1,4 +1,4 @@
-package main
+package providerplatforms
 
 import (
 	"encoding/json"
@@ -10,11 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms"
-
 	log "github.com/sirupsen/logrus"
-	"gorm.io/gorm"
 )
 
 type CanvasService struct {
@@ -29,7 +25,7 @@ type CanvasService struct {
 	JobParams          map[string]any
 }
 
-func newCanvasService(provider *providerplatforms.ProviderPlatform, params map[string]any) *CanvasService {
+func newCanvasService(provider *ProviderPlatform, params map[string]any) *CanvasService {
 	token := strings.TrimSpace(provider.AccessKey)
 	log.Infof("Canvas access key length: %d, contains newline: %v", len(token), strings.ContainsAny(provider.AccessKey, "\r\n"))
 	headers := make(map[string]string)
@@ -67,7 +63,7 @@ func (cs *CanvasService) GetJobParams() map[string]any {
 
 // fetchCanvasUsers retrieves and parses all users from the Canvas API.
 // It does not apply any mapping filter — callers decide what to do with the full list.
-func (srv *CanvasService) fetchCanvasUsers() ([]providerplatforms.ImportUser, error) {
+func (srv *CanvasService) fetchCanvasUsers() ([]ImportUser, error) {
 	enrollmentTypes := []string{"student"}
 	baseURL := srv.BaseURL + "/api/v1/accounts/" + srv.AccountID + "/users?per_page=1000"
 	for _, t := range enrollmentTypes {
@@ -81,7 +77,7 @@ func (srv *CanvasService) fetchCanvasUsers() ([]providerplatforms.ImportUser, er
 	}
 	defer func() {
 		if resp.Body.Close() != nil {
-			logger().Error("Failed to close response body")
+			log.Error("Failed to close response body")
 		}
 	}()
 	if resp.StatusCode != http.StatusOK {
@@ -94,7 +90,7 @@ func (srv *CanvasService) fetchCanvasUsers() ([]providerplatforms.ImportUser, er
 		log.Errorf("Failed to decode Canvas users: %v", err)
 		return nil, err
 	}
-	result := make([]providerplatforms.ImportUser, 0, len(raw))
+	result := make([]ImportUser, 0, len(raw))
 	for _, user := range raw {
 		loginId, ok := user["login_id"].(string)
 		if !ok {
@@ -114,7 +110,7 @@ func (srv *CanvasService) fetchCanvasUsers() ([]providerplatforms.ImportUser, er
 			nameLast = name[0]
 		}
 		userId, _ := user["id"].(float64)
-		result = append(result, providerplatforms.ImportUser{
+		result = append(result, ImportUser{
 			ExternalUserID:   fmt.Sprintf("%d", int(userId)),
 			ExternalUsername: loginId,
 			NameFirst:        nameFirst,
@@ -127,21 +123,19 @@ func (srv *CanvasService) fetchCanvasUsers() ([]providerplatforms.ImportUser, er
 }
 
 // GetUsers returns only Canvas users that have not yet been mapped to an UnlockEd user.
-func (srv *CanvasService) GetUsers(db *gorm.DB) ([]providerplatforms.ImportUser, error) {
+func (srv *CanvasService) GetUsers(st *store) ([]ImportUser, error) {
 	all, err := srv.fetchCanvasUsers()
 	if err != nil {
 		return nil, err
 	}
-	unmapped := make([]providerplatforms.ImportUser, 0, len(all))
+	unmapped := make([]ImportUser, 0, len(all))
 	for _, u := range all {
-		var count int64
-		if err := db.Model(&providerplatforms.ProviderUserMapping{}).
-			Where("external_user_id = ? AND provider_platform_id = ?", u.ExternalUserID, srv.ProviderPlatformID).
-			Count(&count).Error; err != nil {
+		mapped, err := st.isUserMapped(srv.ProviderPlatformID, u.ExternalUserID)
+		if err != nil {
 			log.Errorf("Error counting provider_user_mappings: %v", err)
 			continue
 		}
-		if count > 0 {
+		if mapped {
 			log.Printf("User %s already mapped, skipping", u.ExternalUserID)
 			continue
 		}
@@ -153,7 +147,7 @@ func (srv *CanvasService) GetUsers(db *gorm.DB) ([]providerplatforms.ImportUser,
 
 // GetAllUsers returns all Canvas users regardless of whether they are already mapped.
 // Used by the mapped-users endpoint to resolve canvas display names.
-func (srv *CanvasService) GetAllUsers() ([]providerplatforms.ImportUser, error) {
+func (srv *CanvasService) GetAllUsers() ([]ImportUser, error) {
 	users, err := srv.fetchCanvasUsers()
 	if err != nil {
 		return nil, err
@@ -162,7 +156,7 @@ func (srv *CanvasService) GetAllUsers() ([]providerplatforms.ImportUser, error) 
 	return users, nil
 }
 
-func (srv *CanvasService) ImportCourses(db *gorm.DB) error {
+func (srv *CanvasService) ImportCourses(st *store) error {
 	url := srv.BaseURL + "/api/v1/accounts/" + srv.AccountID + "/courses?include[]=course_image&include[]=public_description"
 	resp, err := srv.SendRequest(url)
 	if err != nil {
@@ -173,7 +167,7 @@ func (srv *CanvasService) ImportCourses(db *gorm.DB) error {
 	log.WithFields(fields).Info("importing courses from provider")
 	defer func() {
 		if resp.Body.Close() != nil {
-			logger().Error("Failed to close response body")
+			log.Error("Failed to close response body")
 		}
 	}()
 	courses := make([]map[string]any, 0)
@@ -184,15 +178,13 @@ func (srv *CanvasService) ImportCourses(db *gorm.DB) error {
 	}
 	for _, course := range courses {
 		id := int(course["id"].(float64))
-		var count int64 = 0
 		log.Infof("importing course %d", id)
-		if db.Table("courses").Where("provider_platform_id = ?", srv.ProviderPlatformID).
-			Where("external_id = ?", fmt.Sprintf("%d", id)).
-			Count(&count).Error != nil {
+		exists, err := st.courseExists(srv.ProviderPlatformID, fmt.Sprintf("%d", id))
+		if err != nil {
 			log.Error("error getting count of provider courses")
 			continue
 		}
-		if count > 0 {
+		if exists {
 			log.Debug("skipping course id: ", id)
 			continue
 		}
@@ -217,16 +209,16 @@ func (srv *CanvasService) ImportCourses(db *gorm.DB) error {
 		if is_pub {
 			progType = "open_enrollment"
 		}
-		unlockedCourse := providerplatforms.Course{
+		unlockedCourse := Course{
 			ProviderPlatformID:      srv.ProviderPlatformID,
 			Name:                    course["name"].(string),
-			AltName:                 models.NilIfBlank(course["course_code"].(string)),
+			AltName:                 nilIfBlank(course["course_code"].(string)),
 			ExternalID:              fmt.Sprintf("%d", id),
-			ExternalURL:             models.StringPtr(srv.BaseURL + "/courses/" + fmt.Sprintf("%d", id)),
-			Type:                    providerplatforms.CourseType(progType),
-			OutcomeTypes:            models.StringPtr("grade, college_credit"),
-			Description:             models.NilIfBlank(description),
-			ThumbnailURL:            models.NilIfBlank(thumbnailURL),
+			ExternalURL:             stringPtr(srv.BaseURL + "/courses/" + fmt.Sprintf("%d", id)),
+			Type:                    CourseType(progType),
+			OutcomeTypes:            stringPtr("grade, college_credit"),
+			Description:             nilIfBlank(description),
+			ThumbnailURL:            nilIfBlank(thumbnailURL),
 			TotalProgressMilestones: uint(totalMilestones),
 		}
 		datePattern := "2006-01-02T15:04:05Z"
@@ -236,7 +228,7 @@ func (srv *CanvasService) ImportCourses(db *gorm.DB) error {
 		if date, ok := course["end_at"].(string); ok {
 			unlockedCourse.EndDt = parseDate(date, datePattern)
 		}
-		if err = db.Create(&unlockedCourse).Error; err != nil {
+		if err = st.createCourse(&unlockedCourse); err != nil {
 			log.Printf("Failed to create course: %v", err)
 			continue
 		}
@@ -244,23 +236,6 @@ func (srv *CanvasService) ImportCourses(db *gorm.DB) error {
 	return nil
 }
 
-// it turns out that quizzes are included in the assignments for a course, so this was fetching duplicate data
-//
-//	func (srv *CanvasService) getQuizzesForCourse(externalCourseId string) ([]map[string]interface{}, error) {
-//		url := srv.BaseURL + "/api/v1/courses/" + externalCourseId + "/quizzes"
-//		resp, err := srv.SendRequest(url)
-//		if err != nil {
-//			log.Printf("Failed to send request: %v", err)
-//			return nil, err
-//		}
-//		defer resp.Body.Close()
-//		quizzes := make([]map[string]interface{}, 0)
-//		err = json.NewDecoder(resp.Body).Decode(&quizzes)
-//		if err != nil {
-//			return nil, err
-//		}
-//		return quizzes, nil
-//	}
 func getNodesLength(data map[string]interface{}) int {
 	if courseData, ok := data["data"].(map[string]interface{}); ok {
 		if course, ok := courseData["course"].(map[string]interface{}); ok {
@@ -305,7 +280,7 @@ func (srv *CanvasService) getCountAssignmentsForCourse(courseId int) (int, error
 	}
 	defer func() {
 		if resp.Body.Close() != nil {
-			logger().Error("Failed to close response body")
+			log.Error("Failed to close response body")
 		}
 	}()
 	assignments := make(map[string]interface{})
@@ -316,52 +291,6 @@ func (srv *CanvasService) getCountAssignmentsForCourse(courseId int) (int, error
 	}
 	return getNodesLength(assignments), nil
 }
-
-// // external ID
-// func (srv *CanvasService) getAssignmentsForCourse(courseId int) ([]interface{}, error) {
-// 	url := srv.BaseURL + "/api/v1/courses/" + fmt.Sprintf("%d", courseId) + "/assignments"
-// 	log.Printf("url: %v", url)
-// 	resp, err := srv.SendRequest(url)
-// 	if err != nil {
-// 		log.Printf("Failed to send request: %v", err)
-// 		return nil, err
-// 	}
-// 	defer resp.Body.Close()
-// 	assignments := []interface{}{}
-// 	err = json.NewDecoder(resp.Body).Decode(&assignments)
-// 	if err != nil {
-// 		log.Printf("failed to decode response from assignments %v", err)
-// 		return nil, err
-// 	}
-// 	return assignments, nil
-// }
-
-// all external ids
-// func (srv *CanvasService) getUserSubmissionForQuiz(courseId, quizId, userId string, lastRun time.Time) (map[string]interface{}, error) {
-// 	queryParams := url.Values{}
-// 	queryParams.Add("submitted_since", lastRun.Format(time.RFC3339))
-// 	url := srv.BaseURL + "/api/v1/courses/" + courseId + "/quizzes/" + quizId + "/submissions/" + userId
-// 	url += "?" + queryParams.Encode()
-// 	resp, err := srv.SendRequest(url)
-// 	if err != nil {
-// 		log.Printf("Failed to send request: %v", err)
-// 		return nil, err
-// 	}
-// 	if resp.StatusCode != 200 {
-// 		log.Errorln("getUserSubmissionForQuiz canvas responded with code: ", resp.Status)
-// 		return nil, errors.New("canvas responded with code: " + resp.Status)
-// 	}
-// 	defer resp.Body.Close()
-// 	submissions := make(map[string]interface{})
-// 	err = json.NewDecoder(resp.Body).Decode(&submissions)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	if submissions == nil {
-// 		return nil, fmt.Errorf("submission not found")
-// 	}
-// 	return submissions, nil
-// }
 
 func (srv *CanvasService) getUsersSubmissionsForCourse(courseId string, queryString url.Values, lastRun time.Time) ([]map[string]interface{}, error) {
 	fields := log.Fields{"handler": "getUserSubmissionForCourse"}
@@ -381,7 +310,7 @@ func (srv *CanvasService) getUsersSubmissionsForCourse(courseId string, queryStr
 	}
 	defer func() {
 		if resp.Body.Close() != nil {
-			logger().Error("Failed to close response body")
+			log.Error("Failed to close response body")
 		}
 	}()
 	var submission []map[string]any
@@ -404,7 +333,7 @@ func (srv *CanvasService) getUsersSubmissionsForCourse(courseId string, queryStr
 *
 * Quizzes are included in assignments so we don't need to get them separately
 * */
-func (srv *CanvasService) ImportMilestones(courseIdPair map[string]any, mapping []map[string]any, db *gorm.DB, lastRun time.Time) error {
+func (srv *CanvasService) ImportMilestones(courseIdPair map[string]any, mapping []map[string]any, st *store, lastRun time.Time) error {
 	courseId, ok := dbUint(courseIdPair, "course_id")
 	if !ok {
 		return fmt.Errorf("unexpected type %T for course_id in course mapping", courseIdPair["course_id"])
@@ -441,14 +370,14 @@ func (srv *CanvasService) ImportMilestones(courseIdPair map[string]any, mapping 
 			log.WithFields(fields).Debugf("no user mapping for external user %s, skipping submission", externalUserID)
 			continue
 		}
-		milestone := providerplatforms.Milestone{
+		milestone := Milestone{
 			UserID:      userID,
 			ExternalID:  fmt.Sprintf("%d", int(submission["id"].(float64))),
 			CourseID:    courseId,
 			Type:        "assignment_submission",
 			IsCompleted: submission["workflow_state"] == "complete" || submission["workflow_state"] == "graded",
 		}
-		if createErr := db.Create(&milestone).Error; createErr != nil {
+		if createErr := st.createMilestone(&milestone); createErr != nil {
 			log.WithFields(fields).Errorln("failed to create assignment_submission milestone: ", createErr)
 		}
 		_, ok := submission["grade"].(string)
@@ -458,14 +387,14 @@ func (srv *CanvasService) ImportMilestones(courseIdPair map[string]any, mapping 
 		}
 		if checkTimespanOfSubmission(lastRun, submission) {
 			anonId := submission["anonymous_id"].(string)
-			gradeReceived := providerplatforms.Milestone{
+			gradeReceived := Milestone{
 				CourseID:    uint(courseId),
 				UserID:      userID,
 				ExternalID:  anonId,
 				Type:        "grade_received",
 				IsCompleted: true,
 			}
-			if createErr := db.Create(&gradeReceived).Error; createErr != nil {
+			if createErr := st.createMilestone(&gradeReceived); createErr != nil {
 				log.WithFields(fields).Errorln("failed to create grade_received milestone: ", createErr)
 				continue
 			}
@@ -512,7 +441,7 @@ func (srv *CanvasService) getEnrollmentsForCourse(courseId string) ([]map[string
 	}
 	defer func() {
 		if resp.Body.Close() != nil {
-			logger().Error("Failed to close response body")
+			log.Error("Failed to close response body")
 		}
 	}()
 	enrollments := make([]map[string]any, 0)
@@ -523,7 +452,7 @@ func (srv *CanvasService) getEnrollmentsForCourse(courseId string) ([]map[string
 	return enrollments, nil
 }
 
-func (srv *CanvasService) ImportActivityForCourse(coursePair map[string]any, db *gorm.DB) error {
+func (srv *CanvasService) ImportActivityForCourse(coursePair map[string]any, st *store) error {
 	courseId, ok := dbUint(coursePair, "course_id")
 	if !ok {
 		return fmt.Errorf("unexpected type %T for course_id in course mapping", coursePair["course_id"])
@@ -536,36 +465,28 @@ func (srv *CanvasService) ImportActivityForCourse(coursePair map[string]any, db 
 	}
 	for _, enrollment := range enrollments {
 		userId := fmt.Sprintf("%d", int(enrollment["user_id"].(float64)))
-		var userID uint
-		err := db.Model(providerplatforms.ProviderUserMapping{}).Select("user_id").First(&userID, "provider_platform_id = ? AND external_user_id = ?", srv.ProviderPlatformID, userId).Error
+		userID, err := st.getMappedUserID(srv.ProviderPlatformID, userId)
 		if err != nil {
 			log.Printf("Failed to get user: %v", err)
 			continue
 		}
-		if db.Model(&providerplatforms.UserEnrollment{}).First(&providerplatforms.UserEnrollment{}, "user_id = ? AND course_id = ?", userID, courseId).RowsAffected == 0 {
-			if err := db.Create(&providerplatforms.UserEnrollment{UserID: userID, CourseID: courseId}).Error; err != nil {
+		enrolled, err := st.enrollmentExists(userID, courseId)
+		if err != nil {
+			log.WithFields(log.Fields{"userId": userID, "course_id": courseId, "error": err}).Error("Failed to check enrollment")
+			continue
+		}
+		if !enrolled {
+			if err := st.createEnrollment(userID, courseId); err != nil {
 				log.WithFields(log.Fields{"userId": userID, "course_id": courseId, "error": err}).Error("Failed to create enrollment")
 				continue
 			}
 		}
 		totalTime := uint(enrollment["total_activity_time"].(float64))
 		// NOTE: this is calling a stored procedure to calculate the time delta
-		if err := db.Exec("CALL insert_daily_activity_canvas(?, ?, ?, ?, ?, ?)", userID, courseId, "course_interaction", totalTime, externalId, time.Now()).Error; err != nil {
+		if err := st.insertDailyActivity("insert_daily_activity_canvas", userID, courseId, "course_interaction", totalTime, externalId); err != nil {
 			log.WithFields(log.Fields{"userId": userID, "course_id": courseId, "error": err}).Error("Failed to create activity")
 			continue
 		}
 	}
 	return nil
 }
-
-// func (srv *CanvasService) ImportOutcomesForCourse(coursePair map[string]interface{}, userMappings []map[string]interface{}) error {
-// 	courseId := int(coursePair["course_id"].(float64))
-// 	externalId := coursePair["external_course_id"].(string)
-// 	fields := log.Fields{"task": "ImportOutcomesForCourse", "course_id": courseId, "external_id": externalId}
-// 	for _, mapping := range userMappings {
-// 		userId := int(mapping["user_id"].(float64))
-// 		externalUserId := mapping["external_user_id"].(string)
-// 		log.WithFields(fields).Debug("importing outcomes from canvas")
-//
-// 	}
-// }

@@ -1,69 +1,35 @@
 package tasks
 
 import (
-	"fmt"
 	"os"
 	"strconv"
 	"time"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
-	ppapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api"
 
 	"github.com/go-co-op/gocron/v2"
 	"github.com/nats-io/nats.go"
 	log "github.com/sirupsen/logrus"
-	"gorm.io/gorm"
 )
 
+// Scheduler runs the feature modules' background jobs (module.Scheduler).
+// Core has none of its own since EN-197.
 type Scheduler struct {
 	gocron.Scheduler
-	nats *nats.Conn
-	db   *gorm.DB
 }
 
-func InitScheduling(dev bool, nats *nats.Conn, db *gorm.DB) *Scheduler {
-	scheduler, err := gocron.NewScheduler()
+// Start schedules every feature module's background jobs, each module's on
+// its own connection (moduleDBs). The scheduler process (`backend scheduler`)
+// calls it, and so does the API server while ServerRunsJobs is true.
+func Start(nats *nats.Conn, mods []module.Module, moduleDBs database.ModuleDBs) *Scheduler {
+	gs, err := gocron.NewScheduler()
 	if err != nil {
 		log.Fatalf("Failed to create scheduler: %v", err)
 		return nil
 	}
-	runner := Scheduler{scheduler, nats, db}
-	tasks, err := runner.generateTasks()
-	if err != nil {
-		log.Fatalf("failed to generate tasks: %v", err)
-		return nil
-	}
-	hour := 1
-	for _, task := range tasks {
-		if task.Job == nil {
-			log.Errorf("Task %v has no job", task.ID)
-			continue
-		}
-		_, err := runner.NewJob(gocron.CronJob(getCronSchedule(&task, hour), false), gocron.NewTask(runner.runTask, &task))
-		if err != nil {
-			log.Errorf("Failed to create job: %v", err)
-			continue
-		}
-		hour++
-		if hour > 23 {
-			hour = 1
-		}
-	}
-	if !dev {
-		runner.execute()
-	}
-	runner.Start()
-	return &runner
-}
-
-// Start schedules every background job: core's and each feature module's, each
-// module's on its own connection (moduleDBs). The scheduler process (`backend
-// scheduler`) calls it, and so does the API server while ServerRunsJobs is
-// true.
-func Start(dev bool, nats *nats.Conn, db *gorm.DB, mods []module.Module, moduleDBs database.ModuleDBs) *Scheduler {
-	s := InitScheduling(dev, nats, db)
+	s := &Scheduler{gs}
+	s.Start()
 	for _, m := range mods {
 		m.RegisterJobs(s, module.Deps{DB: moduleDBs.For(m.Name()), NATS: nats})
 	}
@@ -109,28 +75,4 @@ const startDelay = 60 * time.Second
 
 func (s *Scheduler) Stop() error {
 	return s.StopJobs()
-}
-
-func (s *Scheduler) execute() {
-	tasks, err := s.generateTasks()
-	if err != nil {
-		log.Errorf("failed to generate tasks: %v", err)
-		return
-	}
-	log.Infof("Generated %v tasks", tasks)
-	for _, task := range tasks {
-		if task.ProviderType == ppapi.Brightspace {
-			continue
-		}
-		log.Infof("Running task: %v", task.Job.Name)
-		s.runTask(&task)
-	}
-}
-
-func getCronSchedule(task *models.RunnableTask, hour int) string {
-	if task.ProviderType == ppapi.Brightspace {
-		return fmt.Sprintf("0 %d * * 4", hour)
-	} else {
-		return task.Job.Schedule
-	}
 }
