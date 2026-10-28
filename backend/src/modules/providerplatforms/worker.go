@@ -194,10 +194,12 @@ func (w *worker) handleMilestonesForCourseUser(ctx context.Context, msg *nats.Ms
 	usersMap, err := w.lookupUserMapping(params)
 	if err != nil {
 		w.cleanupJob(ctx, providerPlatformId, jobId, false)
+		return
 	}
 	coursesMap, err := w.lookupCoursesMapping(providerPlatformId)
 	if err != nil {
 		w.cleanupJob(ctx, providerPlatformId, jobId, false)
+		return
 	}
 	success := true
 	lastRunStr := params["last_run"].(string)
@@ -358,6 +360,7 @@ func (w *worker) lookupUserMapping(params map[string]any) ([]map[string]any, err
 	users, err := w.store.getStudentMappings(providerPlatformId)
 	if err != nil {
 		log.Errorf("failed to fetch users: %v", err)
+		return nil, err
 	}
 	return users, nil
 }
@@ -386,6 +389,7 @@ func (w *worker) lookupCoursesMapping(provId int) ([]map[string]any, error) {
 	courses, err := w.store.getCourseMappings(provId)
 	if err != nil {
 		log.Errorf("failed to fetch courses: %v", err)
+		return nil, err
 	}
 	return courses, nil
 }

@@ -169,6 +169,30 @@ func TestHandleMilestonesCanceled(t *testing.T) {
 	assert.Equal(t, taskRunning, reloadTask(t, w, task.ID).Status)
 }
 
+// A failed mapping lookup ends the job without reading the provider, and the
+// run doesn't count: last_run stays where it was.
+func TestHandleMilestonesLookupFailure(t *testing.T) {
+	for _, table := range []string{"provider_user_mappings", "courses"} {
+		t.Run(table, func(t *testing.T) {
+			db := newTestDB(t)
+			w := &worker{store: &store{db: db}}
+			fc := newFakeCanvas(t)
+			p := createCanvasProvider(t, db, fc)
+			createResident(t, db, p.ID, 1, "student", "21")
+			require.NoError(t, db.Create(&Course{ProviderPlatformID: p.ID, ExternalID: "101"}).Error)
+			_, task := createTask(t, db, jobs.GetMilestones, p.ID, lastRun)
+			require.NoError(t, db.Migrator().DropTable(table))
+
+			w.handleMilestonesForCourseUser(context.Background(), taskMsg(t, jobs.GetMilestones, task))
+
+			assert.Empty(t, fc.Requests())
+			got := reloadTask(t, w, task.ID)
+			assert.Equal(t, taskPending, got.Status)
+			assert.True(t, got.LastRun.Equal(lastRun))
+		})
+	}
+}
+
 // Kolibri and Brightspace import milestones for the user mappings as the
 // milestones job looks them up, where user_id arrives as uint (see dbUint).
 // A mapping whose user_id they can't read is skipped.
@@ -282,6 +306,12 @@ func TestLookupMappings(t *testing.T) {
 	courses, err := w.lookupCoursesMapping(int(p.ID))
 	require.NoError(t, err)
 	assert.Equal(t, []map[string]any{{"course_id": int64(1), "external_course_id": "x"}}, courses)
+
+	require.NoError(t, db.Migrator().DropTable("provider_user_mappings", "courses"))
+	_, err = w.lookupUserMapping(map[string]any{"provider_platform_id": float64(p.ID)})
+	assert.Error(t, err)
+	_, err = w.lookupCoursesMapping(int(p.ID))
+	assert.Error(t, err)
 }
 
 func TestDBUint(t *testing.T) {
