@@ -24,12 +24,12 @@ type Programs interface {
 	// facility whose program toFacilityID doesn't offer.
 	TransferConflicts(ctx context.Context, userID, toFacilityID uint) ([]ResidentTransferProgramConflicts, error)
 	// EndEnrollmentsForTransfer marks the resident's current enrollments at
-	// fromFacilityID as ended by a transfer. Get the api with
-	// registry.Programs(tx) to make it part of the transfer's transaction.
+	// fromFacilityID as ended by a transfer. Call it through
+	// registry.ProgramsInTx to make it part of the transfer's transaction.
 	EndEnrollmentsForTransfer(ctx context.Context, userID, fromFacilityID uint) error
 	// WithdrawEnrollments marks the user's current enrollments as withdrawn,
-	// because their account was deactivated. Get the api with
-	// registry.Programs(tx) to make it part of the deactivation's transaction.
+	// because their account was deactivated. Call it through
+	// registry.ProgramsInTx to make it part of the deactivation's transaction.
 	WithdrawEnrollments(ctx context.Context, userID uint) error
 
 	// ResidentPrograms is every enrollment a resident has had, with its

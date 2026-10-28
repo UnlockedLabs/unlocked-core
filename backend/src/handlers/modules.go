@@ -218,13 +218,14 @@ func dbCause(err error) error {
 
 func (srv *Server) moduleDeps() module.Deps {
 	deps := module.Deps{
-		DB:       srv.Db.DB,
-		NATS:     srv.nats,
-		Notify:   wsNotifier{srv},
-		Users:    moduleUsers{srv},
-		HTTP:     httpClient{srv},
-		Features: facilityFeatures{srv},
-		Reports:  pdfReports{},
+		DB:        srv.Db.DB,
+		NATS:      srv.nats,
+		Notify:    wsNotifier{srv},
+		Users:     moduleUsers{srv},
+		HTTP:      httpClient{srv},
+		Features:  facilityFeatures{srv},
+		Reports:   pdfReports{},
+		ModuleDBs: srv.moduleDBs.For,
 	}
 	deps.LiveProviders = registry.LiveProviders(deps)
 	return deps

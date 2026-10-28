@@ -40,19 +40,33 @@ func ProviderPlatforms(db *gorm.DB) ppapi.ProviderPlatforms {
 	return providerplatforms.NewAPI(db)
 }
 
-// Programs is Programs' answers to core, reading db.
-func Programs(db *gorm.DB) programsapi.Programs {
-	return programs.NewAPI(db)
+// Programs is Programs' answers to core, on the connection db gives the
+// Programs module (database.ModuleDBs.For).
+func Programs(db func(name string) *gorm.DB) programsapi.Programs {
+	return programs.NewAPI(db(programs.Module{}.Name()))
 }
 
-// LiveProviders is Programs' Canvas and Essential Education code, for
-// Provider Platforms' Deps.LiveProviders.
+// ProgramsInTx runs fn with Programs' answers inside core's transaction tx, as
+// Programs' own connection runs (module.RunAs), so its writes commit or roll
+// back with core's.
+func ProgramsInTx(tx *gorm.DB, fn func(programsapi.Programs) error) error {
+	return module.RunAs(tx, programsModule(), func(tx *gorm.DB) error {
+		return fn(programs.NewAPI(tx))
+	})
+}
+
+// LiveProviders is Programs' Canvas and Essential Education code, on Programs'
+// own connection, for Provider Platforms' Deps.LiveProviders.
 func LiveProviders(deps module.Deps) module.LiveProviders {
-	return programsModule().LiveProviders(deps)
+	m := programsModule()
+	deps.DB = deps.ModuleDBs(m.Name())
+	return m.LiveProviders(deps)
 }
 
 // programsModule is the Programs module, which asks Provider Platforms' api
-// about providers.
+// about providers, on Provider Platforms' own connection.
 func programsModule() programs.Module {
-	return programs.Module{ProviderPlatforms: providerplatforms.NewAPI}
+	return programs.Module{ProviderPlatforms: func(deps module.Deps) ppapi.ProviderPlatforms {
+		return providerplatforms.NewAPI(deps.ModuleDBs(providerplatforms.Module{}.Name()))
+	}}
 }

@@ -13,9 +13,10 @@ EN-194.
 - **Core asks it questions through `api/`** (interfaces and plain types only),
   and gets the implementation from `registry.Programs`: the users list's
   `include=only_enrolled|only_unenrolled` filters, resident transfer and
-  deactivation (on core's transaction, with `registry.Programs(tx)`), the
-  usage report and the dashboard's Programs numbers. Core never imports this
-  package's insides.
+  deactivation (on core's transaction, with `registry.ProgramsInTx`), the
+  usage report, the dashboard's Programs numbers, and the facility list's,
+  delete check's and account history's Programs data. Core never imports
+  this package's insides.
 - **It reaches core through `Deps`:**
   - `Deps.HTTP` for its Canvas and Essential Education calls;
   - `Deps.Features` to hide Canvas classes at facilities with Provider

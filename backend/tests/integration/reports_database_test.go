@@ -9,7 +9,6 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -236,7 +235,7 @@ func TestGetEnrolledResidentsForClass_ExcludesNonEnrolledStatuses(t *testing.T) 
 // enrolledResidents is the users list's only_enrolled filter: Programs'
 // enrolled user IDs, then core's page of those residents.
 func enrolledResidents(env *TestEnv, args *models.QueryContext, classID uint) ([]models.User, error) {
-	ids, err := registry.Programs(env.DB.DB).EnrolledUserIDs(args.Ctx, classID)
+	ids, err := programs.NewAPI(env.DB.DB).EnrolledUserIDs(args.Ctx, classID)
 	if err != nil {
 		return nil, err
 	}

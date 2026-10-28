@@ -196,7 +196,7 @@ func newServer(ctx context.Context) *Server {
 		moduleDBs:         moduleDBs,
 		openContent:       registry.OpenContent(moduleDBs.For),
 		providerPlatforms: registry.ProviderPlatforms(db.DB),
-		programs:          registry.Programs(db.DB),
+		programs:          registry.Programs(moduleDBs.For),
 	}
 	features, err := server.Db.GetFeatureAccess()
 	if err != nil {
@@ -236,7 +236,7 @@ func newTestingServer() *Server {
 		moduleDBs:         moduleDBs,
 		openContent:       registry.OpenContent(moduleDBs.For),
 		providerPlatforms: registry.ProviderPlatforms(db.DB),
-		programs:          registry.Programs(db.DB),
+		programs:          registry.Programs(moduleDBs.For),
 	}
 }
 

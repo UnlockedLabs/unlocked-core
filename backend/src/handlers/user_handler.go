@@ -845,7 +845,7 @@ func (srv *Server) handleGenerateUsageReportPDF(w http.ResponseWriter, r *http.R
 	}
 	hasProgramAccess := slices.Contains(subjectFeatures, models.ProgramAccess)
 
-	pdfBytes, err := jasper.GenerateUsageReportPDF(r.Context(), srv.Db, srv.openContent, hasProgramAccess, userID)
+	pdfBytes, err := jasper.GenerateUsageReportPDF(r.Context(), srv.Db, srv.openContent, srv.programs, hasProgramAccess, userID)
 	if err != nil {
 		log.errorf("jasper service error: %v", err)
 		return newInternalServerServiceError(err, "failed to generate PDF report")
