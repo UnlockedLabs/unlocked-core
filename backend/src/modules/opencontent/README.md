@@ -41,8 +41,8 @@ activity and the content proxies. It moved here from core in EN-192.
 - **On SQLite** (the tests) there are no schemas or roles, so Open Content
   uses core's connection.
 
-Provider Platforms (EN-199) and Programs (EN-200) follow the same pattern:
-return the schema's name from `Schema()`, and have the module's first
+Programs (EN-200) follows the same pattern, and Provider Platforms (EN-199)
+will: return the schema's name from `Schema()`, and have the module's first
 migration create the schema and its role and move the tables.
 
 ## Files
