@@ -1,0 +1,17 @@
+{
+  "data": [
+    {
+      "id": 1,
+      "name": "Default"
+    },
+    {
+      "id": 2,
+      "name": "North"
+    },
+    {
+      "id": 3,
+      "name": "South"
+    }
+  ],
+  "message": "Data fetched successfully"
+}

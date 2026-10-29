@@ -52,8 +52,8 @@ func truncateForLog(value string, max int) string {
 
 func (srv *Server) registerClientErrorRoutes() []routeDef {
 	return []routeDef{
-		// Deliberately not a featureRoute: a crash must be reportable with every
-		// feature turned off.
+		// Deliberately has no feature gate: a crash must be reportable with
+		// every feature turned off.
 		newRoute("POST /api/client-errors", srv.handleReportClientError),
 	}
 }

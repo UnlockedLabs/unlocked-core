@@ -1,0 +1,39 @@
+{
+  "data": [
+    {
+      "advice_to_peer": "",
+      "barrier_to_completion": "",
+      "challenge_text": "",
+      "challenge_toggle": null,
+      "client_id": "entry-2",
+      "completion_date": "2026-02-01",
+      "confidence": "",
+      "create_user_id": 2,
+      "created_at": "<time>",
+      "editing_entry_id": null,
+      "facility_id": null,
+      "facility_name": "",
+      "facility_other": "Community Center",
+      "goal_connection": "",
+      "growth_reflection": "",
+      "id": 2,
+      "is_draft": false,
+      "next_step_selections": [],
+      "pride": "",
+      "program_name": "Peer Mentoring",
+      "skill_reflection": "",
+      "skill_tags_after": [],
+      "skill_tags_before": [],
+      "standout_moment": "",
+      "step_index": 0,
+      "summary": "",
+      "support_selections": [],
+      "top_skills": [],
+      "ui_phase": "",
+      "update_user_id": null,
+      "updated_at": "<time>",
+      "user_id": 2
+    }
+  ],
+  "message": "Data fetched successfully"
+}

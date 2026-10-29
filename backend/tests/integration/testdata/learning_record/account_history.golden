@@ -1,0 +1,26 @@
+{
+  "data": [
+    {
+      "action": "learning_record_deleted",
+      "admin_username": "jdoe",
+      "attendance_status": "",
+      "class_name": null,
+      "created_at": "<time>",
+      "facility_name": null,
+      "field_name": null,
+      "new_value": null,
+      "old_value": null,
+      "program_classes_history_id": null,
+      "session_date": null,
+      "user_id": 2,
+      "user_username": "jdoe"
+    }
+  ],
+  "message": "",
+  "meta": {
+    "current_page": 1,
+    "last_page": 1,
+    "per_page": 20,
+    "total": 1
+  }
+}

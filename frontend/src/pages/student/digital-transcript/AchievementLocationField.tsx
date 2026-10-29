@@ -19,7 +19,7 @@ const OTHER_VALUE = 'other';
 /** Shown for a facility already on the entry whose name we couldn't resolve. */
 const UNKNOWN_FACILITY_LABEL = 'Saved location (name unavailable)';
 
-/** Keep in step with maxFacilityOtherRunes in learning_record_handler.go. */
+/** Keep in step with maxFacilityOtherRunes in backend/src/modules/learningrecord/handlers.go. */
 const MAX_FACILITY_OTHER_LENGTH = 120;
 
 export const ACHIEVEMENT_LOCATION_LABEL =

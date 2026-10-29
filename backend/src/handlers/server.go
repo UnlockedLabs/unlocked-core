@@ -96,7 +96,6 @@ func (srv *Server) RegisterRoutes() {
 		srv.registerFacilitiesRoutes,
 		srv.registerFacilityFeatureAccessRoutes,
 		srv.registerDemoSeedRoutes,
-		srv.registerLearningRecordRoutes,
 		srv.registerClientErrorRoutes,
 	} {
 		srv.register(route)
