@@ -602,7 +602,7 @@ type user struct {
 
 func (user) TableName() string { return "users" }
 
-// cronJob and runnableTask are rows of core's cron_jobs and runnable_tasks
+// cronJob and runnableTask are rows of the cron_jobs and runnable_tasks
 // tables, which hold the LMS jobs' bookkeeping: one cron_jobs row per job,
 // and one runnable_tasks row per job and provider with its status and the
 // time of its last successful run (jobs.go).

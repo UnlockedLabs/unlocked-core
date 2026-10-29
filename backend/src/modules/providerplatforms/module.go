@@ -27,11 +27,15 @@ type Module struct{}
 
 var (
 	_ module.Module     = Module{}
+	_ module.Schema     = Module{}
 	_ module.TestModels = Module{}
 	_ module.Worker     = Module{}
 )
 
 func (Module) Name() string { return "providerplatforms" }
+
+// Schema is the Postgres schema that holds Provider Platforms' tables.
+func (Module) Schema() string { return "provider" }
 
 // server is what the routes share.
 type server struct {

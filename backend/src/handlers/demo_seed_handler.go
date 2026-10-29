@@ -16,7 +16,7 @@ func (srv *Server) registerDemoSeedRoutes() []routeDef {
 
 func (srv *Server) handleRunDemoSeed(w http.ResponseWriter, r *http.Request, log sLog) error {
 	log.info("running seeder for demo environment")
-	err := srv.Db.RunOrResetDemoSeed(srv.getFacilityID(r), srv.openContent)
+	err := srv.Db.RunOrResetDemoSeed(srv.getFacilityID(r), srv.openContent, srv.providerPlatforms)
 	if err != nil {
 		return newInternalServerServiceError(err, "unable to run demo seed")
 	}
