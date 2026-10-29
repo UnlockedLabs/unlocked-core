@@ -60,6 +60,9 @@ GRANT USAGE ON SCHEMA public TO provider;
 GRANT SELECT ON public.users TO provider;
 
 -- +goose Down
+-- Down runs in its own transaction and takes the same locks moving back.
+SET LOCAL lock_timeout = '5s';
+
 ALTER DEFAULT PRIVILEGES IN SCHEMA provider REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLES FROM provider;
 ALTER DEFAULT PRIVILEGES IN SCHEMA provider REVOKE USAGE, SELECT, UPDATE ON SEQUENCES FROM provider;
 
