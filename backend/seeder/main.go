@@ -13,9 +13,11 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 
 	"github.com/UnlockedLabs/unlocked-contracts/identity"
 	"github.com/go-faker/faker/v4"
@@ -43,11 +45,16 @@ func main() {
 	if err != nil {
 		log.Printf("Error loading .env file: %v", err)
 	}
-	// The seeder writes core's tables, Open Content's and Programs', which live
-	// in the open_content (EN-198) and programs (EN-200) schemas, so its
-	// connection looks in all three.
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=prefer search_path=public,open_content,programs",
-		os.Getenv("DB_HOST"), os.Getenv("DB_PORT"), os.Getenv("DB_USER"), os.Getenv("DB_PASSWORD"), os.Getenv("DB_NAME"))
+	// The seeder writes core's tables and the modules', and a module with its
+	// own schema keeps its tables there, so its connection looks in all of them.
+	schemas := []string{"public"}
+	for _, m := range registry.All() {
+		if s, ok := m.(module.Schema); ok {
+			schemas = append(schemas, s.Schema())
+		}
+	}
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=prefer search_path=%s",
+		os.Getenv("DB_HOST"), os.Getenv("DB_PORT"), os.Getenv("DB_USER"), os.Getenv("DB_PASSWORD"), os.Getenv("DB_NAME"), strings.Join(schemas, ","))
 	db, err := gorm.Open(postgres.New(postgres.Config{
 		DSN: dsn,
 	}), &gorm.Config{})
