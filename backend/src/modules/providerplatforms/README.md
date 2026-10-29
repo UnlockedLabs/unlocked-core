@@ -20,7 +20,8 @@ let residents log in to them. It moved here from core in EN-193.
     when a mapping changes. It goes away when this module fetches and caches
     those providers' data itself.
 - **It reads core's `users` table** to match and list the users linked to a
-  provider (the `user` type in `models.go`).
+  provider (the `user` type in `models.go`). It's the only core table its
+  role can read (see Database).
 - **`backend/seeder` still imports its insides.** depguard doesn't check it:
   `golint.yml` skips the seeder.
 - **Programs shows the Canvas and Essential Education live data** on its
@@ -36,6 +37,32 @@ let residents log in to them. It moved here from core in EN-193.
   (`POST /api/users`), the unmapped-users list
   (`GET /api/users?include=only_unmapped`), the admin dashboard's course
   numbers and the demo seed, which ask `api/`.
+
+## Database
+
+- **Its tables live in the `provider` schema** (EN-199). Its first migration
+  moved all 11 there from `public` (its 9 tables, plus the LMS jobs'
+  `cron_jobs` and `runnable_tasks`), along with the three
+  `insert_daily_activity_*` procedures the activity sync calls. Its rollback
+  moves them back.
+- **Its connection runs as the `provider` role**, which can read and write
+  only this schema and read only core's `users`. Postgres refuses anything
+  else, so Provider Platforms can't reach into core's tables, and core asks
+  `api/` instead of reading its tables.
+- **The role can't log in.** `Schema()` in `module.go` names the schema, and
+  core opens this module its own pool as the app's usual database user
+  (`database.OpenModuleDBs`). Each connection switches with `SET ROLE provider`
+  and `search_path = provider, public`, so queries stay unqualified and no
+  site needs a new password.
+- **Core's user delete soft-deletes the user's mappings in the same
+  transaction** through `database.AsModule`, which switches that transaction
+  to the `provider` role and search_path for the call and back after it.
+- **Later migrations must create tables as `provider.<name>`.** Module
+  migrations run on core's connection, so an unqualified table lands in
+  `public`, where the role can't use it. Tables created here get the role's
+  grants automatically.
+- **On SQLite** (the tests) there are no schemas or roles, so Provider
+  Platforms uses core's connection.
 
 ## Files
 
@@ -59,7 +86,7 @@ There's no `service.go`: the logic is split by topic (`users.go`,
 | `api.go` | The answers to core's questions (`api.ProviderPlatforms`) |
 | `models.go` | Provider Platforms' tables as Go types |
 | `http.go` | Responses, errors, paging and request helpers, matching core's JSON |
-| `migrations/` | This module's own migrations (none yet; its tables come from core's until they move to its own `provider` schema in EN-199) |
+| `migrations/` | This module's own migrations. The first moves its tables and procedures into the `provider` schema and creates its role |
 
 ## Tests
 
@@ -80,5 +107,6 @@ There's no `service.go`: the logic is split by topic (`users.go`,
   the Postgres procedure calls recorded, plus the worker and the scheduling.
 - The tests run on SQLite without NATS, Canvas, Brightspace or Essential
   Education, so they can't run the Brightspace OAuth flow, creating Canvas
-  accounts and logins, or seeding demo data (which calls Postgres
-  procedures). Check those with `make dev`.
+  accounts and logins, seeding demo data (which calls Postgres procedures), or
+  the schema move and the role (`TestAllModulesMigrate` only checks that its
+  migrations load). Check those with `make dev`.
