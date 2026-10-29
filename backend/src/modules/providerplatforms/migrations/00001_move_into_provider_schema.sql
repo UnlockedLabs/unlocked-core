@@ -6,6 +6,12 @@
 --
 -- SET SCHEMA keeps each table's rows, indexes, constraints, owned sequences
 -- and column defaults, and foreign keys keep working across schemas.
+--
+-- Each move holds a brief exclusive lock on its table. If a long query holds
+-- one first, this gives up instead of queueing every later query behind it;
+-- the transaction rolls back and the migration can run again.
+SET LOCAL lock_timeout = '5s';
+
 CREATE SCHEMA provider;
 
 ALTER TABLE public.provider_platforms SET SCHEMA provider;

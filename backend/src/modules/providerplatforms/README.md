@@ -50,7 +50,7 @@ let residents log in to them. It moved here from core in EN-193.
   else, so Provider Platforms can't reach into core's tables, and core asks
   `api/` instead of reading its tables.
 - **The role can't log in.** `Schema()` in `module.go` names the schema, and
-  core opens this module its own pool as the app's usual database user
+  core opens a pool for this module as the app's usual database user
   (`database.OpenModuleDBs`). Each connection switches with `SET ROLE provider`
   and `search_path = provider, public`, so queries stay unqualified and no
   site needs a new password.
