@@ -8,6 +8,8 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	ocapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api"
+	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
 )
 
 func (srv *Server) registerFacilitiesRoutes() []routeDef {
@@ -34,14 +36,22 @@ func (srv *Server) handleIndexFacilities(w http.ResponseWriter, r *http.Request,
 	for i, f := range facilities {
 		ids[i] = f.ID
 	}
+	progs, err := srv.programs.FacilityPrograms(r.Context(), ids)
+	if err != nil {
+		return newDatabaseServiceError(database.NewDBError(err, "error getting facilities"))
+	}
 	content, err := srv.openContent.FacilityContent(r.Context(), ids)
 	if err != nil {
 		return newDatabaseServiceError(database.NewDBError(err, "error getting facilities"))
 	}
 	for i := range facilities {
-		// Open Content's activity and favorites block a delete, as in
-		// FacilityBlockingChildren.HasAny.
-		if c := content[facilities[i].ID]; c.Activities > 0 || c.Favorites > 0 {
+		p := progs[facilities[i].ID]
+		facilities[i].ActivePrograms = p.ActivePrograms
+		facilities[i].ActiveClasses = p.ActiveClasses
+		// The query already counted core's blockers into CanDelete.
+		var blockers models.FacilityBlockingChildren
+		addModuleBlockers(&blockers, p, content[facilities[i].ID])
+		if blockers.HasAny() {
 			facilities[i].CanDelete = false
 		}
 	}
@@ -149,19 +159,31 @@ func (srv *Server) handleDeleteFacility(w http.ResponseWriter, r *http.Request, 
 }
 
 // facilityBlockers counts the rows that point at a facility: core's, and
-// Open Content's from its api.
+// Programs' and Open Content's from their apis.
 func (srv *Server) facilityBlockers(ctx context.Context, id int) (models.FacilityBlockingChildren, error) {
 	blockers, err := srv.Db.FacilityBlockingChildren(id)
 	if err != nil {
 		return blockers, newDatabaseServiceError(err)
 	}
+	progs, err := srv.programs.FacilityPrograms(ctx, []uint{uint(id)})
+	if err != nil {
+		return blockers, newDatabaseServiceError(database.NewDBError(err, "error getting delete_guard_facility_counts"))
+	}
 	content, err := srv.openContent.FacilityContent(ctx, []uint{uint(id)})
 	if err != nil {
 		return blockers, newDatabaseServiceError(database.NewDBError(err, "error getting delete_guard_facility_counts"))
 	}
-	c := content[uint(id)]
-	blockers.OpenContentActivity = c.Activities
-	blockers.OpenContentFavorites = c.Favorites
-	blockers.VisibilityStatuses = c.VisibilityStatuses
+	addModuleBlockers(&blockers, progs[uint(id)], content[uint(id)])
 	return blockers, nil
+}
+
+// addModuleBlockers copies Programs' and Open Content's counts for a facility
+// onto its blockers.
+func addModuleBlockers(b *models.FacilityBlockingChildren, p programsapi.FacilityPrograms, c ocapi.FacilityContent) {
+	b.Classes = p.Classes
+	b.Programs = p.Programs
+	b.Rooms = p.Rooms
+	b.OpenContentActivity = c.Activities
+	b.OpenContentFavorites = c.Favorites
+	b.VisibilityStatuses = c.VisibilityStatuses
 }

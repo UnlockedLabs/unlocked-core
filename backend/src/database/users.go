@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 
 	log "github.com/sirupsen/logrus"
@@ -141,7 +142,9 @@ func (db *DB) TransferResident(ctx *models.QueryContext, userID int, currFacilit
 	if trans.Error != nil {
 		return nil, NewDBError(trans.Error, "unable to start DB transaction")
 	}
-	if err := registry.Programs(trans).EndEnrollmentsForTransfer(trans.Statement.Context, uint(userID), uint(currFacilityID)); err != nil {
+	if err := registry.ProgramsInTx(trans, func(p programsapi.Programs) error {
+		return p.EndEnrollmentsForTransfer(trans.Statement.Context, uint(userID), uint(currFacilityID))
+	}); err != nil {
 		trans.Rollback()
 		return nil, newUpdateDBError(err, "program_class_enrollments")
 	}
@@ -658,11 +661,10 @@ func (db *DB) GetUserAccountHistory(args *models.QueryContext, userID uint, cate
 				admins.username AS admin_username,
 				facilities.name AS facility_name,
 				uah.attendance_status, uah.class_name, uah.session_date,
-				psh.*`).
+				uah.program_classes_history_id AS class_history_id`).
 		Joins("INNER JOIN users ON uah.user_id = users.id").
 		Joins("LEFT JOIN users admins ON uah.admin_id = admins.id").
 		Joins("LEFT JOIN facilities ON uah.facility_id = facilities.id").
-		Joins("LEFT JOIN program_classes_history psh ON uah.program_classes_history_id = psh.id").
 		Where("uah.user_id = ?", userID)
 
 	if len(categories) > 0 {
@@ -856,7 +858,9 @@ func (db *DB) DeactivateUser(ctx context.Context, userID uint, adminID *uint) er
 	if err := tx.Model(&models.User{}).Where("id = ?", userID).Update("deactivated_at", now).Error; err != nil {
 		return newUpdateDBError(err, "users")
 	}
-	if err := registry.Programs(tx).WithdrawEnrollments(ctx, userID); err != nil {
+	if err := registry.ProgramsInTx(tx, func(p programsapi.Programs) error {
+		return p.WithdrawEnrollments(ctx, userID)
+	}); err != nil {
 		return newUpdateDBError(err, "program_class_enrollments")
 	}
 	history := models.NewUserAccountHistory(userID, models.UserDeactivated, adminID, nil, nil)

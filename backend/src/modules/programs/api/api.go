@@ -24,17 +24,26 @@ type Programs interface {
 	// facility whose program toFacilityID doesn't offer.
 	TransferConflicts(ctx context.Context, userID, toFacilityID uint) ([]ResidentTransferProgramConflicts, error)
 	// EndEnrollmentsForTransfer marks the resident's current enrollments at
-	// fromFacilityID as ended by a transfer. Get the api with
-	// registry.Programs(tx) to make it part of the transfer's transaction.
+	// fromFacilityID as ended by a transfer. Call it through
+	// registry.ProgramsInTx to make it part of the transfer's transaction.
 	EndEnrollmentsForTransfer(ctx context.Context, userID, fromFacilityID uint) error
 	// WithdrawEnrollments marks the user's current enrollments as withdrawn,
-	// because their account was deactivated. Get the api with
-	// registry.Programs(tx) to make it part of the deactivation's transaction.
+	// because their account was deactivated. Call it through
+	// registry.ProgramsInTx to make it part of the deactivation's transaction.
 	WithdrawEnrollments(ctx context.Context, userID uint) error
 
 	// ResidentPrograms is every enrollment a resident has had, with its
 	// attendance percentage, latest class start first, for the usage report.
 	ResidentPrograms(ctx context.Context, userID uint) ([]ResidentProgramClassInfo, error)
+
+	// FacilityPrograms is the Programs data each of facilityIDs holds, for
+	// core's facility list and facility delete check. A facility that holds
+	// none is left out.
+	FacilityPrograms(ctx context.Context, facilityIDs []uint) (map[uint]FacilityPrograms, error)
+	// ClassHistoryCreatedAt is when each of the program_classes_history rows
+	// ids was written, for a resident's account history. A row with no time is
+	// left out.
+	ClassHistoryCreatedAt(ctx context.Context, ids []uint) (map[uint]time.Time, error)
 
 	// The Programs numbers on the dashboard, for facilityID (every facility
 	// when nil). EngagementOverview counts the activity between start and end,
@@ -55,6 +64,18 @@ type Programs interface {
 type ResidentTransferProgramConflicts struct {
 	ProgramName string `json:"program_name"`
 	ClassName   string `json:"class_name"`
+}
+
+// FacilityPrograms counts the Programs rows recorded at a facility.
+type FacilityPrograms struct {
+	// ActivePrograms and ActiveClasses are the facility list's numbers.
+	ActivePrograms int64
+	ActiveClasses  int64
+	// Classes, Programs (the programs the facility offers) and Rooms block
+	// deleting the facility.
+	Classes  int64
+	Programs int64
+	Rooms    int64
 }
 
 // ResidentProgramClassInfo is one of a resident's enrollments.

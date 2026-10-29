@@ -17,24 +17,28 @@ import (
 
 	"github.com/nats-io/nats.go"
 	log "github.com/sirupsen/logrus"
-	"gorm.io/gorm"
 )
 
 //go:embed migrations
 var migrations embed.FS
 
 // Module is the Programs module. The registry gives it Provider Platforms'
-// api, which it asks about providers and the users linked to them.
+// api, on Provider Platforms' own connection, which it asks about providers
+// and the users linked to them.
 type Module struct {
-	ProviderPlatforms func(db *gorm.DB) ppapi.ProviderPlatforms
+	ProviderPlatforms func(deps module.Deps) ppapi.ProviderPlatforms
 }
 
 var (
 	_ module.Module     = Module{}
+	_ module.Schema     = Module{}
 	_ module.TestModels = Module{}
 )
 
 func (Module) Name() string { return "programs" }
+
+// Schema is the Postgres schema that holds Programs' tables.
+func (Module) Schema() string { return "programs" }
 
 // server is what the routes share.
 type server struct {
@@ -57,7 +61,7 @@ func (m Module) newServer(deps module.Deps) *server {
 	srv := &server{
 		store:             &Store{deps.DB},
 		Client:            deps.HTTP,
-		providerPlatforms: m.ProviderPlatforms(deps.DB),
+		providerPlatforms: m.ProviderPlatforms(deps),
 		facilityFeatures:  deps.Features,
 		reports:           deps.Reports,
 	}

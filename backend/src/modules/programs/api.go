@@ -93,6 +93,81 @@ func toAPIResidentProgram(p ResidentProgramClassInfo) api.ResidentProgramClassIn
 	}
 }
 
+// FacilityPrograms counts with the conditions core's facility list and
+// delete check used before they asked Programs (EN-200).
+func (a programsAPI) FacilityPrograms(ctx context.Context, facilityIDs []uint) (map[uint]api.FacilityPrograms, error) {
+	counts := make(map[uint]api.FacilityPrograms)
+	if len(facilityIDs) == 0 {
+		return counts, nil
+	}
+	db := a.store.WithContext(ctx)
+	queries := []struct {
+		query    *gorm.DB
+		facility string
+		set      func(*api.FacilityPrograms, int64)
+	}{
+		{db.Table("facilities_programs fp").
+			Select("fp.facility_id, COUNT(DISTINCT p.id) AS count").
+			Joins("JOIN programs p ON p.id = fp.program_id AND p.deleted_at IS NULL").
+			Where("fp.deleted_at IS NULL AND p.is_active = true AND p.archived_at IS NULL"),
+			"fp.facility_id", func(c *api.FacilityPrograms, n int64) { c.ActivePrograms = n }},
+		{db.Table("program_class_cohorts").
+			Select("facility_id, COUNT(*) AS count").
+			Where("deleted_at IS NULL AND status = ? AND archived_at IS NULL", Active),
+			"facility_id", func(c *api.FacilityPrograms, n int64) { c.ActiveClasses = n }},
+		{db.Table("program_classes").
+			Select("facility_id, COUNT(*) AS count").
+			Where("deleted_at IS NULL"),
+			"facility_id", func(c *api.FacilityPrograms, n int64) { c.Classes = n }},
+		{db.Table("facilities_programs fp").
+			Select("fp.facility_id, COUNT(*) AS count").
+			Where("fp.deleted_at IS NULL"),
+			"fp.facility_id", func(c *api.FacilityPrograms, n int64) { c.Programs = n }},
+		{db.Table("rooms").
+			Select("facility_id, COUNT(*) AS count").
+			Where("deleted_at IS NULL"),
+			"facility_id", func(c *api.FacilityPrograms, n int64) { c.Rooms = n }},
+	}
+	for _, q := range queries {
+		var rows []struct {
+			FacilityID uint
+			Count      int64
+		}
+		if err := q.query.Where(q.facility+" IN ?", facilityIDs).
+			Group(q.facility).
+			Scan(&rows).Error; err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			c := counts[row.FacilityID]
+			q.set(&c, row.Count)
+			counts[row.FacilityID] = c
+		}
+	}
+	return counts, nil
+}
+
+func (a programsAPI) ClassHistoryCreatedAt(ctx context.Context, ids []uint) (map[uint]time.Time, error) {
+	times := make(map[uint]time.Time)
+	if len(ids) == 0 {
+		return times, nil
+	}
+	var rows []struct {
+		ID        uint
+		CreatedAt time.Time
+	}
+	if err := a.store.WithContext(ctx).Table("program_classes_history").
+		Select("id, created_at").
+		Where("id IN ? AND created_at IS NOT NULL", ids).
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		times[row.ID] = row.CreatedAt
+	}
+	return times, nil
+}
+
 func (a programsAPI) EngagementOverview(ctx context.Context, start, end *time.Time, facilityID *uint) (api.ProgramEngagementOverview, error) {
 	overview, err := a.store.GetProgramEngagementOverview(&QueryContext{Ctx: ctx}, start, end, facilityID)
 	return overview, dbCause(err)

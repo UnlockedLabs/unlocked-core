@@ -1,0 +1,77 @@
+{
+  "data": [
+    {
+      "active_classes": 1,
+      "active_programs": 0,
+      "can_delete": false,
+      "created_at": "<time>",
+      "id": 4,
+      "name": "Class Hall",
+      "timezone": "America/Chicago",
+      "total_residents": 0,
+      "updated_at": "<time>"
+    },
+    {
+      "active_classes": 0,
+      "active_programs": 0,
+      "can_delete": false,
+      "created_at": "<time>",
+      "id": 1,
+      "name": "Default",
+      "timezone": "America/Chicago",
+      "total_residents": 0,
+      "updated_at": "<time>"
+    },
+    {
+      "active_classes": 2,
+      "active_programs": 2,
+      "can_delete": false,
+      "created_at": "<time>",
+      "id": 2,
+      "name": "North",
+      "timezone": "America/Chicago",
+      "total_residents": 0,
+      "updated_at": "<time>"
+    },
+    {
+      "active_classes": 0,
+      "active_programs": 1,
+      "can_delete": false,
+      "created_at": "<time>",
+      "id": 5,
+      "name": "Program Wing",
+      "timezone": "America/Chicago",
+      "total_residents": 0,
+      "updated_at": "<time>"
+    },
+    {
+      "active_classes": 0,
+      "active_programs": 0,
+      "can_delete": false,
+      "created_at": "<time>",
+      "id": 6,
+      "name": "Room Annex",
+      "timezone": "America/Chicago",
+      "total_residents": 0,
+      "updated_at": "<time>"
+    },
+    {
+      "active_classes": 0,
+      "active_programs": 1,
+      "can_delete": false,
+      "created_at": "<time>",
+      "id": 3,
+      "name": "South",
+      "timezone": "America/Chicago",
+      "total_residents": 1,
+      "updated_at": "<time>"
+    }
+  ],
+  "message": "",
+  "meta": {
+    "current_page": 1,
+    "last_page": 1,
+    "per_page": 20,
+    "total": 6
+  }
+}

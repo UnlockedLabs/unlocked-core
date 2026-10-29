@@ -13,6 +13,7 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/UnlockedLabs/unlocked-contracts/features"
 	"github.com/UnlockedLabs/unlocked-contracts/identity"
@@ -119,6 +120,11 @@ type Deps struct {
 	// Reports renders reports as PDFs with core's report templates. Only
 	// routes get it.
 	Reports Reports
+	// ModuleDBs is each module's connection, by module name
+	// (database.ModuleDBs.For), for the registry to build another module's api
+	// on that module's own connection. A module never queries through it.
+	// Only routes get it.
+	ModuleDBs func(name string) *gorm.DB
 }
 
 // Notifier sends a message to a user over core's websocket. A user with no
@@ -240,6 +246,34 @@ type NewUser struct {
 // and the role, and grants the role only what the module needs.
 type Schema interface {
 	Schema() string
+}
+
+// RunAs runs fn on tx, a transaction on core's connection, as module m's own
+// connection would: on Postgres, when m has its own schema, under m's role and
+// with m's schema first on the search_path. Both go back to core's when fn
+// returns, so the rest of the transaction runs as core. Core uses it to make a
+// module's writes part of one of its transactions. When fn fails, the
+// transaction is aborted and left to the caller's rollback.
+func RunAs(tx *gorm.DB, m Module, fn func(tx *gorm.DB) error) error {
+	s, ok := m.(Schema)
+	if !ok || tx.Name() != "postgres" {
+		return fn(tx)
+	}
+	role := `"` + strings.ReplaceAll(s.Schema(), `"`, `""`) + `"`
+	for _, stmt := range []string{"SET LOCAL ROLE " + role, "SET LOCAL search_path = " + role + ", public"} {
+		if err := tx.Exec(stmt).Error; err != nil {
+			return fmt.Errorf("run as module %s: %w", m.Name(), err)
+		}
+	}
+	if err := fn(tx); err != nil {
+		return err
+	}
+	for _, stmt := range []string{"RESET ROLE", "RESET search_path"} {
+		if err := tx.Exec(stmt).Error; err != nil {
+			return fmt.Errorf("run as module %s: %w", m.Name(), err)
+		}
+	}
+	return nil
 }
 
 // Seeder is a module that adds default rows to a new database. Core calls

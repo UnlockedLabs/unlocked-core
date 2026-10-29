@@ -1,0 +1,27 @@
+{
+  "data": {
+    "program_names": [
+      {
+        "class_name": "Welding",
+        "program_name": "Welding"
+      }
+    ],
+    "trans_facility_id": 3,
+    "user": {
+      "create_user_id": null,
+      "created_at": "<time>",
+      "doc_id": "1001",
+      "email": "jdoe@example.com",
+      "facility_id": 2,
+      "id": 2,
+      "kratos_id": null,
+      "name_first": "Test",
+      "name_last": "User",
+      "role": "student",
+      "update_user_id": null,
+      "updated_at": "<time>",
+      "username": "jdoe"
+    }
+  },
+  "message": "Data fetched successfully"
+}
