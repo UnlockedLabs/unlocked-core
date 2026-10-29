@@ -15,9 +15,9 @@ import (
 
 // These tests pin the core routes that read or write Programs' tables
 // (EN-200): the facility list's counts and can_delete, the facility delete
-// check and delete, a resident's transfer, and the account history's join on
-// program_classes_history. They must pass unchanged once core asks Programs
-// for those numbers and the tables move into the programs schema.
+// check and delete, a resident's transfer, and the account history's class
+// change times. They passed unchanged when core started asking Programs for
+// those numbers and the tables moved into the programs schema.
 //
 // Regenerate the golden files after an intended change with:
 //
@@ -33,7 +33,7 @@ var (
 type programsCoreWorld struct {
 	north, south, classHall, programWing, roomAnnex, empty *models.Facility
 	resident, deptAdmin                                    *models.User
-	northClass                                             *programs.ProgramClassCohort
+	northClass, weldingClass                               *programs.ProgramClassCohort
 }
 
 // seedProgramsCore adds facilities that each hold one kind of Programs data,
@@ -77,9 +77,9 @@ func seedProgramsCore(t *testing.T, env *TestEnv) programsCoreWorld {
 	welding, err := env.CreateTestProgram("Welding", programs.Other, nil, nil, true, nil)
 	require.NoError(t, err)
 	require.NoError(t, env.SetFacilitiesToProgram(welding.ID, []uint{w.north.ID}))
-	weldingClass, err := env.CreateTestClass(welding, w.north, programs.Active, nil)
+	w.weldingClass, err = env.CreateTestClass(welding, w.north, programs.Active, nil)
 	require.NoError(t, err)
-	_, err = env.CreateTestEnrollment(weldingClass.ID, w.resident.ID, programs.Enrolled)
+	_, err = env.CreateTestEnrollment(w.weldingClass.ID, w.resident.ID, programs.Enrolled)
 	require.NoError(t, err)
 	for _, f := range []*models.Facility{w.north, w.roomAnnex} {
 		require.NoError(t, env.DB.Create(&programs.Room{FacilityID: f.ID, Name: f.Name + " Room"}).Error)
@@ -87,7 +87,7 @@ func seedProgramsCore(t *testing.T, env *TestEnv) programsCoreWorld {
 	// Test classes start now; a fixed start keeps the goldens stable.
 	start := time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC)
 	require.NoError(t, env.DB.Model(&programs.ProgramClassCohort{}).
-		Where("id IN ?", []uint{w.northClass.ID, weldingClass.ID}).Update("start_dt", start).Error)
+		Where("id IN ?", []uint{w.northClass.ID, w.weldingClass.ID}).Update("start_dt", start).Error)
 
 	// An enrollment change logged the way the program_classes_history trigger
 	// logs one, with an account history row pointing at it.
@@ -145,9 +145,9 @@ func TestProgramsCoreReads(t *testing.T) {
 		{"transfer_notes", http.MethodGet, fmt.Sprintf("/api/users/resident-verify?facility_id=%d&user_id=%d&doc_id=1001", w.south.ID, w.resident.ID), http.StatusOK},
 	})
 
-	// The golden masks times, so check which row's created_at the history
-	// join returns: today, psh.* replaces the account row's own with the
-	// program_classes_history row's.
+	// The golden masks times, so check which created_at the history shows: for
+	// a row linked to a class change, the program_classes_history row's, not
+	// its own.
 	t.Run("account_history_created_at", func(t *testing.T) {
 		resp := NewRequest[[]struct {
 			CreatedAt time.Time `json:"created_at"`
@@ -171,6 +171,7 @@ func TestProgramsCoreReads(t *testing.T) {
 
 	run(t, []routeCase{
 		{"enrollments_after_transfer", http.MethodGet, fmt.Sprintf("/api/program-classes/%d/enrollments?status=all", w.northClass.ID), http.StatusOK},
+		{"welding_enrollments_after_transfer", http.MethodGet, fmt.Sprintf("/api/program-classes/%d/enrollments?status=all", w.weldingClass.ID), http.StatusOK},
 		{"facilities_after", http.MethodGet, "/api/facilities", http.StatusOK},
 	})
 }

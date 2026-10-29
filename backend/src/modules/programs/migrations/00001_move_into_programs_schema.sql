@@ -8,6 +8,12 @@
 -- sequences and column defaults, and foreign keys keep working across schemas.
 -- The enum types (class_status, credit_type, funding_type, program_type) stay
 -- in public, as Open Content's did.
+--
+-- Each move holds a brief exclusive lock on its table. If a long query holds
+-- one first, this gives up instead of queueing every later query behind it;
+-- the transaction rolls back and the migration can run again.
+SET LOCAL lock_timeout = '5s';
+
 CREATE SCHEMA programs;
 
 ALTER TABLE public.programs SET SCHEMA programs;
