@@ -30,7 +30,8 @@ EN-194.
   `facilities` (the `User` and `Facility` types in `models.go`), and adds
   rows to core's audit tables in the same transaction as its own changes:
   `user_account_history` when attendance is recorded, `change_log_entries`
-  when a class or its schedule changes.
+  when a class or its schedule changes. Deleting a program or class deletes
+  its `change_log_entries` rows too.
 - **It asks Provider Platforms' `api/` on Provider Platforms' connection**,
   which the registry builds from `Deps.ModuleDBs`, so Programs' role needs no
   grants on provider tables.
@@ -52,8 +53,9 @@ EN-194.
   moved all 14 there from `public`, with their sequences, and its rollback
   moves them back.
 - **Its connection runs as the `programs` role**, which can read and write
-  only this schema, read core's `users` and `facilities`, and read and add to
-  (never change) core's `change_log_entries` and `user_account_history`.
+  only this schema, read core's `users` and `facilities`, read and add to
+  (never change) core's `user_account_history`, and read, add to and delete
+  from (never change) core's `change_log_entries`.
   Postgres refuses anything else, so core asks for Programs' numbers through
   `api/` instead of reading its tables.
 - **The role can't log in.** `Schema()` in `module.go` names the schema, and

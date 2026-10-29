@@ -79,9 +79,11 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA programs GRANT USAGE, SELECT, UPDATE ON SEQUE
 GRANT USAGE ON SCHEMA public TO programs;
 GRANT SELECT ON public.users, public.facilities TO programs;
 -- Programs writes core's audit trail in its own transactions (attendance,
--- enrollment and class changes), so it may read and add rows, never change
--- or remove them.
-GRANT SELECT, INSERT ON public.change_log_entries, public.user_account_history TO programs;
+-- enrollment and class changes), so it may read and add rows. Deleting a
+-- program or class also deletes its change log, so it may remove those rows
+-- too. It never changes the trail, or removes account history.
+GRANT SELECT, INSERT, DELETE ON public.change_log_entries TO programs;
+GRANT SELECT, INSERT ON public.user_account_history TO programs;
 GRANT USAGE ON SEQUENCE public.change_log_entries_id_seq, public.user_account_history_id_seq TO programs;
 
 -- +goose Down
