@@ -194,7 +194,7 @@ func newServer(ctx context.Context) *Server {
 		modules:           mods,
 		moduleDBs:         moduleDBs,
 		openContent:       registry.OpenContent(moduleDBs.For),
-		providerPlatforms: registry.ProviderPlatforms(moduleDBs.For("providerplatforms")),
+		providerPlatforms: registry.ProviderPlatforms(moduleDBs.For),
 		programs:          registry.Programs(moduleDBs.For),
 	}
 	features, err := server.Db.GetFeatureAccess()
@@ -234,7 +234,7 @@ func newTestingServer() *Server {
 		modules:           mods,
 		moduleDBs:         moduleDBs,
 		openContent:       registry.OpenContent(moduleDBs.For),
-		providerPlatforms: registry.ProviderPlatforms(moduleDBs.For("providerplatforms")),
+		providerPlatforms: registry.ProviderPlatforms(moduleDBs.For),
 		programs:          registry.Programs(moduleDBs.For),
 	}
 }

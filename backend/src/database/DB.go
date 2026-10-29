@@ -267,58 +267,6 @@ func openModulePostgres(schema string) *sql.DB {
 	return db
 }
 
-// AsModule runs fn on tx, a transaction on core's connection, as the feature
-// module called name, so the module's work is part of core's transaction. For
-// a module with its own schema (module.Schema), fn runs as the module's role,
-// with search_path set to its schema, then public, as on the module's own
-// connection; both are set back when fn returns, and tx's rollback undoes
-// them too. A module without a schema, and SQLite, run fn on tx as it is.
-func AsModule(tx *gorm.DB, name string, fn func(tx *gorm.DB) error) error {
-	schema, err := moduleSchema(name)
-	if err != nil {
-		return err
-	}
-	if schema == "" || tx.Name() != "postgres" {
-		return fn(tx)
-	}
-	if _, ok := tx.Statement.ConnPool.(gorm.TxCommitter); !ok {
-		return fmt.Errorf("module %s's work must run in a transaction", name)
-	}
-	var prev struct{ Role, SearchPath string }
-	if err := tx.Raw("SELECT current_user AS role, current_setting('search_path') AS search_path").Scan(&prev).Error; err != nil {
-		return fmt.Errorf("read the role and search_path: %w", err)
-	}
-	// set_config(..., true) is SET LOCAL: it lasts until the transaction ends.
-	set := func(role, searchPath string) error {
-		return tx.Exec("SELECT set_config('role', ?, true), set_config('search_path', ?, true)", role, searchPath).Error
-	}
-	if err := set(schema, schema+", public"); err != nil {
-		return fmt.Errorf("run as module %s: %w", name, err)
-	}
-	if err := fn(tx); err != nil {
-		return err
-	}
-	if err := set(prev.Role, prev.SearchPath); err != nil {
-		return fmt.Errorf("stop running as module %s: %w", name, err)
-	}
-	return nil
-}
-
-// moduleSchema is the schema of the feature module called name, or "" when
-// it has none.
-func moduleSchema(name string) (string, error) {
-	for _, m := range registry.All() {
-		if m.Name() != name {
-			continue
-		}
-		if s, ok := m.(module.Schema); ok {
-			return s.Schema(), nil
-		}
-		return "", nil
-	}
-	return "", fmt.Errorf("no feature module %q", name)
-}
-
 func openGorm(db *sql.DB) *gorm.DB {
 	slowThreshold := 200 * time.Millisecond
 	if ms := os.Getenv("GORM_SLOW_THRESHOLD_MS"); ms != "" {

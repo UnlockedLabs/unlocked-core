@@ -35,11 +35,19 @@ func OpenContent(db func(name string) *gorm.DB) ocapi.OpenContent {
 	return opencontent.NewAPI(db(opencontent.Module{}.Name()))
 }
 
-// ProviderPlatforms is Provider Platforms' answers to core, reading db: the
-// module's own connection (database.ModuleDBs.For), or core's transaction
-// while it runs as the module (database.AsModule).
-func ProviderPlatforms(db *gorm.DB) ppapi.ProviderPlatforms {
-	return providerplatforms.NewAPI(db)
+// ProviderPlatforms is Provider Platforms' answers to core, on the connection
+// db gives the Provider Platforms module (database.ModuleDBs.For).
+func ProviderPlatforms(db func(name string) *gorm.DB) ppapi.ProviderPlatforms {
+	return providerplatforms.NewAPI(db(providerplatforms.Module{}.Name()))
+}
+
+// ProviderPlatformsInTx runs fn with Provider Platforms' answers inside core's
+// transaction tx, as Provider Platforms' own connection runs (module.RunAs), so
+// its writes commit or roll back with core's.
+func ProviderPlatformsInTx(tx *gorm.DB, fn func(ppapi.ProviderPlatforms) error) error {
+	return module.RunAs(tx, providerplatforms.Module{}, func(tx *gorm.DB) error {
+		return fn(providerplatforms.NewAPI(tx))
+	})
 }
 
 // Programs is Programs' answers to core, on the connection db gives the

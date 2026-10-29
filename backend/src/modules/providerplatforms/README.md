@@ -55,8 +55,9 @@ let residents log in to them. It moved here from core in EN-193.
   and `search_path = provider, public`, so queries stay unqualified and no
   site needs a new password.
 - **Core's user delete soft-deletes the user's mappings in the same
-  transaction** through `database.AsModule`, which switches that transaction
-  to the `provider` role and search_path for the call and back after it.
+  transaction** through `registry.ProviderPlatformsInTx` (`module.RunAs`),
+  which switches that transaction to the `provider` role and search_path for
+  the call and back after it.
 - **Later migrations must create tables as `provider.<name>`.** Module
   migrations run on core's connection, so an unqualified table lands in
   `public`, where the role can't use it. Tables created here get the role's
