@@ -8,6 +8,8 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	ocapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api"
+	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
 )
 
 func (srv *Server) registerFacilitiesRoutes() []routeDef {
@@ -46,9 +48,10 @@ func (srv *Server) handleIndexFacilities(w http.ResponseWriter, r *http.Request,
 		p := progs[facilities[i].ID]
 		facilities[i].ActivePrograms = p.ActivePrograms
 		facilities[i].ActiveClasses = p.ActiveClasses
-		// Programs' classes, programs and rooms, and Open Content's activity
-		// and favorites, block a delete, as in FacilityBlockingChildren.HasAny.
-		if c := content[facilities[i].ID]; p.Classes > 0 || p.Programs > 0 || p.Rooms > 0 || c.Activities > 0 || c.Favorites > 0 {
+		// The query already counted core's blockers into CanDelete.
+		var blockers models.FacilityBlockingChildren
+		addModuleBlockers(&blockers, p, content[facilities[i].ID])
+		if blockers.HasAny() {
 			facilities[i].CanDelete = false
 		}
 	}
@@ -166,17 +169,21 @@ func (srv *Server) facilityBlockers(ctx context.Context, id int) (models.Facilit
 	if err != nil {
 		return blockers, newDatabaseServiceError(database.NewDBError(err, "error getting delete_guard_facility_counts"))
 	}
-	p := progs[uint(id)]
-	blockers.Classes = p.Classes
-	blockers.Programs = p.Programs
-	blockers.Rooms = p.Rooms
 	content, err := srv.openContent.FacilityContent(ctx, []uint{uint(id)})
 	if err != nil {
 		return blockers, newDatabaseServiceError(database.NewDBError(err, "error getting delete_guard_facility_counts"))
 	}
-	c := content[uint(id)]
-	blockers.OpenContentActivity = c.Activities
-	blockers.OpenContentFavorites = c.Favorites
-	blockers.VisibilityStatuses = c.VisibilityStatuses
+	addModuleBlockers(&blockers, progs[uint(id)], content[uint(id)])
 	return blockers, nil
+}
+
+// addModuleBlockers copies Programs' and Open Content's counts for a facility
+// onto its blockers.
+func addModuleBlockers(b *models.FacilityBlockingChildren, p programsapi.FacilityPrograms, c ocapi.FacilityContent) {
+	b.Classes = p.Classes
+	b.Programs = p.Programs
+	b.Rooms = p.Rooms
+	b.OpenContentActivity = c.Activities
+	b.OpenContentFavorites = c.Favorites
+	b.VisibilityStatuses = c.VisibilityStatuses
 }
