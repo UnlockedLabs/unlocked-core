@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.0](https://github.com/UnlockedLabs/unlocked-core/compare/v1.6.0...v1.7.0) (2026-10-29)
+
+
+### Features
+
+* En 195 move learning record into its folder ([#1274](https://github.com/UnlockedLabs/unlocked-core/issues/1274)) ([3ba923d](https://github.com/UnlockedLabs/unlocked-core/commit/3ba923d3f0d11088133cb9ebc19b132df794b609))
+* en 197 move lms jobs out of provider middleware and retire it ([#1273](https://github.com/UnlockedLabs/unlocked-core/issues/1273)) ([25d0e0d](https://github.com/UnlockedLabs/unlocked-core/commit/25d0e0d7706ba80264aea6e7bdd9f74f4a40497f))
+* en-198 give open content its own database schema ([16a4c4f](https://github.com/UnlockedLabs/unlocked-core/commit/16a4c4f19eb79614f8bd2f13187333f13f23aada))
+
+
+### Bug Fixes
+
+* **backend:** give yt-dlp a JS runtime for YouTube (EN-228) ([c157754](https://github.com/UnlockedLabs/unlocked-core/commit/c157754d4c9a925fc3aadd78721541e25fd3e521))
+
 ## [1.6.0](https://github.com/UnlockedLabs/unlocked-core/compare/v1.5.0...v1.6.0) (2026-10-26)
 
 
