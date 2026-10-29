@@ -85,6 +85,9 @@ GRANT SELECT, INSERT ON public.change_log_entries, public.user_account_history T
 GRANT USAGE ON SEQUENCE public.change_log_entries_id_seq, public.user_account_history_id_seq TO programs;
 
 -- +goose Down
+-- Moving the tables back takes the same locks, so it gives up the same way.
+SET LOCAL lock_timeout = '5s';
+
 ALTER DEFAULT PRIVILEGES IN SCHEMA programs REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLES FROM programs;
 ALTER DEFAULT PRIVILEGES IN SCHEMA programs REVOKE USAGE, SELECT, UPDATE ON SEQUENCES FROM programs;
 
