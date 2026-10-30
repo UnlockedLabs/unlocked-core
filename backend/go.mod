@@ -28,7 +28,7 @@ require (
 )
 
 require (
-	github.com/UnlockedLabs/unlocked-contracts v0.2.0
+	github.com/UnlockedLabs/unlocked-contracts v0.2.1-0.20261030194631-348ee399d3b2
 	github.com/adrg/strutil v0.3.1
 	github.com/gocarina/gocsv v0.0.0-20240520201108-78e41c74b4b1
 	github.com/microcosm-cc/bluemonday v1.0.27

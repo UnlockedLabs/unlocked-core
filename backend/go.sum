@@ -1,5 +1,5 @@
-github.com/UnlockedLabs/unlocked-contracts v0.2.0 h1:yftBeAEvEJ2ZY7wmw9aXmjR+oV4ViJiKb9UPvX5xUIM=
-github.com/UnlockedLabs/unlocked-contracts v0.2.0/go.mod h1:RAEqqBigq/Gu5ARxWKsSjN34B2N3GlEyGX8DjHjKxK0=
+github.com/UnlockedLabs/unlocked-contracts v0.2.1-0.20261030194631-348ee399d3b2 h1:ByE1RJ7tx9mnz4Fd1tuaC1guvYBq9SsPRuP9T9XH5z0=
+github.com/UnlockedLabs/unlocked-contracts v0.2.1-0.20261030194631-348ee399d3b2/go.mod h1:RAEqqBigq/Gu5ARxWKsSjN34B2N3GlEyGX8DjHjKxK0=
 github.com/adrg/strutil v0.3.1 h1:OLvSS7CSJO8lBii4YmBt8jiK9QOtB9CzCzwl4Ic/Fz4=
 github.com/adrg/strutil v0.3.1/go.mod h1:8h90y18QLrs11IBffcGX3NW/GFBXCMcNg4M7H6MspPA=
 github.com/aws/aws-sdk-go-v2 v1.42.1 h1:9eOTgu1z/dVtYpNZ3/8/XbbaX0x/BqE3HUzAzs6K0ek=

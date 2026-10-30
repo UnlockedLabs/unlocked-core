@@ -13,6 +13,7 @@ import (
 // there is no session to check.
 func (srv *Server) registerInternalRoutes() {
 	srv.Mux.Handle("GET /internal/v1/features", srv.handleError(srv.handleInternalFeatures))
+	srv.Mux.Handle("GET /internal/v1/claims", srv.handleError(srv.handleInternalClaims))
 }
 
 type internalFeaturesResponse struct {
