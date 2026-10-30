@@ -112,6 +112,8 @@ jobs:
     if: github.repository == 'UnlockedLabs/unlocked-core' && github.ref == 'refs/heads/main'
     needs: build-and-push
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     concurrency:
       group: update-staging
       cancel-in-progress: false
