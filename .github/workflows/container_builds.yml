@@ -142,6 +142,13 @@ jobs:
           APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
         run: |
           set -euo pipefail
+          # unlocked-platform's deploy workflow only checks this push's content
+          # when github.actor is unlocked-release-bot[bot]; any other app name
+          # would skip that check instead of failing it.
+          if [[ "$APP_SLUG" != unlocked-release-bot ]]; then
+            echo "::error::expected unlocked-release-bot, got ${APP_SLUG}; unlocked-platform's content check keys on that name"
+            exit 1
+          fi
           TAG="sha-${GITHUB_SHA:0:7}"
           SITE_FILE=sites/staging.yaml
           BOT_ID="$(GH_TOKEN="$APP_TOKEN" gh api "/users/${APP_SLUG}%5Bbot%5D" --jq .id)"
