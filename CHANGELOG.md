@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.0](https://github.com/UnlockedLabs/unlocked-core/compare/v1.7.0...v1.8.0) (2026-10-30)
+
+
+### Features
+
+* en 199 give provider platforms its own database schema ([#1276](https://github.com/UnlockedLabs/unlocked-core/issues/1276)) ([64c103d](https://github.com/UnlockedLabs/unlocked-core/commit/64c103d96c40cc281476eb4f0636258cf48c630a))
+* En 200 give programs its own database schema ([#1275](https://github.com/UnlockedLabs/unlocked-core/issues/1275)) ([a7a39b6](https://github.com/UnlockedLabs/unlocked-core/commit/a7a39b6e2d07b3fdc0a71d0e958b3db0852054f3))
+* En 256 login check for product services ([#1280](https://github.com/UnlockedLabs/unlocked-core/issues/1280)) ([a25c01a](https://github.com/UnlockedLabs/unlocked-core/commit/a25c01ab2f199ce7208c69a7ae098e8618314e3d))
+
+
+### Bug Fixes
+
+* stop locking the instructor's users row in the class conflict check (EN-200) ([#1278](https://github.com/UnlockedLabs/unlocked-core/issues/1278)) ([c5dccaf](https://github.com/UnlockedLabs/unlocked-core/commit/c5dccafa5ff785d7f2b7cd3510c08935882dc1be))
+
 ## [1.7.0](https://github.com/UnlockedLabs/unlocked-core/compare/v1.6.0...v1.7.0) (2026-10-29)
 
 
