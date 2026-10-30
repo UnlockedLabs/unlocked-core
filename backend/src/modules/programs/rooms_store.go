@@ -46,9 +46,11 @@ func LockAndCheckConflicts(tx *gorm.DB, req *ConflictCheckRequest) ([]RoomConfli
 			return nil, newNotFoundDBError(err, "room")
 		}
 	}
+	// The instructor isn't locked: users is a core table, and Programs' role
+	// can read it but not lock its rows.
 	if req.InstructorID != 0 {
 		var instructor User
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&instructor, req.InstructorID).Error; err != nil {
+		if err := tx.First(&instructor, req.InstructorID).Error; err != nil {
 			return nil, newNotFoundDBError(err, "instructor")
 		}
 	}
