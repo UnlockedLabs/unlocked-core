@@ -310,48 +310,32 @@ func (srv *Server) validateOrySession(r *http.Request) (*Claims, bool, error) {
 					log.WithFields(fields).Errorln("error parsing ID from ory response")
 					return nil, hasCookie, err
 				}
-				var user models.User
-				if err := srv.Db.Model(&models.User{}).Preload("Facility").First(&user, "kratos_id = ?", kratosID).Error; err != nil {
+				claims, err := srv.claimsForKratosID(kratosID)
+				if errors.Is(err, errUserDeactivated) {
+					log.Error("User is deactivated, cannot access auth endpoint")
+					return &Claims{}, false, newBadRequestServiceError(err, "Account deactivated. Contact the facility administrator for support.")
+				}
+				if err != nil {
 					fields["error"] = err.Error()
 					fields["kratos_id"] = kratosID
 					log.WithFields(fields).Errorln("error fetching user found from kratos session")
 					return nil, hasCookie, err
 				}
-				if user.DeactivatedAt != nil {
-					log.Error("User is deactivated, cannot access auth endpoint")
-					return &Claims{}, false, newBadRequestServiceError(errors.New("account deactivated"), "Account deactivated. Contact the facility administrator for support.")
-				}
 				traits, ok := identity["traits"].(map[string]any)
 				if !ok {
 					return nil, hasCookie, errors.New("invalid identity traits")
 				}
-				fields["user"] = user
+				fields["user_id"] = claims.UserID
 				log.WithFields(fields).Trace("found user from ory session")
 
 				passReset, ok := traits["password_reset"].(bool)
 				if !ok {
 					passReset = true
 				}
-				featureAccess, err := srv.Db.GetFacilityFeatureAccess(user.FacilityID, srv.features)
-				if err != nil {
-					log.WithFields(fields).Errorf("Error resolving facility feature access: %v", err)
-					featureAccess = []models.FeatureAccess{}
-				}
-				claims := &Claims{
-					Username:      user.Username,
-					Email:         user.Email,
-					UserID:        user.ID,
-					FacilityID:    user.FacilityID,
-					FacilityName:  user.Facility.Name,
-					PasswordReset: passReset,
-					KratosID:      kratosID,
-					Role:          user.Role,
-					FeatureAccess: featureAccess,
-					SessionID:     sessionID,
-					TimeZone:      user.Facility.Timezone,
-				}
+				claims.PasswordReset = passReset
+				claims.SessionID = sessionID
 				traitsRole, ok := traits["role"].(string)
-				if !ok || string(user.Role) != traitsRole {
+				if !ok || string(claims.Role) != traitsRole {
 					err := srv.updateUserTraitsInKratos(claims)
 					if err != nil {
 						log.WithFields(fields).Errorf("Error updating user traits in kratos: %v", err)
@@ -363,6 +347,39 @@ func (srv *Server) validateOrySession(r *http.Request) (*Claims, bool, error) {
 	}
 	log.WithFields(fields).Error("Ory session not active")
 	return nil, hasCookie, errors.New("ory session not active")
+}
+
+var errUserDeactivated = errors.New("account deactivated")
+
+// claimsForKratosID builds the claims of the user with this Kratos identity
+// from core's database: the user, their facility, and the features on there.
+// The session's own details (SessionID, PasswordReset) come from Kratos and
+// are left to the caller. Core's login check and /internal/v1/claims both use
+// it, so a product service gets the same claims core builds (EN-256).
+func (srv *Server) claimsForKratosID(kratosID string) (*Claims, error) {
+	var user models.User
+	if err := srv.Db.Model(&models.User{}).Preload("Facility").First(&user, "kratos_id = ?", kratosID).Error; err != nil {
+		return nil, err
+	}
+	if user.DeactivatedAt != nil {
+		return nil, errUserDeactivated
+	}
+	featureAccess, err := srv.Db.GetFacilityFeatureAccess(user.FacilityID, srv.features)
+	if err != nil {
+		log.WithFields(log.Fields{"handler": "claimsForKratosID", "user_id": user.ID}).Errorf("Error resolving facility feature access: %v", err)
+		featureAccess = []models.FeatureAccess{}
+	}
+	return &Claims{
+		Username:      user.Username,
+		Email:         user.Email,
+		UserID:        user.ID,
+		FacilityID:    user.FacilityID,
+		FacilityName:  user.Facility.Name,
+		KratosID:      kratosID,
+		Role:          user.Role,
+		FeatureAccess: featureAccess,
+		TimeZone:      user.Facility.Timezone,
+	}, nil
 }
 
 type ResetPasswordRequest struct {
