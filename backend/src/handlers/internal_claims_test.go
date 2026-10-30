@@ -54,6 +54,9 @@ func TestHandleInternalClaims(t *testing.T) {
 		query      string
 		wantStatus int
 		want       *identity.Claims
+		// The message in core's JSON error, which SessionChecker needs to tell
+		// an unknown or deactivated user from a missing route.
+		wantMessage string
 	}{
 		{
 			name:       "a resident gets their facility's features",
@@ -76,14 +79,16 @@ func TestHandleInternalClaims(t *testing.T) {
 			},
 		},
 		{
-			name:       "a deactivated user is refused",
-			query:      "kratos_id=kratos-claimsgone",
-			wantStatus: http.StatusForbidden,
+			name:        "a deactivated user is refused",
+			query:       "kratos_id=kratos-claimsgone",
+			wantStatus:  http.StatusForbidden,
+			wantMessage: "account deactivated",
 		},
 		{
-			name:       "an unknown identity is not found",
-			query:      "kratos_id=kratos-nobody",
-			wantStatus: http.StatusNotFound,
+			name:        "an unknown identity is not found",
+			query:       "kratos_id=kratos-nobody",
+			wantStatus:  http.StatusNotFound,
+			wantMessage: "user not found",
 		},
 		{
 			name:       "a missing kratos_id is rejected",
@@ -98,6 +103,11 @@ func TestHandleInternalClaims(t *testing.T) {
 			srv.Mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/internal/v1/claims?"+tt.query, nil))
 
 			require.Equal(t, tt.wantStatus, rec.Code, rec.Body.String())
+			if tt.wantMessage != "" {
+				var resp models.Resource[any]
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp), rec.Body.String())
+				assert.Equal(t, tt.wantMessage, resp.Message)
+			}
 			if tt.wantStatus != http.StatusOK {
 				return
 			}
