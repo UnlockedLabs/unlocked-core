@@ -37,8 +37,6 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
       queue: max
-    outputs:
-      deployments: ${{ steps.build-images.outputs.deployments }}
 
     steps:
       - name: Checkout code
@@ -46,7 +44,6 @@ jobs:
 
       - name: Set Image Version
         run: |
-          # main also gets :latest so the existing staging restart flow keeps working.
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
             if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
@@ -54,13 +51,11 @@ jobs:
               exit 1
             fi
             echo "IMAGE_VERSION=${TAG#v}" >> $GITHUB_ENV
-            echo "EXTRA_TAG=" >> $GITHUB_ENV
             # GITHUB_REF_NAME is the tag itself on this path, not a branch —
             # report "unknown" rather than a tag name masquerading as a branch.
             echo "IMAGE_GIT_BRANCH=unknown" >> $GITHUB_ENV
           else
             echo "IMAGE_VERSION=sha-${GITHUB_SHA:0:7}" >> $GITHUB_ENV
-            echo "EXTRA_TAG=latest" >> $GITHUB_ENV
             echo "IMAGE_GIT_BRANCH=$GITHUB_REF_NAME" >> $GITHUB_ENV
           fi
 
@@ -99,64 +94,94 @@ jobs:
           # deployment's /config.js (EN-176) instead of baked in here —
           # one image now works on every site.
           TAGS=(-t "$REGISTRY/frontend:${IMAGE_VERSION}")
-          if [[ -n "$EXTRA_TAG" ]]; then
-            TAGS+=(-t "$REGISTRY/frontend:${EXTRA_TAG}")
-          fi
           docker buildx build --platform linux/amd64 \
             --cache-from type=gha,scope=frontend --cache-to type=gha,scope=frontend,mode=max \
             "${LABELS[@]}" "${TAGS[@]}" --push frontend/.
 
           echo "Building backend image"
           TAGS=(-t "$REGISTRY/unlockedv2:${IMAGE_VERSION}")
-          if [[ -n "$EXTRA_TAG" ]]; then
-            TAGS+=(-t "$REGISTRY/unlockedv2:${EXTRA_TAG}")
-          fi
           docker buildx build --platform linux/amd64 \
             --cache-from type=gha,scope=backend --cache-to type=gha,scope=backend,mode=max \
             --build-arg GIT_COMMIT="$GITHUB_SHA" --build-arg GIT_BRANCH="$IMAGE_GIT_BRANCH" --build-arg APP_VERSION="$IMAGE_VERSION" \
             "${LABELS[@]}" "${TAGS[@]}" --push -f backend/Dockerfile .
 
-          echo "deployments=frontend server opencontent-worker providerplatforms-worker" >> $GITHUB_OUTPUT
-
-  restart-deployments:
-    if: github.repository == 'UnlockedLabs/unlocked-core' || github.repository == 'PThorpe92/UnlockEdv2'
+  # Staging follows main (EN-184): commit this build's tag to staging's site
+  # file in unlocked-platform. That push starts its deploy workflow, which runs
+  # helm upgrade and the migrations, then checks /api/version.
+  update-staging:
+    if: github.repository == 'UnlockedLabs/unlocked-core' && github.ref == 'refs/heads/main'
     needs: build-and-push
     runs-on: ubuntu-latest
+    concurrency:
+      group: update-staging
+      cancel-in-progress: false
 
     steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      # The unlocked-release-bot app may push to unlocked-platform's main past
+      # its review rule; that repo's deploy workflow refuses any bot push that
+      # changes more than image tags.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
         with:
-          role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
-          aws-region: us-west-2
-          mask-aws-account-id: true
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: UnlockedLabs
+          repositories: unlocked-platform
+          permission-contents: write
 
-      - name: Restart Deployments via SSM
+      - name: Checkout unlocked-platform
+        uses: actions/checkout@v4
+        with:
+          repository: UnlockedLabs/unlocked-platform
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Commit the new tag to staging
         env:
-          SSM_TARGET_INSTANCE_ID: ${{ secrets.SSM_TARGET_INSTANCE_ID }}
+          GH_TOKEN: ${{ github.token }}
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
         run: |
-          deployments="${{ needs.build-and-push.outputs.deployments }}"
-          if [[ -z "$deployments" ]]; then
-            echo "No deployments need restarting."
-            exit 0
-          fi
+          set -euo pipefail
+          TAG="sha-${GITHUB_SHA:0:7}"
+          SITE_FILE=sites/staging.yaml
+          BOT_ID="$(GH_TOKEN="$APP_TOKEN" gh api "/users/${APP_SLUG}%5Bbot%5D" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${BOT_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
 
-          if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
-            NAMESPACE="staging"
-          else
-            echo "Skipping deployment restarts for ${GITHUB_REF}"
-            exit 0
-          fi
-          # Until EN-184, staging migrates here: copy the chart's suspended
-          # CronJob/core-migrate into a Job, then run rollout.sh as before. The
-          # server waits for that Job's migrations itself, so it needn't finish
-          # first. Before the chart has the CronJob, the copy fails and the
-          # restart still runs (unlocked-platform D7).
-          JOB="core-migrate-${GITHUB_SHA::8}-${GITHUB_RUN_ATTEMPT}"
-          COMMAND="kubectl -n $NAMESPACE create job $JOB --from=cronjob/core-migrate; rollout.sh $NAMESPACE $deployments"
-          PARAMETERS=$(jq -n --arg cmd "$COMMAND" '{"commands": [$cmd]}')
-          aws ssm send-command \
-            --instance-ids "$SSM_TARGET_INSTANCE_ID" \
-            --document-name "AWS-RunShellScript" \
-            --parameters "$PARAMETERS" \
-            --comment "Restarting deployments in $NAMESPACE"
+          site_tag() {
+            sed -n "/^  $1:\$/,/^    tag:/ s/^    tag: *//p" "$SITE_FILE"
+          }
+
+          # Retries when another push lands on unlocked-platform's main first.
+          for attempt in 1 2 3 4 5; do
+            # A re-run of an older build must not roll staging back.
+            CURRENT="$(site_tag server)"
+            if [[ "$CURRENT" == sha-* ]]; then
+              STATUS="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${CURRENT#sha-}...${GITHUB_SHA}" --jq .status)"
+              if [[ "$STATUS" != ahead ]]; then
+                echo "Staging runs $CURRENT, and $TAG isn't newer ($STATUS); leaving it."
+                exit 0
+              fi
+            fi
+
+            sed -i -E "/^  (frontend|server):\$/,/^    tag:/ s/^(    tag:).*/\1 ${TAG}/" "$SITE_FILE"
+            for image in frontend server; do
+              if [[ "$(site_tag "$image")" != "$TAG" ]]; then
+                echo "::error::couldn't set images.${image}.tag in ${SITE_FILE}"
+                exit 1
+              fi
+            done
+
+            git commit -qam "chore(staging): deploy unlocked-core ${TAG}" \
+              -m "https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
+            if git push -q origin HEAD:main; then
+              echo "Staging set to $TAG; unlocked-platform's deploy workflow takes it from here."
+              exit 0
+            fi
+            echo "Push rejected (attempt $attempt), retrying on the new main"
+            git fetch -q origin main
+            git reset -q --hard FETCH_HEAD
+            sleep $((attempt * 5))
+          done
+          echo "::error::couldn't push to unlocked-platform's main"
+          exit 1
