@@ -103,8 +103,6 @@ type Worker interface {
 type Deps struct {
 	DB   *gorm.DB
 	NATS *nats.Conn
-	// Notify sends messages to a user's open browser tabs.
-	Notify Notifier
 	// Users is core's user accounts. Only routes get it: it is nil in
 	// RegisterJobs.
 	Users Users
@@ -125,22 +123,6 @@ type Deps struct {
 	// on that module's own connection. A module never queries through it.
 	// Only routes get it.
 	ModuleDBs func(name string) *gorm.DB
-}
-
-// Notifier sends a message to a user over core's websocket. A user with no
-// open tab misses it.
-type Notifier interface {
-	Notify(userID uint, msg Message)
-}
-
-// Message is one websocket message to a user.
-type Message struct {
-	// Event is the message's type, such as "visits".
-	Event string
-	// ActivityID is the Open Content activity the message is about, if any.
-	// Core ends that activity when the user's tab closes.
-	ActivityID int64
-	Text       string
 }
 
 // Users is core's user accounts, for a module that adds or looks up users.

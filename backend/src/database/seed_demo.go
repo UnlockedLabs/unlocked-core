@@ -4,8 +4,9 @@ import (
 	"context"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
-	ocapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api"
 	ppapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api"
+
+	ocapi "github.com/UnlockedLabs/unlocked-contracts/opencontent"
 )
 
 func (db *DB) RunOrResetDemoSeed(facilityId uint, openContent ocapi.OpenContent, providerPlatforms ppapi.ProviderPlatforms) error {

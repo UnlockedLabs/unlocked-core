@@ -274,32 +274,8 @@ func TestModuleRouterLogFields(t *testing.T) {
 	assert.Equal(t, "facadmin", coreFields["username"])
 }
 
-// Module messages reach the user's open tab as the websocket's own message
-// shape, and are dropped when the server has no websocket.
-func TestWsNotifier(t *testing.T) {
-	msg := module.Message{Event: "visits", ActivityID: 42, Text: "hi"}
-
-	t.Run("no websocket", func(t *testing.T) {
-		assert.NotPanics(t, func() { wsNotifier{newTestingServer()}.Notify(7, msg) })
-	})
-
-	t.Run("open tab", func(t *testing.T) {
-		srv := newTestingServer()
-		srv.wsClient = newClientManager()
-		client := &WsClient{UserID: 7, sendChan: make(chan []byte, 1)}
-		srv.wsClient.clients[7] = client
-
-		wsNotifier{srv}.Notify(7, msg)
-
-		assert.JSONEq(t, `{"event_type":"visits","user_id":7,"session_id":"","msg":{"activity_id":42,"msg":"hi"}}`, string(<-client.sendChan))
-		// The websocket ends this activity when the tab closes.
-		assert.Equal(t, int64(42), client.OpenContentActivityID)
-	})
-}
-
 func TestModuleDeps(t *testing.T) {
 	deps := newTestingServer().moduleDeps()
-	assert.NotNil(t, deps.Notify)
 	assert.NotNil(t, deps.Users)
 	require.NotNil(t, deps.LiveProviders)
 	// The testing server has no Canvas cache, so there is nothing to clear.

@@ -11,8 +11,8 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
-	ocapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api"
 
+	ocapi "github.com/UnlockedLabs/unlocked-contracts/opencontent"
 	"github.com/nats-io/nats.go"
 )
 

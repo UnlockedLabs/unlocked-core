@@ -99,24 +99,8 @@ func (c *Claims) identityClaims() *identity.Claims {
 	}
 }
 
-// wsNotifier sends module messages over the websocket. It reads srv.wsClient
-// on each call because the server creates the websocket after registering
-// routes, and the testing server has none.
-type wsNotifier struct{ srv *Server }
-
-func (n wsNotifier) Notify(userID uint, msg module.Message) {
-	if n.srv.wsClient == nil {
-		return
-	}
-	n.srv.wsClient.notifyUser(WsMsg{
-		EventType: WsEventType(msg.Event),
-		UserID:    userID,
-		Msg:       MsgContent{ActivityID: msg.ActivityID, Msg: msg.Text},
-	})
-}
-
 // moduleUsers gives modules core's user accounts. It reads srv's fields on each
-// call, like wsNotifier.
+// call, since the testing server sets some after startup.
 type moduleUsers struct{ srv *Server }
 
 func (u moduleUsers) Get(ctx context.Context, id uint) (module.User, error) {
@@ -170,7 +154,7 @@ func (u moduleUsers) Delete(ctx context.Context, id uint) error {
 }
 
 // httpClient sends module requests with srv.Client. It reads srv.Client on
-// each call, like wsNotifier, so a client set after startup is the one used.
+// each call, so a client set after startup is the one used.
 type httpClient struct{ srv *Server }
 
 func (c httpClient) Do(req *http.Request) (*http.Response, error) {
@@ -220,7 +204,6 @@ func (srv *Server) moduleDeps() module.Deps {
 	deps := module.Deps{
 		DB:        srv.Db.DB,
 		NATS:      srv.nats,
-		Notify:    wsNotifier{srv},
 		Users:     moduleUsers{srv},
 		HTTP:      httpClient{srv},
 		Features:  facilityFeatures{srv},

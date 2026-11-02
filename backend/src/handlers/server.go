@@ -14,12 +14,12 @@ import (
 	database "github.com/UnlockedLabs/unlocked-core/backend/src/database"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
-	ocapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api"
 	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
 	ppapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/tasks"
 
+	ocapi "github.com/UnlockedLabs/unlocked-contracts/opencontent"
 	"github.com/nats-io/nats.go"
 	ory "github.com/ory/kratos-client-go"
 	"github.com/prometheus/client_golang/prometheus"
@@ -177,6 +177,10 @@ func newServer(ctx context.Context) *Server {
 		log.Errorf("Failed to connect to NATS: %v", err)
 	}
 	dev := os.Getenv("APP_ENV") == "dev"
+	// Open Content answers core's questions only with the site's secret.
+	if os.Getenv("OPEN_CONTENT_TOKEN") == "" {
+		log.Fatal("OPEN_CONTENT_TOKEN must be set: it's the secret core asks Open Content's questions with")
+	}
 	db := database.InitDB(ctx, false)
 	if db == nil {
 		return nil
@@ -193,7 +197,7 @@ func newServer(ctx context.Context) *Server {
 		dev:               dev,
 		modules:           mods,
 		moduleDBs:         moduleDBs,
-		openContent:       registry.OpenContent(moduleDBs.For),
+		openContent:       ocapi.NewClient(openContentURL(), os.Getenv("OPEN_CONTENT_TOKEN"), nil),
 		providerPlatforms: registry.ProviderPlatforms(moduleDBs.For),
 		programs:          registry.Programs(moduleDBs.For),
 	}
@@ -211,6 +215,9 @@ func newServer(ctx context.Context) *Server {
 		log.Fatal("Error setting up default admin in Kratos")
 	}
 	server.wsClient = newClientManager()
+	if err := server.forwardOpenContentNotifications(); err != nil {
+		log.Fatalf("Failed to subscribe to Open Content's notifications: %v", err)
+	}
 	if tasks.ServerRunsJobs() {
 		server.scheduler = tasks.Start(server.nats, server.modules, server.moduleDBs)
 	} else {
@@ -233,10 +240,19 @@ func newTestingServer() *Server {
 		testingMode:       true,
 		modules:           mods,
 		moduleDBs:         moduleDBs,
-		openContent:       registry.OpenContent(moduleDBs.For),
+		openContent:       ocapi.NewClient(openContentURL(), os.Getenv("OPEN_CONTENT_TOKEN"), nil),
 		providerPlatforms: registry.ProviderPlatforms(moduleDBs.For),
 		programs:          registry.Programs(moduleDBs.For),
 	}
+}
+
+// openContentURL is where core asks Open Content's service its questions:
+// OPEN_CONTENT_URL, else the service's name in the cluster.
+func openContentURL() string {
+	if url := os.Getenv("OPEN_CONTENT_URL"); url != "" {
+		return url
+	}
+	return "http://open-content:8080"
 }
 
 // ConnectNATS connects to NATS with NATS_URL, NATS_USER and NATS_PASSWORD. The
