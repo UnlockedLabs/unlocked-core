@@ -45,6 +45,10 @@ If you would like to contribute, please have a look at our [contribution guideli
 
 - Clone the repository.
 
+- Clone [unlocked-open-content](https://github.com/UnlockedLabs/unlocked-open-content) next to it
+  (`../unlocked-open-content`). Open Content runs as its own service, and `make dev` builds it from
+  that checkout. Set `OPEN_CONTENT_DIR` in `.env` if yours lives somewhere else.
+
 - `cp .env.example .env`.
 
 - run `make init` to install dependencies, setup git hooks, and run the containers.
@@ -130,7 +134,7 @@ If this does not work because your directory is named something different, you c
  - **Videos**:
    Videos can be hosted locally for development, in which case they are simply downloaded and moved into the `frontend/public/videos` directory,
    If you wish to use `s3` and test out hosting videos between multiple instances, you need to set the following environment variables in either
-   the docker-compose.yml for both the `opencontent-worker` and `server` or in your production environment.
+   the docker-compose.yml for both `open-content` and `open-content-worker` (in `x-open-content`), or in your production environment.
  ```
      - AWS_REGION=
      - S3_BUCKET_NAME=
