@@ -4,19 +4,19 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 
+	ocapi "github.com/UnlockedLabs/unlocked-contracts/opencontent"
 	"github.com/stretchr/testify/require"
 )
 
-// These tests pin the core routes that read Open Content's tables (EN-198):
+// These tests pin the core routes that use Open Content's numbers (EN-198):
 // the facility list's can_delete, the facility delete check and delete, and
-// the resident profile's activity engagement. They must pass unchanged once
-// core asks Open Content for those numbers and the tables move into the
-// open_content schema.
+// the resident profile's activity engagement. Since EN-205 core asks Open
+// Content's service, here a stand-in that answers with the numbers the
+// original seed's rows gave, and the golden files are unchanged.
 //
 // Regenerate the golden files after an intended change with:
 //
@@ -27,7 +27,7 @@ type openContentCoreWorld struct {
 	resident, deptAdmin                          *models.User
 }
 
-// seedOpenContentCore adds facilities that each hold one kind of Open Content
+// seedOpenContentCore adds facilities that each have one kind of Open Content
 // data, so each golden shows which kinds block deleting a facility:
 //   - North has the residents, and every kind of Open Content data;
 //   - Reading Room has only reading activity;
@@ -54,25 +54,16 @@ func seedOpenContentCore(t *testing.T, env *TestEnv) openContentCoreWorld {
 	w.deptAdmin, err = env.CreateTestUser("deptadmin", models.DepartmentAdmin, w.north.ID, "")
 	require.NoError(t, err)
 
-	day := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-	for _, stmt := range []struct {
-		sql  string
-		args []any
-	}{
-		{`INSERT INTO libraries (id, open_content_provider_id, external_id, title, language, description, url, thumbnail_url, created_at, updated_at)
-			VALUES (1, 1, 'lib-algebra', 'Algebra', 'eng', 'Algebra for everyone', '/content/algebra', NULL, ?, ?)`, []any{day, day}},
-		{`INSERT INTO open_content_urls (id, content_url) VALUES (1, '/api/proxy/libraries/1/content/algebra/A/Lesson_1')`, nil},
-		{`INSERT INTO open_content_activities (open_content_provider_id, facility_id, user_id, content_id, open_content_url_id, request_ts, stop_ts) VALUES
-			(1, ?, ?, 1, 1, ?, ?), (1, ?, ?, 1, 1, ?, ?)`,
-			[]any{w.north.ID, w.resident.ID, day, day.Add(30 * time.Minute), w.reading.ID, w.resident.ID, day.Add(time.Hour), day.Add(90 * time.Minute)}},
-		{`INSERT INTO open_content_favorites (user_id, content_id, open_content_provider_id, facility_id, created_at) VALUES
-			(?, 1, 1, NULL, ?), (?, 1, 1, ?, ?), (?, 1, 1, ?, ?)`,
-			[]any{w.resident.ID, day, w.deptAdmin.ID, w.north.ID, day, w.deptAdmin.ID, w.favorites.ID, day}},
-		{`INSERT INTO facility_visibility_statuses (facility_id, open_content_provider_id, content_id, visibility_status) VALUES
-			(?, 1, 1, true), (?, 1, 1, true)`, []any{w.north.ID, w.visibility.ID}},
-	} {
-		require.NoError(t, env.DB.Exec(stmt.sql, stmt.args...).Error, stmt.sql)
-	}
+	// The numbers Open Content counts for each facility: its reading
+	// activity, facility-wide favorites and visibility settings.
+	env.OpenContent.set(func(f *fakeOpenContent) {
+		f.facilityContent = map[uint]ocapi.FacilityContent{
+			w.north.ID:      {Activities: 1, Favorites: 1, VisibilityStatuses: 1},
+			w.reading.ID:    {Activities: 1},
+			w.favorites.ID:  {Favorites: 1},
+			w.visibility.ID: {VisibilityStatuses: 1},
+		}
+	})
 	return w
 }
 
