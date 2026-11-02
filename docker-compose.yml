@@ -1,3 +1,29 @@
+# Open Content's three services (EN-205) share one image and environment.
+x-open-content: &open-content
+  image: unlocked-open-content:dev
+  build:
+    context: ${OPEN_CONTENT_DIR:-../unlocked-open-content}
+    args:
+      APP_VERSION: dev
+      GIT_COMMIT: ${OPEN_CONTENT_GIT_COMMIT:-unknown}
+      GIT_BRANCH: ${OPEN_CONTENT_GIT_BRANCH:-unknown}
+  networks:
+    - intranet
+  environment:
+    APP_DSN: postgres://unlocked:dev@postgres:5432/unlocked
+    APP_ENV: dev
+    APP_URL: http://server:8080
+    KRATOS_PUBLIC_URL: http://kratos:4433
+    LOG_LEVEL: debug
+    NATS_URL: nats:4222
+    NATS_USER: unlocked
+    NATS_PASSWORD: dev
+    KIWIX_SERVER_URL: https://kiwix.dev.unlockedlabs.xyz
+    MIDDLEWARE_CRON_SCHEDULE: 0 22 * * *
+    PROXY_SCHEME_OVERRIDE: "false"
+    # The secret core asks Open Content's questions with; the server's matches.
+    OPEN_CONTENT_TOKEN: dev-open-content-token
+
 services:
   postgres:
     image: postgres:16
@@ -88,6 +114,8 @@ services:
       - APP_URL=http://127.0.0.1
       - APP_KEY=base64:NTQxODNmNDMyM2YzNzdiNzM3NDMzYTFlOTgyMjllYWQwZmRjNjg2ZjkzYmFiMDU3ZWNiNjEyZGFhOTQwMDJiNSAgLQo=
       - PROVIDER_SERVICE_URL=http://providerplatforms-worker:8081
+      - OPEN_CONTENT_URL=http://open-content:8080
+      - OPEN_CONTENT_TOKEN=dev-open-content-token
       - HYDRA_ADMIN_URL=http://hydra:4445
       - HYDRA_PUBLIC_URL=http://hydra:4444
       - KRATOS_ADMIN_URL=http://kratos:4434
@@ -147,31 +175,40 @@ services:
     restart: unless-stopped
     depends_on: [server]
 
-  # Open Content's jobs (EN-196): the Kiwix scrape and the video downloads,
-  # run as `backend worker opencontent`. No hot reload: restart it after
-  # changing job code.
-  opencontent-worker:
-    build:
-      context: ./
-      dockerfile: backend/dev.Dockerfile
-    command: ["go", "run", "./backend/cmd/main.go", "worker", "opencontent"]
-    networks:
-      - intranet
-    volumes:
-      - ./:/app
-      - ./frontend/public/videos:/videos
-    environment:
-      - APP_DSN=postgres://unlocked:dev@postgres:5432/unlocked
-      - APP_ENV=dev
-      - APP_URL=http://server:8080
-      - LOG_LEVEL=debug
-      # Where it reads the migration files it waits for server-migrate to apply.
-      - MIGRATION_DIR=backend/migrations
-      - NATS_URL=nats:4222
-      - NATS_USER=unlocked
-      - NATS_PASSWORD=dev
+  # Open Content (EN-205) runs as its own service, built from the
+  # unlocked-open-content checkout next to this one. Set OPEN_CONTENT_DIR in
+  # .env if yours lives elsewhere. No hot reload: `make dev` rebuilds it.
+  open-content-migrate:
+    <<: *open-content
+    command: ["migrate"]
+    depends_on:
+      server-migrate:
+        condition: service_completed_successfully
+
+  # Open Content's API. The rev_proxy sends its paths here, and the server
+  # asks it questions (.env.example points a server run outside compose at
+  # port 8082).
+  open-content:
+    <<: *open-content
+    command: ["serve"]
+    ports:
+      - 8082:8080
     restart: unless-stopped
-    depends_on: [server]
+    depends_on:
+      open-content-migrate:
+        condition: service_completed_successfully
+
+  # Open Content's worker: it seeds a new database once the server has created
+  # its first facility, then runs the Kiwix scrape and the video jobs.
+  open-content-worker:
+    <<: *open-content
+    command: ["worker"]
+    volumes:
+      - ./frontend/public/videos:/videos
+    restart: unless-stopped
+    depends_on:
+      open-content-migrate:
+        condition: service_completed_successfully
 
   # Provider Platforms' LMS jobs (EN-197): the Canvas, Brightspace and Kolibri
   # syncs, run as `backend worker providerplatforms`, which also serves the
