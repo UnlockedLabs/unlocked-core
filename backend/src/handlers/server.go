@@ -177,10 +177,6 @@ func newServer(ctx context.Context) *Server {
 		log.Errorf("Failed to connect to NATS: %v", err)
 	}
 	dev := os.Getenv("APP_ENV") == "dev"
-	// Open Content answers core's questions only with the site's secret.
-	if os.Getenv("OPEN_CONTENT_TOKEN") == "" {
-		log.Fatal("OPEN_CONTENT_TOKEN must be set: it's the secret core asks Open Content's questions with")
-	}
 	db := database.InitDB(ctx, false)
 	if db == nil {
 		return nil

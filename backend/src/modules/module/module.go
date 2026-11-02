@@ -38,7 +38,7 @@ type Module interface {
 	Migrations() fs.FS
 }
 
-// Route is one HTTP route, such as "GET /api/libraries". The module writes
+// Route is one HTTP route, such as "GET /api/programs". The module writes
 // its own responses and errors (EN-188: handler helpers stay in each module).
 type Route struct {
 	Pattern string
