@@ -14,9 +14,11 @@ BUILD_RECREATE=--build --force-recreate
 # somewhere other than a sibling ../ai/ directory. Docker Compose reads the
 # same variable from .env for the tutor build context, so the two never drift.
 DEFAULT_AI_DIR=../ai/unlocked-hiset-ai
-# Open Content runs as its own service (EN-205), built from its checkout. Set
-# OPEN_CONTENT_DIR in .env (or the environment) if it isn't next to this repo.
-DEFAULT_OPEN_CONTENT_DIR=../unlocked-open-content
+# Open Content runs as its own service (EN-205). `make dev` builds it straight
+# from GitHub (OPEN_CONTENT_REF, default main), so no checkout is needed; set
+# OPEN_CONTENT_DIR in .env (or the environment) to your checkout to build your
+# own changes. Docker Compose reads the same variables for the build context.
+OPEN_CONTENT_REPO=https://github.com/UnlockedLabs/unlocked-open-content.git
 # Open Content's one-off commands run in its migrate service's container.
 OPEN_CONTENT_RUN=docker compose run --rm --no-deps open-content-migrate
 # Canvas admin created on first `make canvas`. Override in the environment if
@@ -52,24 +54,21 @@ define run_dev_compose
 	export GIT_COMMIT=$$(git rev-parse --short HEAD 2>/dev/null || echo unknown); \
 	export GIT_BRANCH=$$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown); \
 	OC_DIR=$${OPEN_CONTENT_DIR:-$$(sed -n 's/^OPEN_CONTENT_DIR=//p' .env | tail -1)}; \
-	OC_DIR=$${OC_DIR:-$(DEFAULT_OPEN_CONTENT_DIR)}; \
-	if [ ! -d "$$OC_DIR" ]; then \
-		echo; \
-		echo "=============================================================="; \
-		echo " NO OPEN CONTENT CHECKOUT AT $$OC_DIR."; \
-		echo " Open Content runs as its own service. Clone it next to this repo:"; \
-		echo; \
-		echo "     git clone git@github.com:UnlockedLabs/unlocked-open-content.git $$OC_DIR"; \
-		echo; \
-		echo " or set OPEN_CONTENT_DIR in .env to your checkout, then re-run"; \
-		echo " this target."; \
-		echo "=============================================================="; \
-		echo; \
-		exit 1; \
+	if [ -n "$$OC_DIR" ]; then \
+		if [ ! -d "$$OC_DIR" ]; then \
+			echo "OPEN_CONTENT_DIR is $$OC_DIR, but there's no checkout there. Clone it, or unset OPEN_CONTENT_DIR to build Open Content from GitHub."; \
+			exit 1; \
+		fi; \
+		export OPEN_CONTENT_GIT_COMMIT=$$(git -C "$$OC_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown); \
+		export OPEN_CONTENT_GIT_BRANCH=$$(git -C "$$OC_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown); \
+		echo "Building Open Content from your checkout $$OC_DIR @ $$OPEN_CONTENT_GIT_BRANCH ($$OPEN_CONTENT_GIT_COMMIT)"; \
+	else \
+		OC_REF=$${OPEN_CONTENT_REF:-$$(sed -n 's/^OPEN_CONTENT_REF=//p' .env | tail -1)}; \
+		export OPEN_CONTENT_GIT_BRANCH=$${OC_REF:-main}; \
+		OC_COMMIT=$$(git ls-remote $(OPEN_CONTENT_REPO) "refs/heads/$$OPEN_CONTENT_GIT_BRANCH" 2>/dev/null | cut -c1-7); \
+		export OPEN_CONTENT_GIT_COMMIT=$${OC_COMMIT:-unknown}; \
+		echo "Building Open Content from GitHub @ $$OPEN_CONTENT_GIT_BRANCH ($$OPEN_CONTENT_GIT_COMMIT)"; \
 	fi; \
-	export OPEN_CONTENT_GIT_COMMIT=$$(git -C "$$OC_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown); \
-	export OPEN_CONTENT_GIT_BRANCH=$$(git -C "$$OC_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown); \
-	echo "Building Open Content from $$OC_DIR @ $$OPEN_CONTENT_GIT_BRANCH ($$OPEN_CONTENT_GIT_COMMIT)"; \
 	AI_DIR=$${TUTOR_DIR:-$$(sed -n 's/^TUTOR_DIR=//p' .env | tail -1)}; \
 	AI_DIR=$${AI_DIR:-$(DEFAULT_AI_DIR)}; \
 	TUTOR_READY=0; TUTOR_WHY=; \

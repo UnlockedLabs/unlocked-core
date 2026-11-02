@@ -2,7 +2,10 @@
 x-open-content: &open-content
   image: unlocked-open-content:dev
   build:
-    context: ${OPEN_CONTENT_DIR:-../unlocked-open-content}
+    # Built straight from GitHub (OPEN_CONTENT_REF, default main), so no
+    # checkout is needed. Set OPEN_CONTENT_DIR to your checkout to build your
+    # own changes instead.
+    context: ${OPEN_CONTENT_DIR:-https://github.com/UnlockedLabs/unlocked-open-content.git#${OPEN_CONTENT_REF:-main}}
     args:
       APP_VERSION: dev
       GIT_COMMIT: ${OPEN_CONTENT_GIT_COMMIT:-unknown}
@@ -175,9 +178,9 @@ services:
     restart: unless-stopped
     depends_on: [server]
 
-  # Open Content (EN-205) runs as its own service, built from the
-  # unlocked-open-content checkout next to this one. Set OPEN_CONTENT_DIR in
-  # .env if yours lives elsewhere. No hot reload: `make dev` rebuilds it.
+  # Open Content (EN-205) runs as its own service, built from GitHub, or from
+  # your checkout when OPEN_CONTENT_DIR is set (see x-open-content). No hot
+  # reload: `make dev` rebuilds it.
   open-content-migrate:
     <<: *open-content
     command: ["migrate"]

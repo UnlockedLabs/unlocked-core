@@ -45,10 +45,6 @@ If you would like to contribute, please have a look at our [contribution guideli
 
 - Clone the repository.
 
-- Clone [unlocked-open-content](https://github.com/UnlockedLabs/unlocked-open-content) next to it
-  (`../unlocked-open-content`). Open Content runs as its own service, and `make dev` builds it from
-  that checkout. Set `OPEN_CONTENT_DIR` in `.env` if yours lives somewhere else.
-
 - `cp .env.example .env`.
 
 - run `make init` to install dependencies, setup git hooks, and run the containers.
@@ -60,6 +56,12 @@ If you would like to contribute, please have a look at our [contribution guideli
 
 Subsequent runs can be done with `make dev`, which will start all the necessary containers
 with hot reloading on the client and the backend.
+
+**Open Content** ([unlocked-open-content](https://github.com/UnlockedLabs/unlocked-open-content))
+runs as its own service. `make dev` builds its `main` branch straight from GitHub, so you don't need
+a checkout of it. To work on it, clone it and set `OPEN_CONTENT_DIR` in `.env` to your checkout
+(such as `../unlocked-open-content`); `make dev` then builds your changes. To try another branch
+without a checkout, such as one in review, set `OPEN_CONTENT_REF` to the branch name.
 
 
 **NOTE:** you _must_ be sure to use `127.0.0.1` in place of `localhost` in your browser, as the cookies required for authentication are not shared between the two,
