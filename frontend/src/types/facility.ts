@@ -1,5 +1,3 @@
-import type { FeatureAccess } from './user';
-
 export interface Facility {
     [key: string]: string | number;
     id: number;
@@ -39,14 +37,24 @@ export interface FacilityWithStats {
     can_delete: boolean;
 }
 
+// Feature names are plain strings here: a product can register a feature
+// that isn't in the FeatureAccess enum.
+export interface FeatureCatalogEntry {
+    name: string;
+    title: string;
+    description: string | null;
+    /** Set only for a sub-feature. */
+    parent?: string;
+}
+
 export interface FacilityFeatureOverviewRow {
     facility_id: number;
     facility_name: string;
-    features: Partial<Record<FeatureAccess, boolean>>;
+    features: Partial<Record<string, boolean>>;
 }
 
 export interface FacilityFeatureDetailRow {
-    feature: FeatureAccess;
+    feature: string;
     enabled: boolean;
 }
 

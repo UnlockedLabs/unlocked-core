@@ -61,12 +61,12 @@ const (
 // Parent is set only for a sub-feature, which is never on where its parent is
 // off.
 type CatalogFeature struct {
-	ID             uint
-	Name           FeatureAccess
-	Title          string
-	Description    *string
-	DefaultEnabled bool
-	Parent         FeatureAccess
+	ID             uint          `json:"-"`
+	Name           FeatureAccess `json:"name"`
+	Title          string        `json:"title"`
+	Description    *string       `json:"description"`
+	DefaultEnabled bool          `json:"-"`
+	Parent         FeatureAccess `json:"parent,omitempty"`
 }
 
 // FeatureCatalog is every feature core knows, top-level ones first: core's own

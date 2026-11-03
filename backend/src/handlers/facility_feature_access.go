@@ -11,11 +11,25 @@ import (
 
 func (srv *Server) registerFacilityFeatureAccessRoutes() []routeDef {
 	return []routeDef{
+		newDeptAdminRoute("GET /api/features", srv.handleGetFeatureCatalog),
 		newDeptAdminRoute("GET /api/facilities/features", srv.handleGetFacilityFeatureOverview),
 		newDeptAdminRoute("PUT /api/facilities/features/apply-all", srv.handleApplyFacilityFeaturesToAll),
 		newDeptAdminRoute("GET /api/facilities/{id}/features", srv.handleGetFacilityFeatureDetail),
 		newDeptAdminRoute("PUT /api/facilities/{id}/features/{feature}", srv.handleSetFacilityFeature),
 	}
+}
+
+/**
+* GET: /api/features
+* Every feature Feature Control shows, top-level ones first: core's own and any
+* a product registered. A sub-feature carries its parent's name.
+**/
+func (srv *Server) handleGetFeatureCatalog(w http.ResponseWriter, r *http.Request, log sLog) error {
+	catalog, err := srv.Db.FeatureCatalog()
+	if err != nil {
+		return newDatabaseServiceError(err)
+	}
+	return writeJsonResponse(w, http.StatusOK, catalog)
 }
 
 /**

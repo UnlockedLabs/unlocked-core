@@ -371,6 +371,37 @@ func TestFacilityFeatureRoutes_RoleGating(t *testing.T) {
 	})
 }
 
+func TestFeatureCatalogRoute(t *testing.T) {
+	env = SetupTestEnv(t)
+	defer env.CleanupTestEnv()
+
+	facility, err := env.CreateTestFacility("Catalog Facility")
+	require.NoError(t, err)
+	description := "Helps with things"
+	require.NoError(t, env.DB.Create(&models.FeatureFlags{Name: "my_tool", Title: "My Tool", Description: &description}).Error)
+
+	t.Run("department admin gets every feature, top-level ones first", func(t *testing.T) {
+		catalog := NewRequest[[]map[string]any](env.Client, t, http.MethodGet, "/api/features", nil).
+			WithTestClaims(&handlers.Claims{Role: models.DepartmentAdmin}).
+			Do().
+			ExpectStatus(http.StatusOK).
+			GetData()
+
+		require.Len(t, catalog, len(features.All)+1)
+		require.Equal(t, map[string]any{"name": "my_tool", "title": "My Tool", "description": description}, catalog[5],
+			"a registered feature is top-level, listed after core's five")
+		require.Equal(t, map[string]any{"name": "ai_tutor", "title": "ai_tutor", "description": nil}, catalog[4])
+		require.Equal(t, "open_content", catalog[6]["parent"])
+	})
+
+	t.Run("facility admin cannot list features", func(t *testing.T) {
+		NewRequest[any](env.Client, t, http.MethodGet, "/api/features", nil).
+			WithTestClaims(&handlers.Claims{Role: models.FacilityAdmin, FacilityID: facility.ID}).
+			Do().
+			ExpectStatus(http.StatusUnauthorized)
+	})
+}
+
 func TestFacilityFeatureRoutes_ApplyAll(t *testing.T) {
 	env = SetupTestEnv(t)
 	defer env.CleanupTestEnv()
