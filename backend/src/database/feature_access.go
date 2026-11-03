@@ -9,16 +9,18 @@ import (
 
 // FeatureCatalog reads every feature from feature_flags, top-level ones first.
 // A sub-feature's parent comes from page_feature_flags, through the shadow row
-// EN-96 gave each sub-feature. It is read on every use, so a feature a product
-// registers shows up without a restart.
+// EN-96 gave each sub-feature. Sub-features are in the order they were added
+// to page_feature_flags, since 00077 copied the shadow rows in no set order. It
+// is read on every use, so a feature a product registers shows up without a
+// restart.
 func (db *DB) FeatureCatalog() (models.FeatureCatalog, error) {
 	var catalog models.FeatureCatalog
 	if err := db.Table("feature_flags AS ff").
-		Select("ff.id, ff.name, ff.title, ff.description, ff.default_enabled, COALESCE(parent.name, '') AS parent").
+		Select("ff.id, ff.name, ff.title, ff.description, ff.default_enabled, ff.is_page_feature, COALESCE(parent.name, '') AS parent").
 		Joins("LEFT JOIN page_feature_flags pff ON ff.is_page_feature AND pff.page_feature = ff.name AND pff.deleted_at IS NULL").
 		Joins("LEFT JOIN feature_flags parent ON parent.id = pff.feature_flag_id").
 		Where("ff.deleted_at IS NULL").
-		Order("ff.is_page_feature, ff.id").
+		Order("ff.is_page_feature, pff.id, ff.id").
 		Scan(&catalog).Error; err != nil {
 		return nil, newGetRecordsDBError(err, "feature_flags")
 	}
@@ -38,25 +40,6 @@ func (db *DB) UpsertFeature(name models.FeatureAccess, title string, description
 		return newCreateDBError(err, "feature_flags")
 	}
 	return nil
-}
-
-// statewideDefaults is every feature on by default: a top-level feature by its
-// own default, and a sub-feature only when its parent is on by default too.
-// GetFacilityFeatureAccess layers each facility's overrides on top.
-func statewideDefaults(catalog models.FeatureCatalog) []models.FeatureAccess {
-	var on []models.FeatureAccess
-	for _, f := range catalog {
-		if !f.DefaultEnabled {
-			continue
-		}
-		if f.Parent != "" {
-			if parent, ok := catalog.Find(f.Parent); !ok || !parent.DefaultEnabled {
-				continue
-			}
-		}
-		on = append(on, f.Name)
-	}
-	return on
 }
 
 // seedTestFeatureFlags mirrors the feature_flags/page_feature_flags rows the

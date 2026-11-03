@@ -66,6 +66,7 @@ type CatalogFeature struct {
 	Title          string        `json:"title"`
 	Description    *string       `json:"description"`
 	DefaultEnabled bool          `json:"-"`
+	IsPageFeature  bool          `json:"-"`
 	Parent         FeatureAccess `json:"parent,omitempty"`
 }
 
@@ -82,24 +83,71 @@ func (c FeatureCatalog) Find(name FeatureAccess) (CatalogFeature, bool) {
 	return CatalogFeature{}, false
 }
 
-func (c FeatureCatalog) Names() []FeatureAccess {
-	names := make([]FeatureAccess, len(c))
-	for i, f := range c {
-		names[i] = f.Name
-	}
-	return names
-}
-
 // TopLevel are the features shown as their own card on the Feature Control
 // page; sub-features are nested under their parent.
 func (c FeatureCatalog) TopLevel() []FeatureAccess {
 	var names []FeatureAccess
 	for _, f := range c {
-		if f.Parent == "" {
+		if !f.IsPageFeature {
 			names = append(names, f.Name)
 		}
 	}
 	return names
+}
+
+// StatewideDefaults is every feature on by default: a top-level feature by its
+// own default, and a sub-feature only when its parent is on by default too.
+func (c FeatureCatalog) StatewideDefaults() []FeatureAccess {
+	var on []FeatureAccess
+	for _, f := range c {
+		if !f.DefaultEnabled {
+			continue
+		}
+		if f.Parent != "" {
+			if parent, ok := c.Find(f.Parent); !ok || !parent.DefaultEnabled {
+				continue
+			}
+		}
+		on = append(on, f.Name)
+	}
+	return on
+}
+
+// Resolve gives every feature its state before the parent rule: the facility's
+// override where it has one, otherwise the statewide default. A facility's
+// override wins in both directions.
+func (c FeatureCatalog) Resolve(overrides map[FeatureAccess]bool) map[FeatureAccess]bool {
+	statewide := make(map[FeatureAccess]bool, len(c))
+	for _, f := range c.StatewideDefaults() {
+		statewide[f] = true
+	}
+	states := make(map[FeatureAccess]bool, len(c))
+	for _, f := range c {
+		if override, ok := overrides[f.Name]; ok {
+			states[f.Name] = override
+		} else {
+			states[f.Name] = statewide[f.Name]
+		}
+	}
+	return states
+}
+
+// Effective is every feature on at a facility with these overrides. A
+// sub-feature is never on where its parent is off, whatever its own override
+// says, since turning the parent off doesn't clear it.
+func (c FeatureCatalog) Effective(overrides map[FeatureAccess]bool) []FeatureAccess {
+	states := c.Resolve(overrides)
+	effective := make([]FeatureAccess, 0, len(c))
+	for _, f := range c {
+		if !states[f.Name] {
+			continue
+		}
+		if f.Parent != "" && !states[f.Parent] {
+			continue
+		}
+		effective = append(effective, f.Name)
+	}
+	return effective
 }
 
 func Feature(kinds ...FeatureAccess) []FeatureAccess {

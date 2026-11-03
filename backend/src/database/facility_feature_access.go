@@ -21,56 +21,25 @@ type FacilityFeatureDetailRow struct {
 	Enabled bool                 `json:"enabled"`
 }
 
-// GetFacilityFeatureAccess resolves the effective feature set for one facility.
-// A facility's own override row wins in both directions: it may enable a feature
-// that is off statewide, or disable one that is on. The statewide defaults
-// (feature_flags.default_enabled) apply only to features the facility has no
-// row for. A sub-feature is never effective when its parent isn't — that
-// cascade is enforced here regardless of the sub-feature's own override row,
-// since disabling the parent doesn't retroactively clear it.
+// GetFacilityFeatureAccess returns the features on at one facility
+// (models.FeatureCatalog.Effective has the rules).
 func (db *DB) GetFacilityFeatureAccess(facilityID uint) ([]models.FeatureAccess, error) {
+	_, effective, err := db.facilityFeatures(facilityID)
+	return effective, err
+}
+
+// facilityFeatures loads the catalog and one facility's overrides, and returns
+// the catalog with the features on at that facility.
+func (db *DB) facilityFeatures(facilityID uint) (models.FeatureCatalog, []models.FeatureAccess, error) {
 	catalog, err := db.FeatureCatalog()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	overrides, err := db.facilityOverrides(facilityID, catalog)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return effectiveFeatures(catalog, overrides), nil
-}
-
-func effectiveFeatures(catalog models.FeatureCatalog, overrides map[models.FeatureAccess]bool) []models.FeatureAccess {
-	enabled := resolveFeatures(catalog, overrides)
-	effective := make([]models.FeatureAccess, 0, len(catalog))
-	for _, f := range catalog {
-		if !enabled[f.Name] {
-			continue
-		}
-		if f.Parent != "" && !enabled[f.Parent] {
-			continue
-		}
-		effective = append(effective, f.Name)
-	}
-	return effective
-}
-
-// resolveFeatures gives every known feature its pre-cascade state: the facility's
-// override where one exists, otherwise the statewide default.
-func resolveFeatures(catalog models.FeatureCatalog, overrides map[models.FeatureAccess]bool) map[models.FeatureAccess]bool {
-	statewideSet := make(map[models.FeatureAccess]bool, len(catalog))
-	for _, f := range statewideDefaults(catalog) {
-		statewideSet[f] = true
-	}
-	states := make(map[models.FeatureAccess]bool, len(catalog))
-	for _, f := range catalog {
-		if override, ok := overrides[f.Name]; ok {
-			states[f.Name] = override
-		} else {
-			states[f.Name] = statewideSet[f.Name]
-		}
-	}
-	return states
+	return catalog, catalog.Effective(overrides), nil
 }
 
 // namesByID translates facility_feature_flags.feature_flag_id back into the
@@ -139,7 +108,7 @@ func (db *DB) GetFacilityFeatureOverview(args *models.QueryContext, filterFeatur
 
 	rows := make([]FacilityFeatureOverviewRow, 0, len(facilities))
 	for _, f := range facilities {
-		enabled := resolveFeatures(catalog, overridesByFacility[f.ID])
+		enabled := catalog.Resolve(overridesByFacility[f.ID])
 		features := make(map[models.FeatureAccess]bool, len(topLevel))
 		for _, feat := range topLevel {
 			features[feat] = enabled[feat]
@@ -161,15 +130,10 @@ func (db *DB) GetFacilityFeatureOverview(args *models.QueryContext, filterFeatur
 // GetFacilityFeatureDetail returns every feature (top-level and sub) with its
 // effective state for one facility — the data behind the detail panel.
 func (db *DB) GetFacilityFeatureDetail(facilityID uint) ([]FacilityFeatureDetailRow, error) {
-	catalog, err := db.FeatureCatalog()
+	catalog, effective, err := db.facilityFeatures(facilityID)
 	if err != nil {
 		return nil, err
 	}
-	overrides, err := db.facilityOverrides(facilityID, catalog)
-	if err != nil {
-		return nil, err
-	}
-	effective := effectiveFeatures(catalog, overrides)
 	rows := make([]FacilityFeatureDetailRow, 0, len(catalog))
 	for _, f := range catalog {
 		rows = append(rows, FacilityFeatureDetailRow{Feature: f.Name, Enabled: slices.Contains(effective, f.Name)})
@@ -195,7 +159,7 @@ func (db *DB) UpsertFacilityFeatureFlag(args *models.QueryContext, facilityID ui
 		if err != nil {
 			return err
 		}
-		if !slices.Contains(effectiveFeatures(catalog, overrides), flag.Parent) {
+		if !slices.Contains(catalog.Effective(overrides), flag.Parent) {
 			return newBadRequestDBError(errors.New("parent feature disabled"), "cannot enable this feature while its parent feature is disabled for this facility")
 		}
 	}
@@ -229,15 +193,10 @@ func (db *DB) ApplyFacilityFeaturesToAll(args *models.QueryContext, sourceFacili
 		return newNotFoundDBError(gorm.ErrRecordNotFound, "facilities")
 	}
 
-	catalog, err := db.FeatureCatalog()
+	catalog, effective, err := db.facilityFeatures(sourceFacilityID)
 	if err != nil {
 		return err
 	}
-	overrides, err := db.facilityOverrides(sourceFacilityID, catalog)
-	if err != nil {
-		return err
-	}
-	effective := effectiveFeatures(catalog, overrides)
 	effectiveSet := make(map[models.FeatureAccess]bool, len(effective))
 	for _, f := range effective {
 		effectiveSet[f] = true

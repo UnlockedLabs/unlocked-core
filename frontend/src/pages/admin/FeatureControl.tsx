@@ -35,54 +35,16 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 
-interface SubFeature {
-    feature: FeatureAccess;
-    label: string;
-    description: string;
-}
-
-// Sub-features nested under the top-level feature that gates them. `note` is the
-// line above the group explaining when the group applies — for Programs it also
-// explains why the default is on, so admins read turning it off as a deliberate
-// setup step rather than a suggested one. A group whose parent is off stays
-// visible but disabled, so admins can see which sub-features exist.
-const SUB_FEATURE_GROUPS: Partial<
-    Record<string, { note: string; features: SubFeature[] }>
-> = {
-    [FeatureAccess.OpenContentAccess]: {
-        note: 'Sub-features (only available when Knowledge Center is enabled)',
-        features: [
-            {
-                feature: FeatureAccess.RequestContentAccess,
-                label: 'Request Content Button',
-                description:
-                    'Allows residents to submit requests for new content to be added to the Knowledge Center'
-            },
-            {
-                feature: FeatureAccess.HelpfulLinksAccess,
-                label: 'Helpful Links',
-                description:
-                    'Enables the Helpful Links tab for residents and allows admins to add/manage helpful resources'
-            },
-            {
-                feature: FeatureAccess.UploadVideoAccess,
-                label: 'Videos',
-                description:
-                    'Enables video content viewing for residents and allows admins to upload/manage videos'
-            }
-        ]
-    },
-    [FeatureAccess.ProgramAccess]: {
-        note: 'Residents can see their own program information by default (only available when Program Hub & Tracking is enabled).',
-        features: [
-            {
-                feature: FeatureAccess.ResidentProgramsAccess,
-                label: 'Programs Page for Residents',
-                description:
-                    'Shows the Programs page and its nav item in the resident portal. Program tracking, data, and admin views are unaffected either way.'
-            }
-        ]
-    }
+// The line above each group of sub-features, keyed by their parent: when the
+// group applies, and for Programs why it defaults on, so admins read turning it
+// off as a deliberate setup step rather than a suggested one. A group whose
+// parent is off stays visible but disabled, so admins can see which
+// sub-features exist.
+const SUB_FEATURE_NOTES: Partial<Record<string, string>> = {
+    [FeatureAccess.OpenContentAccess]:
+        'Sub-features (only available when Knowledge Center is enabled)',
+    [FeatureAccess.ProgramAccess]:
+        'Residents can see their own program information by default (only available when Program Hub & Tracking is enabled).'
 };
 
 type FilterValue = 'all' | `${string}:true` | `${string}:false`;
@@ -127,7 +89,7 @@ function SubFeatureRow({
     disabled,
     onToggle
 }: {
-    sub: SubFeature;
+    sub: FeatureCatalogEntry;
     enabled: boolean;
     disabled: boolean;
     onToggle: () => void;
@@ -141,14 +103,16 @@ function SubFeatureRow({
         >
             <div className="flex-1 pr-4">
                 <h4 className="text-sm font-medium text-brand-dark dark:text-white">
-                    {sub.label}
+                    {sub.title}
                 </h4>
-                <p className="text-xs text-muted-foreground mt-1">
-                    {sub.description}
-                </p>
+                {sub.description && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                        {sub.description}
+                    </p>
+                )}
             </div>
             <Switch
-                aria-label={`Toggle ${sub.label}`}
+                aria-label={`Toggle ${sub.title}`}
                 checked={enabled}
                 disabled={disabled}
                 onCheckedChange={onToggle}
@@ -176,8 +140,11 @@ export default function FeatureControl() {
 
     // Every feature, including any a product registered, so a new one shows up
     // here without a frontend change.
-    const { data: catalogResp, isLoading: catalogLoading } =
-        useSWR<ServerResponseMany<FeatureCatalogEntry>>('/api/features');
+    const {
+        data: catalogResp,
+        isLoading: catalogLoading,
+        error: catalogError
+    } = useSWR<ServerResponseMany<FeatureCatalogEntry>, Error>('/api/features');
     const catalog = useMemo(() => catalogResp?.data ?? [], [catalogResp]);
     const topLevel = useMemo(() => catalog.filter((f) => !f.parent), [catalog]);
 
@@ -218,6 +185,16 @@ export default function FeatureControl() {
     );
 
     if (!user) return null;
+
+    if (catalogError) {
+        return (
+            <div className="full-page-center">
+                <div className="text-red-600">
+                    Error loading the feature list
+                </div>
+            </div>
+        );
+    }
 
     async function refreshOwnClaimsIfAffected(facilityId: number) {
         if (user?.facility_id === facilityId) {
@@ -403,18 +380,27 @@ export default function FeatureControl() {
                                     variant="outline"
                                     onClick={() => setConfirmApplyAll(true)}
                                     disabled={
-                                        pendingFeature !== null || applying
+                                        pendingFeature !== null ||
+                                        applying ||
+                                        catalogLoading
                                     }
                                 >
                                     Apply these settings to all facilities
                                 </Button>
                             </div>
 
+                            {catalogLoading && (
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    Loading features…
+                                </p>
+                            )}
                             <div className="space-y-4">
                                 {topLevel.map((card) => {
                                     const enabled = isEnabled(card.name);
-                                    const subGroup =
-                                        SUB_FEATURE_GROUPS[card.name];
+                                    const subs = catalog.filter(
+                                        (f) => f.parent === card.name
+                                    );
+                                    const note = SUB_FEATURE_NOTES[card.name];
                                     return (
                                         <div
                                             key={card.name}
@@ -449,49 +435,45 @@ export default function FeatureControl() {
                                                 />
                                             </div>
 
-                                            {subGroup && (
+                                            {subs.length > 0 && (
                                                 <div className="mt-4 bg-surface-hover rounded-md p-4">
-                                                    <div className="flex items-start gap-2 mb-4 text-sm text-muted-foreground">
-                                                        <AlertCircle className="size-4 shrink-0" />
-                                                        <span>
-                                                            {subGroup.note}
-                                                        </span>
-                                                    </div>
+                                                    {note && (
+                                                        <div className="flex items-start gap-2 mb-4 text-sm text-muted-foreground">
+                                                            <AlertCircle className="size-4 shrink-0" />
+                                                            <span>{note}</span>
+                                                        </div>
+                                                    )}
                                                     <div className="space-y-4">
-                                                        {subGroup.features.map(
-                                                            (sub) => {
-                                                                const subEnabled =
-                                                                    isEnabled(
-                                                                        sub.feature
-                                                                    );
-                                                                return (
-                                                                    <SubFeatureRow
-                                                                        key={
-                                                                            sub.feature
-                                                                        }
-                                                                        sub={
-                                                                            sub
-                                                                        }
-                                                                        enabled={
-                                                                            subEnabled
-                                                                        }
-                                                                        disabled={
-                                                                            !enabled ||
-                                                                            pendingFeature !==
-                                                                                null ||
-                                                                            detailLoading ||
-                                                                            applying
-                                                                        }
-                                                                        onToggle={() =>
-                                                                            void handleToggle(
-                                                                                sub.feature,
-                                                                                subEnabled
-                                                                            )
-                                                                        }
-                                                                    />
+                                                        {subs.map((sub) => {
+                                                            const subEnabled =
+                                                                isEnabled(
+                                                                    sub.name
                                                                 );
-                                                            }
-                                                        )}
+                                                            return (
+                                                                <SubFeatureRow
+                                                                    key={
+                                                                        sub.name
+                                                                    }
+                                                                    sub={sub}
+                                                                    enabled={
+                                                                        subEnabled
+                                                                    }
+                                                                    disabled={
+                                                                        !enabled ||
+                                                                        pendingFeature !==
+                                                                            null ||
+                                                                        detailLoading ||
+                                                                        applying
+                                                                    }
+                                                                    onToggle={() =>
+                                                                        void handleToggle(
+                                                                            sub.name,
+                                                                            subEnabled
+                                                                        )
+                                                                    }
+                                                                />
+                                                            );
+                                                        })}
                                                     </div>
                                                 </div>
                                             )}

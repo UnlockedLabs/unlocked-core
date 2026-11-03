@@ -5,10 +5,12 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/UnlockedLabs/unlocked-contracts/features"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 )
 
@@ -44,17 +46,20 @@ func (srv *Server) handleInternalFeatures(w http.ResponseWriter, r *http.Request
 	if _, err := srv.Db.GetFacilityByID(id); err != nil {
 		return newDatabaseServiceError(err)
 	}
-	features, err := srv.Db.GetFacilityFeatureAccess(uint(id))
+	on, err := srv.Db.GetFacilityFeatureAccess(uint(id))
 	if err != nil {
 		return newDatabaseServiceError(err)
 	}
-	return writeJsonResponse(w, http.StatusOK, internalFeaturesResponse{FacilityID: uint(id), Features: features})
+	return writeJsonResponse(w, http.StatusOK, internalFeaturesResponse{FacilityID: uint(id), Features: on})
 }
 
 // featureName matches feature_flags' name check (migration 00079).
 var featureName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
-const maxFeatureTitle = 100
+const (
+	maxFeatureTitle       = 100
+	maxFeatureDescription = 500
+)
 
 type registerFeatureRequest struct {
 	Title       string `json:"title"`
@@ -66,8 +71,9 @@ type registerFeatureRequest struct {
 * A product registers its feature on startup (EN-257). A new feature starts
 * off at every facility until an admin turns it on in Feature Control.
 * Registering again only updates the title and description, so it is safe to
-* repeat. 201 when the feature is new, 200 when it already existed. Called by
-* unlocked-contracts' features.Register.
+* repeat. 201 when the feature is new, 200 when it already existed. Core's own
+* features can't be registered, so no product can rename or blank them. Called
+* by unlocked-contracts' features.Register.
 **/
 func (srv *Server) handleInternalRegisterFeature(w http.ResponseWriter, r *http.Request, log sLog) error {
 	name := models.FeatureAccess(r.PathValue("name"))
@@ -75,9 +81,16 @@ func (srv *Server) handleInternalRegisterFeature(w http.ResponseWriter, r *http.
 	if !featureName.MatchString(string(name)) {
 		return newBadRequestServiceError(errors.New("invalid feature name"), "feature name must start with a letter and use only lowercase letters, digits and underscores, up to 64 characters")
 	}
+	if slices.Contains(features.All, name) {
+		return NewServiceError(errors.New("core feature name"), http.StatusConflict, "a core feature can't be registered")
+	}
 	var req registerFeatureRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16*1024)).Decode(&req); err != nil {
 		return newJSONReqBodyServiceError(err)
+	}
+	// Postgres text can't hold a NUL character.
+	if strings.ContainsRune(req.Title, 0) || strings.ContainsRune(req.Description, 0) {
+		return newBadRequestServiceError(errors.New("NUL character"), "title and description can't contain a NUL character")
 	}
 	title := strings.TrimSpace(req.Title)
 	if title == "" || utf8.RuneCountInString(title) > maxFeatureTitle {
@@ -85,6 +98,9 @@ func (srv *Server) handleInternalRegisterFeature(w http.ResponseWriter, r *http.
 	}
 	var description *string
 	if d := strings.TrimSpace(req.Description); d != "" {
+		if utf8.RuneCountInString(d) > maxFeatureDescription {
+			return newBadRequestServiceError(errors.New("invalid description"), "description is up to 500 characters")
+		}
 		description = &d
 	}
 
@@ -92,10 +108,7 @@ func (srv *Server) handleInternalRegisterFeature(w http.ResponseWriter, r *http.
 	if err != nil {
 		return newDatabaseServiceError(err)
 	}
-	existing, exists := catalog.Find(name)
-	if exists && existing.Parent != "" {
-		return NewServiceError(errors.New("sub-feature name"), http.StatusConflict, "a sub-feature can't be registered")
-	}
+	_, exists := catalog.Find(name)
 	if err := srv.Db.UpsertFeature(name, title, description); err != nil {
 		return newDatabaseServiceError(err)
 	}

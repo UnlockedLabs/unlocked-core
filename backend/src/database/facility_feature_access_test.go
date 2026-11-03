@@ -51,7 +51,7 @@ func TestResolveFeatures_OverrideWinsOverStatewide(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			states := resolveFeatures(catalog, tt.overrides)
+			states := catalog.Resolve(tt.overrides)
 			assert.Equal(t, tt.want, states[tt.feature])
 		})
 	}
@@ -65,7 +65,7 @@ func TestResolveFeatures_CoversAllFeatures(t *testing.T) {
 		{ID: 2, Name: models.UploadVideoAccess, DefaultEnabled: true, Parent: models.OpenContentAccess},
 		{ID: 3, Name: "registered_tool"},
 	}
-	states := resolveFeatures(catalog, nil)
+	states := catalog.Resolve(nil)
 	for _, f := range catalog {
 		_, ok := states[f.Name]
 		assert.True(t, ok, "expected an entry for %s", f.Name)
@@ -88,7 +88,18 @@ func TestStatewideDefaults(t *testing.T) {
 				{ID: 1, Name: models.OpenContentAccess, DefaultEnabled: tt.parentDefault},
 				{ID: 2, Name: models.UploadVideoAccess, DefaultEnabled: true, Parent: models.OpenContentAccess},
 			}
-			assert.Equal(t, tt.want, statewideDefaults(catalog))
+			assert.Equal(t, tt.want, catalog.StatewideDefaults())
 		})
 	}
+}
+
+// A sub-feature's row is never top-level, even if its parent link is missing.
+func TestTopLevel(t *testing.T) {
+	catalog := models.FeatureCatalog{
+		{ID: 1, Name: models.OpenContentAccess},
+		{ID: 2, Name: models.UploadVideoAccess, IsPageFeature: true, Parent: models.OpenContentAccess},
+		{ID: 3, Name: models.HelpfulLinksAccess, IsPageFeature: true},
+		{ID: 4, Name: "registered_tool"},
+	}
+	assert.Equal(t, []models.FeatureAccess{models.OpenContentAccess, "registered_tool"}, catalog.TopLevel())
 }

@@ -2,8 +2,9 @@
 -- EN-257: feature_flags becomes the list of features, so a product can add its
 -- own without a core change. The feature enum becomes text, and each row
 -- carries its statewide default and the text Feature Control shows. The
--- backfill matches models.DefaultEnabled and FeatureControl.tsx, so every
--- facility resolves exactly as before. Both tables are a handful of rows.
+-- backfill copies the defaults and card text that were hard-coded in Go and
+-- FeatureControl.tsx before this release, so every facility resolves exactly as
+-- before. Both tables are a handful of rows.
 -- +goose StatementBegin
 SET LOCAL lock_timeout = '5s';
 

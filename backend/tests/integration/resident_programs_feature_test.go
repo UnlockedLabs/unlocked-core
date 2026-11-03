@@ -63,12 +63,6 @@ func TestResidentProgramsAccess_EffectiveState(t *testing.T) {
 		err = env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.ResidentProgramsAccess, true)
 		require.Error(t, err, "the flag isn't toggleable while program tracking is off")
 	})
-
-	t.Run("cannot be enabled for one facility when disabled statewide", func(t *testing.T) {
-		setStatewideDefaults(t, models.ProgramAccess)
-		err := env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.ResidentProgramsAccess, true)
-		require.Error(t, err)
-	})
 }
 
 // Direct navigation to the resident Programs page must not render, which means

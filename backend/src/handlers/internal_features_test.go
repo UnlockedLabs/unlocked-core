@@ -147,20 +147,13 @@ func TestHandleInternalRegisterFeature(t *testing.T) {
 		assert.Contains(t, effective, models.FeatureAccess("my_tool"), "registering never changes a facility's setting")
 	})
 
-	t.Run("a core feature's default is left alone too", func(t *testing.T) {
-		w := put(string(models.AiTutorAccess), `{"title":"AI Tutor"}`)
-		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-		f, ok := find(models.AiTutorAccess)
-		require.True(t, ok)
-		assert.False(t, f.DefaultEnabled)
-	})
-
 	tests := []struct {
 		name, feature, body string
 		wantStatus          int
 	}{
 		{"longest name", strings.Repeat("a", 64), `{"title":"Long"}`, http.StatusCreated},
 		{"longest title", "long_title", `{"title":"` + strings.Repeat("t", 100) + `"}`, http.StatusCreated},
+		{"longest description", "long_description", `{"title":"x","description":"` + strings.Repeat("d", 500) + `"}`, http.StatusCreated},
 		{"uppercase", "My_Tool", `{"title":"x"}`, http.StatusBadRequest},
 		{"dash", "my-tool", `{"title":"x"}`, http.StatusBadRequest},
 		{"leading underscore", "_tool", `{"title":"x"}`, http.StatusBadRequest},
@@ -169,8 +162,13 @@ func TestHandleInternalRegisterFeature(t *testing.T) {
 		{"no title", "no_title", `{}`, http.StatusBadRequest},
 		{"blank title", "blank_title", `{"title":"   "}`, http.StatusBadRequest},
 		{"title too long", "big_title", `{"title":"` + strings.Repeat("t", 101) + `"}`, http.StatusBadRequest},
+		{"description too long", "big_description", `{"title":"x","description":"` + strings.Repeat("d", 501) + `"}`, http.StatusBadRequest},
+		{"NUL in title", "nul_title", `{"title":"My\u0000Tool"}`, http.StatusBadRequest},
+		{"NUL in description", "nul_description", `{"title":"x","description":"a\u0000b"}`, http.StatusBadRequest},
 		{"not json", "bad_body", `title`, http.StatusBadRequest},
 		{"body too large", "huge_body", `{"title":"x","description":"` + strings.Repeat("d", 17*1024) + `"}`, http.StatusBadRequest},
+		{"a core feature's name", string(models.OpenContentAccess), `{"title":"x"}`, http.StatusConflict},
+		{"a core feature's name, no description", string(models.AiTutorAccess), `{"title":"AI Tutor"}`, http.StatusConflict},
 		{"a sub-feature's name", string(models.UploadVideoAccess), `{"title":"x"}`, http.StatusConflict},
 	}
 	for _, tt := range tests {
