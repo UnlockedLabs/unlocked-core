@@ -13,7 +13,10 @@ type (
 
 	FeatureFlags struct {
 		DatabaseFields
-		Name FeatureAccess `json:"name" gorm:"not null;type:feature"`
+		Name           FeatureAccess `json:"name" gorm:"not null;unique"`
+		DefaultEnabled bool          `json:"default_enabled" gorm:"not null;default:false"`
+		Title          string        `json:"title" gorm:"not null"`
+		Description    *string       `json:"description"`
 		// IsPageFeature marks a shadow row copied from page_feature_flags, so every
 		// feature (top-level or sub) has one real id for facility_feature_flags to
 		// reference. GetFeatureAccess() excludes these to avoid double-counting.
@@ -24,7 +27,7 @@ type (
 	PageFeatureFlags struct {
 		DatabaseFields
 		FeatureFlagID uint          `json:"feature_flag_id" gorm:"not null;index"`
-		PageFeature   FeatureAccess `json:"page_feature" gorm:"not null;type:feature"`
+		PageFeature   FeatureAccess `json:"page_feature" gorm:"not null"`
 	}
 
 	// FacilityFeatureFlag is a per-facility override of a statewide feature default.
