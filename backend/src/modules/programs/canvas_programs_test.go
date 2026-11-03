@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	ppapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api"
-
 	"github.com/stretchr/testify/assert"
+
+	"github.com/UnlockedLabs/unlocked-contracts/providerplatforms"
 )
 
 // These tests pin down the behavior of the live provider path before it is
@@ -103,18 +103,18 @@ func TestResolveCanvasClassParts(t *testing.T) {
 
 func TestIsCanvasProvider(t *testing.T) {
 	tests := []struct {
-		providerType ppapi.ProviderType
+		providerType providerplatforms.ProviderType
 		want         bool
 	}{
-		{ppapi.CanvasOSS, true},
-		{ppapi.CanvasCloud, true},
-		{ppapi.Kolibri, false},
-		{ppapi.Brightspace, false},
-		{ppapi.ProviderType("essential_ed"), false},
+		{providerplatforms.CanvasOSS, true},
+		{providerplatforms.CanvasCloud, true},
+		{providerplatforms.Kolibri, false},
+		{providerplatforms.Brightspace, false},
+		{providerplatforms.ProviderType("essential_ed"), false},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.providerType), func(t *testing.T) {
-			got := isCanvasProvider(&ppapi.Provider{Type: tt.providerType})
+			got := isCanvasProvider(&providerplatforms.Provider{Type: tt.providerType})
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -216,7 +216,7 @@ func TestFetchAllCanvasPages(t *testing.T) {
 		defer ts.Close()
 
 		srv := &server{Client: ts.Client()}
-		provider := &ppapi.Provider{AccessKey: "secret-token"}
+		provider := &providerplatforms.Provider{AccessKey: "secret-token"}
 
 		out, err := srv.fetchAllCanvasPages(context.Background(), provider, ts.URL, 0)
 		assert.NoError(t, err)
@@ -240,7 +240,7 @@ func TestFetchAllCanvasPages(t *testing.T) {
 		defer ts.Close()
 
 		srv := &server{Client: ts.Client()}
-		out, err := srv.fetchAllCanvasPages(context.Background(), &ppapi.Provider{}, ts.URL, 0)
+		out, err := srv.fetchAllCanvasPages(context.Background(), &providerplatforms.Provider{}, ts.URL, 0)
 
 		assert.NoError(t, err)
 		assert.Equal(t, 2, calls)
@@ -254,7 +254,7 @@ func TestFetchAllCanvasPages(t *testing.T) {
 		defer ts.Close()
 
 		srv := &server{Client: ts.Client()}
-		out, err := srv.fetchAllCanvasPages(context.Background(), &ppapi.Provider{}, ts.URL, 0)
+		out, err := srv.fetchAllCanvasPages(context.Background(), &providerplatforms.Provider{}, ts.URL, 0)
 
 		assert.Error(t, err)
 		assert.Nil(t, out)
@@ -267,7 +267,7 @@ func TestFetchAllCanvasPages(t *testing.T) {
 		defer ts.Close()
 
 		srv := &server{Client: ts.Client()}
-		_, err := srv.fetchAllCanvasPages(context.Background(), &ppapi.Provider{}, ts.URL, 0)
+		_, err := srv.fetchAllCanvasPages(context.Background(), &providerplatforms.Provider{}, ts.URL, 0)
 
 		assert.Error(t, err)
 	})
@@ -282,7 +282,7 @@ func TestFetchAllCanvasPages(t *testing.T) {
 		cancel()
 
 		srv := &server{Client: ts.Client()}
-		_, err := srv.fetchAllCanvasPages(ctx, &ppapi.Provider{}, ts.URL, 0)
+		_, err := srv.fetchAllCanvasPages(ctx, &providerplatforms.Provider{}, ts.URL, 0)
 
 		assert.Error(t, err)
 	})
@@ -292,17 +292,17 @@ func TestFetchAllCanvasPages(t *testing.T) {
 
 func TestIsLiveProgramProvider(t *testing.T) {
 	tests := []struct {
-		providerType ppapi.ProviderType
+		providerType providerplatforms.ProviderType
 		want         bool
 	}{
-		{ppapi.CanvasOSS, true},
-		{ppapi.CanvasCloud, true},
-		{ppapi.Kolibri, false},
-		{ppapi.Brightspace, false},
+		{providerplatforms.CanvasOSS, true},
+		{providerplatforms.CanvasCloud, true},
+		{providerplatforms.Kolibri, false},
+		{providerplatforms.Brightspace, false},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.providerType), func(t *testing.T) {
-			got := isLiveProgramProvider(&ppapi.Provider{Type: tt.providerType})
+			got := isLiveProgramProvider(&providerplatforms.Provider{Type: tt.providerType})
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -345,7 +345,7 @@ func TestFetchAllCanvasPagesRefusesPlaintextNextPage(t *testing.T) {
 	}))
 	defer ts.Close()
 	srv := &server{Client: ts.Client()}
-	provider := &ppapi.Provider{BaseURL: ts.URL, AccessKey: "secret-token", Type: ppapi.CanvasOSS}
+	provider := &providerplatforms.Provider{BaseURL: ts.URL, AccessKey: "secret-token", Type: providerplatforms.CanvasOSS}
 
 	out, err := srv.fetchAllCanvasPages(context.Background(), provider, ts.URL+"/api/v1/courses", 0)
 
@@ -357,16 +357,16 @@ func TestTransportFor(t *testing.T) {
 	srv := &server{}
 
 	t.Run("canvas types get the canvas transport", func(t *testing.T) {
-		for _, pt := range []ppapi.ProviderType{ppapi.CanvasOSS, ppapi.CanvasCloud} {
-			transport, err := srv.transportFor(&ppapi.Provider{Type: pt})
+		for _, pt := range []providerplatforms.ProviderType{providerplatforms.CanvasOSS, providerplatforms.CanvasCloud} {
+			transport, err := srv.transportFor(&providerplatforms.Provider{Type: pt})
 			assert.NoError(t, err)
 			assert.IsType(t, canvasTransport{}, transport)
 		}
 	})
 
 	t.Run("non-live types are rejected", func(t *testing.T) {
-		for _, pt := range []ppapi.ProviderType{ppapi.Kolibri, ppapi.Brightspace} {
-			transport, err := srv.transportFor(&ppapi.Provider{Type: pt})
+		for _, pt := range []providerplatforms.ProviderType{providerplatforms.Kolibri, providerplatforms.Brightspace} {
+			transport, err := srv.transportFor(&providerplatforms.Provider{Type: pt})
 			assert.Error(t, err)
 			assert.Nil(t, transport)
 		}
@@ -374,7 +374,7 @@ func TestTransportFor(t *testing.T) {
 }
 
 func TestCanvasURLBuilders(t *testing.T) {
-	provider := &ppapi.Provider{BaseURL: "http://canvas", AccountID: "1"}
+	provider := &providerplatforms.Provider{BaseURL: "http://canvas", AccountID: "1"}
 
 	assert.Equal(t,
 		"http://canvas/api/v1/accounts/1/courses?per_page=100",
@@ -397,7 +397,7 @@ func TestCanvasTransportFetchOne(t *testing.T) {
 		defer ts.Close()
 
 		transport := canvasTransport{srv: &server{Client: ts.Client()}}
-		provider := &ppapi.Provider{AccessKey: "tok"}
+		provider := &providerplatforms.Provider{AccessKey: "tok"}
 
 		record, err := transport.fetchOne(context.Background(), provider, ts.URL)
 		assert.NoError(t, err)
@@ -412,7 +412,7 @@ func TestCanvasTransportFetchOne(t *testing.T) {
 		defer ts.Close()
 
 		transport := canvasTransport{srv: &server{Client: ts.Client()}}
-		record, err := transport.fetchOne(context.Background(), &ppapi.Provider{}, ts.URL)
+		record, err := transport.fetchOne(context.Background(), &providerplatforms.Provider{}, ts.URL)
 		assert.Error(t, err)
 		assert.Nil(t, record)
 	})
@@ -424,7 +424,7 @@ func TestCanvasTransportFetchOne(t *testing.T) {
 		defer ts.Close()
 
 		transport := canvasTransport{srv: &server{Client: ts.Client()}}
-		_, err := transport.fetchOne(context.Background(), &ppapi.Provider{}, ts.URL)
+		_, err := transport.fetchOne(context.Background(), &providerplatforms.Provider{}, ts.URL)
 		assert.Error(t, err)
 	})
 }
@@ -439,7 +439,7 @@ func TestCanvasProviderListCourses(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(payload)
 		}))
 		srv := &server{Client: ts.Client()}
-		provider := &ppapi.Provider{BaseURL: ts.URL, AccountID: "1", Type: ppapi.CanvasOSS}
+		provider := &providerplatforms.Provider{BaseURL: ts.URL, AccountID: "1", Type: providerplatforms.CanvasOSS}
 		reader, err := srv.newLiveProgramProvider(provider)
 		assert.NoError(t, err)
 		return reader, ts.Close
@@ -504,7 +504,7 @@ func TestCanvasProviderListCourses(t *testing.T) {
 
 		srv := &server{Client: ts.Client()}
 		reader, err := srv.newLiveProgramProvider(
-			&ppapi.Provider{BaseURL: ts.URL, AccountID: "1", Type: ppapi.CanvasOSS})
+			&providerplatforms.Provider{BaseURL: ts.URL, AccountID: "1", Type: providerplatforms.CanvasOSS})
 		assert.NoError(t, err)
 
 		_, err = reader.ListCourses(context.Background())
@@ -514,8 +514,8 @@ func TestCanvasProviderListCourses(t *testing.T) {
 
 func TestNewLiveProgramProviderRejectsNonLiveTypes(t *testing.T) {
 	srv := &server{}
-	for _, pt := range []ppapi.ProviderType{ppapi.Kolibri, ppapi.Brightspace} {
-		reader, err := srv.newLiveProgramProvider(&ppapi.Provider{Type: pt})
+	for _, pt := range []providerplatforms.ProviderType{providerplatforms.Kolibri, providerplatforms.Brightspace} {
+		reader, err := srv.newLiveProgramProvider(&providerplatforms.Provider{Type: pt})
 		assert.Error(t, err)
 		assert.Nil(t, reader)
 	}

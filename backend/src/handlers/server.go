@@ -16,7 +16,6 @@ import (
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
 	ocapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api"
 	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
-	ppapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/tasks"
 
@@ -25,6 +24,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/UnlockedLabs/unlocked-contracts/providerplatforms"
 )
 
 type Server struct {
@@ -43,7 +44,7 @@ type Server struct {
 	modules           []module.Module
 	moduleDBs         database.ModuleDBs
 	openContent       ocapi.OpenContent
-	providerPlatforms ppapi.ProviderPlatforms
+	providerPlatforms providerplatforms.ProviderPlatforms
 	programs          programsapi.Programs
 }
 
@@ -101,6 +102,7 @@ func (srv *Server) RegisterRoutes() {
 		srv.register(route)
 	}
 	srv.registerModuleRoutes()
+	srv.registerProviderPlatformsRoutes()
 }
 
 func init() {
@@ -194,7 +196,7 @@ func newServer(ctx context.Context) *Server {
 		modules:           mods,
 		moduleDBs:         moduleDBs,
 		openContent:       registry.OpenContent(moduleDBs.For),
-		providerPlatforms: registry.ProviderPlatforms(moduleDBs.For),
+		providerPlatforms: registry.ProviderPlatforms(),
 		programs:          registry.Programs(moduleDBs.For),
 	}
 	features, err := server.Db.GetFeatureAccess()
@@ -234,7 +236,7 @@ func newTestingServer() *Server {
 		modules:           mods,
 		moduleDBs:         moduleDBs,
 		openContent:       registry.OpenContent(moduleDBs.For),
-		providerPlatforms: registry.ProviderPlatforms(moduleDBs.For),
+		providerPlatforms: registry.ProviderPlatforms(),
 		programs:          registry.Programs(moduleDBs.For),
 	}
 }

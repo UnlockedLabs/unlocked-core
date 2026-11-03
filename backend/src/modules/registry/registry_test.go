@@ -25,8 +25,11 @@ func TestAllModules(t *testing.T) {
 			t.Errorf("module %q has no migrations folder: %v", name, err)
 		}
 	}
-	if len(seen) != 4 {
-		t.Errorf("got %d modules, want 4 (EN-186)", len(seen))
+	if len(seen) != 3 {
+		t.Errorf("got %d modules, want 3: Provider Platforms is its own service (EN-206)", len(seen))
+	}
+	if seen["providerplatforms"] {
+		t.Error("Provider Platforms runs as its own service, not as a core module")
 	}
 }
 

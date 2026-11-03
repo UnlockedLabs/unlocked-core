@@ -8,8 +8,7 @@ EN-194.
 ## Boundaries
 
 - **It imports nothing from core.** It talks to core only through
-  `modules/module` (the seam), `unlocked-contracts` and Provider Platforms'
-  `api/`. depguard in `backend/.golangci.yml` enforces this.
+  `modules/module` (the seam) and `unlocked-contracts`. depguard in `backend/.golangci.yml` enforces this.
 - **Core asks it questions through `api/`** (interfaces and plain types only),
   and gets the implementation from `registry.Programs`: the users list's
   `include=only_enrolled|only_unenrolled` filters, resident transfer and
@@ -22,19 +21,21 @@ EN-194.
   - `Deps.Features` to hide Canvas classes at facilities with Provider
     Platforms turned off;
   - `Deps.Reports` to render report PDFs with core's Jasper templates.
-- **It answers Provider Platforms' `Deps.LiveProviders`**, through
-  `registry.LiveProviders`: an Essential Education provider's users, and
-  clearing the cached Canvas programs when a mapping changes. That goes away
-  when Provider Platforms fetches and caches those providers' data itself.
+- **It answers the Provider Platforms service's `coreapi.LiveProviders`**,
+  through `registry.LiveProviders`, which core serves under
+  `/internal/v1/core/`: an Essential Education provider's users, and clearing
+  the cached Canvas programs when a mapping changes. That goes away when
+  Provider Platforms fetches and caches those providers' data itself.
 - **It reads and writes some of core's tables:** it reads `users` and
   `facilities` (the `User` and `Facility` types in `models.go`), and adds
   rows to core's audit tables in the same transaction as its own changes:
   `user_account_history` when attendance is recorded, `change_log_entries`
   when a class or its schedule changes. Deleting a program or class deletes
   its `change_log_entries` rows too.
-- **It asks Provider Platforms' `api/` on Provider Platforms' connection**,
-  which the registry builds from `Deps.ModuleDBs`, so Programs' role needs no
-  grants on provider tables.
+- **It asks the Provider Platforms service** about providers and the users
+  linked to them, with the unlocked-contracts `providerplatforms` client from
+  `registry.ProviderPlatforms`, so Programs' role needs no grants on provider
+  tables.
 - **Its routes keep core's access checks.** 35 of the 65 routes have a check
   of their own (`Route.Allow`), which `handlers.go` copies from core's
   resolvers.

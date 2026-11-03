@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
@@ -16,7 +15,6 @@ import (
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 
 	"github.com/UnlockedLabs/unlocked-contracts/identity"
@@ -92,25 +90,6 @@ func seedTestData(db *gorm.DB) {
 			log.Printf("Failed to create facility: %v", err)
 		}
 	}
-	// The local Canvas from `make canvas`. base_url is the compose service name, not
-	// localhost:3001, because the API calls originate inside the server and
-	// providerplatforms-worker containers. The access key still has to be pasted in by hand -- it is minted per machine.
-	platforms := []providerplatforms.ProviderPlatform{
-		{
-			Name:      "Canvas",
-			BaseUrl:   "http://canvas",
-			AccountID: "1",
-			Type:      providerplatforms.CanvasOSS,
-			State:     providerplatforms.Enabled,
-			AccessKey: "testing_key_replace_me",
-		},
-	}
-	for idx := range platforms {
-		if err := db.Create(&platforms[idx]).Error; err != nil {
-			log.Printf("Failed to create platform: %v", err)
-		}
-	}
-
 	facilities = []models.Facility{}
 	err := db.Find(&facilities).Error
 	if err != nil {
@@ -143,18 +122,6 @@ func seedTestData(db *gorm.DB) {
 		// exist, and GetUnmappedUsers then hides them from the list you would use to link
 		// them for real. Link users by hand against a live provider instead.
 	}
-	courses := []providerplatforms.Course{}
-	if err := json.Unmarshal([]byte(coursesStr), &courses); err != nil {
-		log.Printf("Failed to unmarshal test data: %v", err)
-	}
-	for idx := range courses {
-		if err := db.Create(&courses[idx]).Error; err != nil {
-			log.Printf("Failed to create course: %v", err)
-		}
-	}
-	outcomes := []string{"college_credit", "grade", "certificate", "pathway_completion"}
-	milestoneTypes := []providerplatforms.MilestoneType{providerplatforms.DiscussionPost, providerplatforms.AssignmentSubmission, providerplatforms.QuizSubmission, providerplatforms.GradeReceived}
-
 	cohorts := []programs.ProgramClassCohort{}
 	cohorts, err = createFacilityPrograms(db)
 	if err != nil {
@@ -177,64 +144,6 @@ func seedTestData(db *gorm.DB) {
 		adminEmail = seededAdminEmail
 	}
 	for _, user := range users {
-		for _, prog := range courses {
-			// all test courses are open_enrollment
-			enrollment := providerplatforms.UserEnrollment{
-				CourseID:   prog.ID,
-				UserID:     user.ID,
-				ExternalID: models.StringPtr(fmt.Sprintf("%d", rand.Intn(1000))),
-			}
-			enrollment.CreatedAt = &prog.CreatedAt
-			if err := db.Create(&enrollment).Error; err != nil {
-				log.Printf("Failed to create enrollment milestone: %v", err)
-				continue
-			}
-			startTime := 0
-			for i := range 365 {
-				if i%5 == 0 {
-					continue
-				}
-				randTime := rand.Intn(1000)
-				// we want activity for the last year
-				yearAgo := time.Now().AddDate(-1, 0, 0)
-				time := yearAgo.AddDate(0, 0, i)
-				activity := providerplatforms.Activity{
-					UserID:     user.ID,
-					CourseID:   prog.ID,
-					Type:       "interaction",
-					TotalTime:  int64(startTime + randTime),
-					TimeDelta:  int64(randTime),
-					ExternalID: strconv.Itoa(rand.Intn(1000)),
-					CreatedAt:  time,
-				}
-				startTime += randTime
-				if err := db.Create(&activity).Error; err != nil {
-					log.Printf("Failed to create activity: %v", err)
-				}
-			}
-			if rand.Float32() < 0.4 { // 40% chance to create an outcome
-				outcome := providerplatforms.Outcome{
-					UserID:   user.ID,
-					CourseID: prog.ID,
-					Type:     providerplatforms.OutcomeType(outcomes[rand.Intn(len(outcomes))]),
-				}
-				if err := db.Create(&outcome).Error; err != nil {
-					log.Printf("Failed to create outcome: %v", err)
-				}
-			} else {
-				newMilestone := providerplatforms.Milestone{
-					CourseID:    prog.ID,
-					IsCompleted: false,
-					Type:        milestoneTypes[rand.Intn(len(milestoneTypes))],
-					UserID:      user.ID,
-					ExternalID:  strconv.Itoa(rand.Intn(9999)),
-				}
-				if err := db.Create(&newMilestone).Error; err != nil {
-					log.Printf("Failed to create milestone: %v", err)
-				}
-				log.Printf("Creating milestone for user %s", user.Username)
-			}
-		}
 		statuses := [6]programs.ProgramEnrollmentStatus{
 			programs.EnrollmentCancelled,
 			programs.EnrollmentCompleted,
@@ -770,147 +679,3 @@ func generateFakeUsers(facilities []models.Facility) []models.User {
 	}
 	return users
 }
-
-var coursesStr string = `
-[
-	{
-		"provider_platform_id": 1,
-		"name": "Introduction to Botany",
-		"description": "This course covers the basics of plant biology, including plant structure, function, growth, and reproduction.",
-		"external_id": "98",
-		"thumbnail_url": "https://d2r55xnwy6nx47.cloudfront.net/uploads/2023/12/YIR-BIOLOGY-IbrahimRayintakath-Lede-scaled.webp",
-		"type": "open_enrollment",
-		"outcome_types": "grade,college_credit",
-		"external_url": "https://canvas.staging.unlockedlabs.xyz/courses/105",
-		"alt_name": "BOT101",
-		"total_progress_milestones": 12,
-		"start_dt": "2024-09-01T00:00:00.000Z",
-		"end_dt": "2025-01-05T00:00:00.000Z"
-	},
-	{
-		"provider_platform_id": 1,
-		"name": "Criminology and Justice",
-		"description": "Explore the causes, consequences, and prevention of criminal behavior through a study of the justice system.",
-		"external_id": "101",
-		"thumbnail_url": "https://news.fsu.edu/wp-content/uploads/2017/11/Seal-criminology-3x2.jpg",
-		"type": "open_enrollment",
-		"outcome_types": "grade,college_credit",
-		"external_url": "https://canvas.staging.unlockedlabs.xyz/courses/106",
-		"alt_name": "CRJ201",
-		"total_progress_milestones": 10,
-		"start_dt": "2024-11-15T00:00:00.000Z",
-		"end_dt": "2024-12-15T00:00:00.000Z"
-	},
-	{
-		"provider_platform_id": 1,
-		"name": "Introduction to Philosophy",
-		"description": "Delve into fundamental philosophical questions and explore various philosophical traditions and theories.",
-		"external_id": "103",
-		"thumbnail_url": "https://miro.medium.com/v2/resize:fit:938/1*ARpXbGZtzKkHbojQkawQKQ.jpeg",
-		"type": "open_enrollment",
-		"outcome_types": "grade,college_credit",
-		"external_url": "https://canvas.staging.unlockedlabs.xyz/courses/104",
-		"alt_name": "PHI101",
-		"total_progress_milestones": 10,
-		"start_dt": "2024-10-07T00:00:00.000Z",
-		"end_dt": "2025-03-04T00:00:00.000Z"
-	},
-	{
-		"provider_platform_id": 1,
-		"name": "Advanced Mathematics",
-		"description": "A comprehensive study of advanced mathematical concepts including calculus, linear algebra, and differential equations.",
-		"external_id": "258",
-		"thumbnail_url": "https://news.harvard.edu/wp-content/uploads/2022/11/iStock-mathproblems.jpg",
-		"type": "fixed_enrollment",
-		"outcome_types": "grade,college_credit",
-		"external_url": "https://canvas.staging.unlockedlabs.xyz/courses/104",
-		"alt_name": "MATH301",
-		"total_progress_milestones": 10,
-		"start_dt": "2024-09-22T00:00:00.000Z",
-		"end_dt": "2025-02-25T00:00:00.000Z"
-	},
-	{
-		"provider_platform_id": 1,
-		"name": "Introduction to Computer Science",
-		"description": "An introductory course in computer science, covering fundamental concepts such as algorithms, data structures, and software engineering.",
-		"external_id": "176",
-		"thumbnail_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/Computer_science_and_engineering.jpg/640px-Computer_science_and_engineering.jpg",
-		"type": "open_enrollment",
-		"outcome_types": "grade,college_credit",
-		"external_url": "https://canvas.staging.unlockedlabs.xyz/courses/106",
-		"alt_name": "CS101",
-		"total_progress_milestones": 12,
-		"start_dt": "2024-11-08T00:00:00.000Z",
-		"end_dt": "2025-06-05T00:00:00.000Z"
-	},
-	{
-		"provider_platform_id": 1,
-		"name": "Basics of Marketing",
-		"description": "Learn the fundamental principles of marketing, including market research, branding, and consumer behavior.",
-		"external_id": "754",
-		"thumbnail_url": "https://builtin.com/sites/www.builtin.com/files/styles/ckeditor_optimize/public/inline-images/marketing-pillar-page-marketing-overview_0.png",
-		"type": "open_enrollment",
-		"outcome_types": "grade,college_credit",
-		"external_url": "https://canvas.staging.unlockedlabs.xyz/courses/105",
-		"alt_name": "MKT101",
-		"total_progress_milestones": 8,
-		"start_dt": "2024-10-27T00:00:00.000Z",
-		"end_dt": "2025-05-05T00:00:00.000Z"
-	},
-	{
-		"provider_platform_id": 1,
-		"name": "Introduction to Psychology",
-		"description": "A comprehensive introduction to the science of psychology, including the study of mental processes and behavior.",
-		"external_id": "886",
-		"thumbnail_url": "https://www.udc.edu/social-udc/wp-content/uploads/sites/24/2018/03/Importance-of-Psychology_UDC.jpg",
-		"type": "open_enrollment",
-		"outcome_types": "grade,college_credit",
-		"external_url": "https://canvas.staging.unlockedlabs.xyz/courses/106",
-		"alt_name": "PSY101",
-		"total_progress_milestones": 8,
-		"start_dt": "2024-12-01T00:00:00.000Z",
-		"end_dt": "2025-05-05T00:00:00.000Z"
-	},
-	{
-		"provider_platform_id": 1,
-		"name": "Environmental Science",
-		"description": "Examine the interactions between the natural environment and human activity, focusing on sustainability and conservation.",
-		"external_id": "1055",
-		"thumbnail_url": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSNxnwEFPxa4ujQwSb3ebJQ0qScgFz7CEY14g&s",
-		"type": "open_enrollment",
-		"outcome_types": "grade,college_credit",
-		"external_url": "https://canvas.staging.unlockedlabs.xyz/courses/105",
-		"alt_name": "ENV201",
-		"total_progress_milestones": 14,
-		"start_dt": "2024-01-15T00:00:00.000Z",
-		"end_dt": "2025-05-01T00:00:00.000Z"
-	},
-	{
-		"provider_platform_id": 1,
-		"name": "Fundamentals of Physics",
-		"description": "Learn the basic principles of physics, including motion, energy, and the properties of matter.",
-		"external_id": "104",
-		"thumbnail_url": "https://media-cldnry.s-nbcnews.com/image/upload/newscms/2018_22/2451826/180601-atomi-mn-1540.jpg",
-		"type": "open_enrollment",
-		"outcome_types": "grade,college_credit",
-		"external_url": "https://canvas.staging.unlockedlabs.xyz/courses/104",
-		"alt_name": "PHY101",
-		"total_progress_milestones": 11,
-		"start_dt": "2024-08-01T00:00:00.000Z",
-		"end_dt": "2024-10-05T00:00:00.000Z"
-	},
-	{
-		"provider_platform_id": 1,
-		"name": "Modern Art History",
-		"description": "Explore the history and development of modern art from the late 19th century to the present.",
-		"external_id": "106",
-		"thumbnail_url": "https://www.invaluable.com/blog/wp-content/plugins/inv_art-history-timeline/images/2x/04-renaissance.jpg",
-		"type": "open_enrollment",
-		"outcome_types": "grade,college_credit",
-		"external_url": "https://canvas.staging.unlockedlabs.xyz/courses/106",
-		"alt_name": "ART201",
-		"total_progress_milestones": 10,
-		"start_dt": "2025-02-01T00:00:00.000Z",
-		"end_dt": "2025-06-05T00:00:00.000Z"
-	}
-]`

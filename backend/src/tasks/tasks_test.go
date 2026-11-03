@@ -62,11 +62,6 @@ func (noUnlinker) DeleteUserMappings(context.Context, uint) error { return nil }
 // users from Provider Platforms.
 func TestStart(t *testing.T) {
 	db := database.InitDB(context.Background(), true)
-	// An enabled LMS provider: its jobs are Provider Platforms', not core's.
-	if err := db.Exec(`INSERT INTO provider_platforms (type, name, state) VALUES ('canvas_cloud', 'Canvas', 'enabled')`).Error; err != nil {
-		t.Fatal(err)
-	}
-
 	var got module.Deps
 	mods := []module.Module{jobModule{deps: &got}}
 	s := Start(nil, mods, database.OpenModuleDBs(db.DB, mods), db, noUnlinker{})

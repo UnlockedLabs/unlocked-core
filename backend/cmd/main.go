@@ -77,7 +77,7 @@ func runScheduler(ctx context.Context) {
 		return
 	}
 	moduleDBs := database.OpenModuleDBs(db, mods)
-	s := tasks.Start(nc, mods, moduleDBs, database.NewDB(db), registry.ProviderPlatforms(moduleDBs.For))
+	s := tasks.Start(nc, mods, moduleDBs, database.NewDB(db), registry.ProviderPlatforms())
 	log.Info("Scheduler started")
 	<-ctx.Done()
 	if err := s.Stop(); err != nil {

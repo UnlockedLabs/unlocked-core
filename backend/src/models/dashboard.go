@@ -4,7 +4,8 @@ import (
 	"time"
 
 	ocapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api"
-	ppapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api"
+
+	"github.com/UnlockedLabs/unlocked-contracts/providerplatforms"
 )
 
 // KnowledgeCenterMetrics is the Knowledge Center page's numbers, from Open
@@ -27,8 +28,8 @@ type CachedDashboard[T any] struct {
 
 // AdminLayer2Join is the course numbers on the admin dashboard.
 type AdminLayer2Join struct {
-	TotalCoursesOffered   int64                   `json:"total_courses_offered"`
-	TotalStudentsEnrolled int64                   `json:"total_students_enrolled"`
-	TotalHourlyActivity   int64                   `json:"total_hourly_activity"`
-	LearningInsights      []ppapi.LearningInsight `json:"learning_insights"`
+	TotalCoursesOffered   int64                               `json:"total_courses_offered"`
+	TotalStudentsEnrolled int64                               `json:"total_students_enrolled"`
+	TotalHourlyActivity   int64                               `json:"total_hourly_activity"`
+	LearningInsights      []providerplatforms.LearningInsight `json:"learning_insights"`
 }

@@ -10,9 +10,8 @@ import (
 	"strings"
 	"time"
 
-	ppapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api"
-
 	"github.com/UnlockedLabs/unlocked-contracts/features"
+	"github.com/UnlockedLabs/unlocked-contracts/providerplatforms"
 	"github.com/UnlockedLabs/unlocked-contracts/users"
 	log "github.com/sirupsen/logrus"
 )
@@ -56,7 +55,7 @@ func (srv *server) fetchCanvasUserPrograms(userID int) []ResidentProgramClassInf
 	if err != nil {
 		return nil
 	}
-	providerMap := make(map[uint]ppapi.Provider, len(providers))
+	providerMap := make(map[uint]providerplatforms.Provider, len(providers))
 	for _, p := range providers {
 		providerMap[p.ID] = p
 	}
@@ -78,7 +77,7 @@ func (srv *server) fetchCanvasUserPrograms(userID int) []ResidentProgramClassInf
 // fetchLiveCoursesForUser builds a resident's program rows for a live provider
 // that reports its own per-user enrollments. Canvas has a dedicated endpoint and
 // is handled by fetchCanvasCoursesForUser instead.
-func (srv *server) fetchLiveCoursesForUser(provider *ppapi.Provider, externalUserID string) []ResidentProgramClassInfo {
+func (srv *server) fetchLiveCoursesForUser(provider *providerplatforms.Provider, externalUserID string) []ResidentProgramClassInfo {
 	reader, err := srv.newLiveProgramProvider(provider)
 	if err != nil {
 		return nil
@@ -127,7 +126,7 @@ func (srv *server) fetchLiveCoursesForUser(provider *ppapi.Provider, externalUse
 	return result
 }
 
-func (srv *server) fetchCanvasCoursesForUser(provider *ppapi.Provider, canvasUserID string) []ResidentProgramClassInfo {
+func (srv *server) fetchCanvasCoursesForUser(provider *providerplatforms.Provider, canvasUserID string) []ResidentProgramClassInfo {
 	apiURL := fmt.Sprintf("%s/api/v1/users/%s/courses?enrollment_state=active&per_page=100", provider.BaseURL, canvasUserID)
 	var result []ResidentProgramClassInfo
 	for apiURL != "" {
