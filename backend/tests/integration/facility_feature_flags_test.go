@@ -3,6 +3,7 @@ package integration
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"testing"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
@@ -69,6 +70,104 @@ func TestFacilityFeatureAccess_EffectiveMatrix(t *testing.T) {
 		require.ElementsMatch(t, statewide, otherEffective,
 			"a facility with no rows of its own still inherits the statewide defaults")
 	})
+}
+
+// TestFacilityFeatureAccess_RealDefaults pins what every facility resolves to
+// with the statewide defaults core actually ships, not a hand-picked list. The
+// override rows are written directly, so a sub-feature row left on under a
+// parent that is off is covered too.
+func TestFacilityFeatureAccess_RealDefaults(t *testing.T) {
+	env = SetupTestEnv(t)
+	defer env.CleanupTestEnv()
+
+	statewide, err := env.DB.GetFeatureAccess()
+	require.NoError(t, err)
+
+	defaults := []models.FeatureAccess{
+		models.OpenContentAccess, models.RequestContentAccess, models.HelpfulLinksAccess, models.UploadVideoAccess,
+		models.ProviderAccess,
+		models.ProgramAccess, models.ResidentProgramsAccess,
+	}
+	without := func(remove ...models.FeatureAccess) []models.FeatureAccess {
+		var out []models.FeatureAccess
+		for _, f := range defaults {
+			if !slices.Contains(remove, f) {
+				out = append(out, f)
+			}
+		}
+		return out
+	}
+
+	tests := []struct {
+		name      string
+		overrides map[models.FeatureAccess]bool
+		want      []models.FeatureAccess
+	}{
+		{
+			name: "no overrides gets the statewide defaults",
+			want: defaults,
+		},
+		{
+			name:      "learning_record can be turned on",
+			overrides: map[models.FeatureAccess]bool{models.LearningRecordAccess: true},
+			want:      append(without(), models.LearningRecordAccess),
+		},
+		{
+			name:      "ai_tutor can be turned on",
+			overrides: map[models.FeatureAccess]bool{models.AiTutorAccess: true},
+			want:      append(without(), models.AiTutorAccess),
+		},
+		{
+			name:      "provider_platforms can be turned off",
+			overrides: map[models.FeatureAccess]bool{models.ProviderAccess: false},
+			want:      without(models.ProviderAccess),
+		},
+		{
+			name:      "open_content off takes its sub-features with it",
+			overrides: map[models.FeatureAccess]bool{models.OpenContentAccess: false},
+			want:      without(models.OpenContentAccess, models.RequestContentAccess, models.HelpfulLinksAccess, models.UploadVideoAccess),
+		},
+		{
+			name:      "program_management off takes resident_programs with it",
+			overrides: map[models.FeatureAccess]bool{models.ProgramAccess: false},
+			want:      without(models.ProgramAccess, models.ResidentProgramsAccess),
+		},
+		{
+			name:      "a sub-feature can be turned off on its own",
+			overrides: map[models.FeatureAccess]bool{models.UploadVideoAccess: false},
+			want:      without(models.UploadVideoAccess),
+		},
+		{
+			name:      "a sub-feature row left on stays off while its parent is off",
+			overrides: map[models.FeatureAccess]bool{models.OpenContentAccess: false, models.RequestContentAccess: true},
+			want:      without(models.OpenContentAccess, models.RequestContentAccess, models.HelpfulLinksAccess, models.UploadVideoAccess),
+		},
+		{
+			name: "every feature can be turned off",
+			overrides: map[models.FeatureAccess]bool{
+				models.OpenContentAccess: false, models.ProviderAccess: false, models.ProgramAccess: false,
+			},
+			want: nil,
+		},
+	}
+
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			facility, err := env.CreateTestFacility(fmt.Sprintf("Real Defaults Facility %d", i))
+			require.NoError(t, err)
+			for feature, enabled := range tt.overrides {
+				var flag models.FeatureFlags
+				require.NoError(t, env.DB.Where("name = ?", feature).First(&flag).Error)
+				require.NoError(t, env.DB.Create(&models.FacilityFeatureFlag{
+					FacilityID: facility.ID, FeatureFlagID: flag.ID, Enabled: enabled,
+				}).Error)
+			}
+
+			effective, err := env.DB.GetFacilityFeatureAccess(facility.ID, statewide)
+			require.NoError(t, err)
+			require.ElementsMatch(t, tt.want, effective)
+		})
+	}
 }
 
 func TestFacilityFeatureAccess_SubFeatureGuard(t *testing.T) {
