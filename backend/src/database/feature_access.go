@@ -6,57 +6,75 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// GetFeatureAccess returns the statewide default feature set: every top-level
-// feature that's enabled, plus every enabled page-level (sub-)feature. This is
-// the floor that GetFacilityFeatureAccess layers per-facility overrides on top
-// of; it is no longer directly editable via any UI (see facility_feature_access.go).
-func (db *DB) GetFeatureAccess() ([]models.FeatureAccess, error) {
-	var featureFlags []models.FeatureFlags
-	// is_page_feature excludes the shadow rows copied from page_feature_flags (EN-96) --
-	// those exist only so facility_feature_flags has a real id to reference for sub-feature
-	// overrides, and would otherwise be double-counted here as their own top-level flags.
-	if err := db.Preload("PageFeatures").Model(&models.FeatureFlags{}).Where("is_page_feature = ?", false).Find(&featureFlags).Error; err != nil {
-		return nil, newNotFoundDBError(err, "unable to fetch features")
+// FeatureCatalog reads every feature from feature_flags, top-level ones first.
+// A sub-feature's parent comes from page_feature_flags, through the shadow row
+// EN-96 gave each sub-feature. It is read on every use, so a feature a product
+// registers shows up without a restart.
+func (db *DB) FeatureCatalog() (models.FeatureCatalog, error) {
+	var catalog models.FeatureCatalog
+	if err := db.Table("feature_flags AS ff").
+		Select("ff.id, ff.name, ff.title, ff.description, ff.default_enabled, COALESCE(parent.name, '') AS parent").
+		Joins("LEFT JOIN page_feature_flags pff ON ff.is_page_feature AND pff.page_feature = ff.name AND pff.deleted_at IS NULL").
+		Joins("LEFT JOIN feature_flags parent ON parent.id = pff.feature_flag_id").
+		Where("ff.deleted_at IS NULL").
+		Order("ff.is_page_feature, ff.id").
+		Scan(&catalog).Error; err != nil {
+		return nil, newGetRecordsDBError(err, "feature_flags")
 	}
-
-	var features []models.FeatureAccess
-	for _, flag := range featureFlags { //build the feature flags here
-		if !models.DefaultEnabled[flag.Name] {
-			continue
-		}
-		features = append(features, flag.Name)
-		for _, pageFeature := range flag.PageFeatures {
-			if models.DefaultEnabled[pageFeature.PageFeature] {
-				features = append(features, pageFeature.PageFeature)
-			}
-		}
-	}
-
-	return features, nil
+	return catalog, nil
 }
 
-// seedTestFeatureFlags mirrors the feature_flags/page_feature_flags seed rows the
-// Postgres migrations insert (00018/00057/00069/00072/00075/00077). The SQLite test
-// DB only gets its schema from MigrateTesting's AutoMigrate, never those SQL files, so
-// without this, facility-level feature overrides (which resolve through feature_flags.id)
-// would have no rows to look up.
+// statewideDefaults is every feature on by default: a top-level feature by its
+// own default, and a sub-feature only when its parent is on by default too.
+// GetFacilityFeatureAccess layers each facility's overrides on top.
+func statewideDefaults(catalog models.FeatureCatalog) []models.FeatureAccess {
+	var on []models.FeatureAccess
+	for _, f := range catalog {
+		if !f.DefaultEnabled {
+			continue
+		}
+		if f.Parent != "" {
+			if parent, ok := catalog.Find(f.Parent); !ok || !parent.DefaultEnabled {
+				continue
+			}
+		}
+		on = append(on, f.Name)
+	}
+	return on
+}
+
+// seedTestFeatureFlags mirrors the feature_flags/page_feature_flags rows the
+// Postgres migrations leave (00018 through 00079). The SQLite test DB only gets
+// its schema from MigrateTesting's AutoMigrate, never those SQL files, so
+// without this there would be no features to resolve.
 func (db *DB) seedTestFeatureFlags() {
-	ids := make(map[models.FeatureAccess]uint, len(models.TopLevelFeatures))
-	for _, name := range models.TopLevelFeatures {
-		flag := models.FeatureFlags{Name: name}
+	seed := []struct {
+		name, parent   models.FeatureAccess
+		defaultEnabled bool
+	}{
+		{models.OpenContentAccess, "", true},
+		{models.ProviderAccess, "", true},
+		{models.ProgramAccess, "", true},
+		{models.LearningRecordAccess, "", false},
+		{models.AiTutorAccess, "", false},
+		{models.RequestContentAccess, models.OpenContentAccess, true},
+		{models.HelpfulLinksAccess, models.OpenContentAccess, true},
+		{models.UploadVideoAccess, models.OpenContentAccess, true},
+		{models.ResidentProgramsAccess, models.ProgramAccess, true},
+	}
+	ids := make(map[models.FeatureAccess]uint, len(seed))
+	for _, s := range seed {
+		flag := models.FeatureFlags{Name: s.name, Title: string(s.name), DefaultEnabled: s.defaultEnabled, IsPageFeature: s.parent != ""}
 		if err := db.Create(&flag).Error; err != nil {
 			logrus.Fatalf("Failed to create feature flag: %v", err)
 		}
-		ids[name] = flag.ID
-	}
-	for sub, parent := range models.SubFeatureParent {
-		shadow := models.FeatureFlags{Name: sub, IsPageFeature: true}
-		if err := db.Create(&shadow).Error; err != nil {
-			logrus.Fatalf("Failed to create page feature shadow flag: %v", err)
+		ids[s.name] = flag.ID
+		if s.parent == "" {
+			continue
 		}
 		if err := db.Create(&models.PageFeatureFlags{
-			FeatureFlagID: ids[parent],
-			PageFeature:   sub,
+			FeatureFlagID: ids[s.parent],
+			PageFeature:   s.name,
 		}).Error; err != nil {
 			logrus.Fatalf("Failed to create page feature flag: %v", err)
 		}

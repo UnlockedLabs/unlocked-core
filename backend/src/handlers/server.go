@@ -36,7 +36,6 @@ type Server struct {
 	nats              *nats.Conn
 	dev               bool
 	buckets           map[string]nats.KeyValue
-	features          []models.FeatureAccess
 	testingMode       bool
 	wsClient          *ClientManager
 	scheduler         *tasks.Scheduler
@@ -193,13 +192,7 @@ func newServer(ctx context.Context) *Server {
 		providerPlatforms: registry.ProviderPlatforms(moduleDBs.For),
 		programs:          registry.Programs(moduleDBs.For),
 	}
-	features, err := server.Db.GetFeatureAccess()
-	if err != nil {
-		log.Fatal("Failed to fetch feature flags")
-	}
-	server.features = features
-	err = server.setupNatsKvBuckets()
-	if err != nil {
+	if err := server.setupNatsKvBuckets(); err != nil {
 		log.Fatalf("Failed to setup JetStream KV store: %v", err)
 	}
 	server.RegisterRoutes()
@@ -220,7 +213,6 @@ func newServer(ctx context.Context) *Server {
 
 func newTestingServer() *Server {
 	db := database.InitDB(context.Background(), true)
-	features := models.AllFeatures
 	mods := registry.All()
 	moduleDBs := database.OpenModuleDBs(db.DB, mods)
 	return &Server{
@@ -228,7 +220,6 @@ func newTestingServer() *Server {
 		Mux:               http.NewServeMux(),
 		OryClient:         nil,
 		Client:            nil,
-		features:          features,
 		testingMode:       true,
 		modules:           mods,
 		moduleDBs:         moduleDBs,

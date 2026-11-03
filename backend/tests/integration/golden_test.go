@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/UnlockedLabs/unlocked-contracts/features"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 
@@ -40,7 +41,7 @@ func noRedirects(env *TestEnv) *Client {
 func withFeatures(c *handlers.Claims, off ...models.FeatureAccess) *handlers.Claims {
 	cp := *c
 	cp.FeatureAccess = []models.FeatureAccess{}
-	for _, f := range models.AllFeatures {
+	for _, f := range features.All {
 		if !slices.Contains(off, f) {
 			cp.FeatureAccess = append(cp.FeatureAccess, f)
 		}

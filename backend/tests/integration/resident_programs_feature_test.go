@@ -22,28 +22,29 @@ func TestResidentProgramsAccess_EffectiveState(t *testing.T) {
 	require.NoError(t, err)
 
 	statewide := []models.FeatureAccess{models.ProgramAccess, models.ResidentProgramsAccess}
+	setStatewideDefaults(t, statewide...)
 	args := &models.QueryContext{Ctx: env.Context}
 
 	t.Run("defaults to on once program tracking is on", func(t *testing.T) {
-		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID, statewide)
+		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID)
 		require.NoError(t, err)
 		require.Contains(t, effective, models.ResidentProgramsAccess,
 			"an admin must take an explicit action to hide the Programs page")
 	})
 
 	t.Run("turning it off leaves program tracking itself on", func(t *testing.T) {
-		require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.ResidentProgramsAccess, false, statewide))
+		require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.ResidentProgramsAccess, false))
 
-		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID, statewide)
+		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID)
 		require.NoError(t, err)
 		require.NotContains(t, effective, models.ResidentProgramsAccess)
 		require.Contains(t, effective, models.ProgramAccess)
 	})
 
 	t.Run("turning it back on restores resident visibility", func(t *testing.T) {
-		require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.ResidentProgramsAccess, true, statewide))
+		require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.ResidentProgramsAccess, true))
 
-		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID, statewide)
+		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID)
 		require.NoError(t, err)
 		require.Contains(t, effective, models.ResidentProgramsAccess)
 	})
@@ -51,21 +52,21 @@ func TestResidentProgramsAccess_EffectiveState(t *testing.T) {
 	// If program tracking is later turned off entirely, the Programs page must
 	// behave as if the flag is off regardless of its last set value.
 	t.Run("disabling program tracking cascades even with the flag left on", func(t *testing.T) {
-		require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.ProgramAccess, false, statewide))
+		require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.ProgramAccess, false))
 
-		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID, statewide)
+		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID)
 		require.NoError(t, err)
 		require.NotContains(t, effective, models.ProgramAccess)
 		require.NotContains(t, effective, models.ResidentProgramsAccess,
 			"resident_programs is still stored as enabled, but its parent is off")
 
-		err = env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.ResidentProgramsAccess, true, statewide)
+		err = env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.ResidentProgramsAccess, true)
 		require.Error(t, err, "the flag isn't toggleable while program tracking is off")
 	})
 
 	t.Run("cannot be enabled for one facility when disabled statewide", func(t *testing.T) {
-		programOnly := []models.FeatureAccess{models.ProgramAccess}
-		err := env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.ResidentProgramsAccess, true, programOnly)
+		setStatewideDefaults(t, models.ProgramAccess)
+		err := env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.ResidentProgramsAccess, true)
 		require.Error(t, err)
 	})
 }

@@ -26,10 +26,10 @@ type claimsWorld struct {
 
 func seedClaimsWorld(t *testing.T, srv *Server) claimsWorld {
 	t.Helper()
-	srv.features = []models.FeatureAccess{models.OpenContentAccess, models.HelpfulLinksAccess, models.ProgramAccess}
+	setStatewideDefaults(t, srv, models.OpenContentAccess, models.HelpfulLinksAccess, models.ProgramAccess)
 	w := claimsWorld{facility: createTestFacility(t, srv, "Claims North")}
 	args := models.QueryContext{Ctx: context.Background()}
-	require.NoError(t, srv.Db.UpsertFacilityFeatureFlag(&args, w.facility, models.LearningRecordAccess, true, srv.features))
+	require.NoError(t, srv.Db.UpsertFacilityFeatureFlag(&args, w.facility, models.LearningRecordAccess, true))
 	newUser := func(username string, role models.UserRole) *models.User {
 		u := createTestUser(t, srv, username, role, w.facility)
 		kratosID := "kratos-" + username

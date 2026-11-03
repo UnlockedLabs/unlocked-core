@@ -19,11 +19,12 @@ func TestHandleInternalFeatures(t *testing.T) {
 	srv := newTestingServer()
 	// Statewide defaults as a fresh install has them: learning_record and
 	// ai_tutor off, everything else on.
-	srv.features = []models.FeatureAccess{
+	statewide := []models.FeatureAccess{
 		models.OpenContentAccess, models.RequestContentAccess, models.HelpfulLinksAccess, models.UploadVideoAccess,
 		models.ProviderAccess,
 		models.ProgramAccess, models.ResidentProgramsAccess,
 	}
+	setStatewideDefaults(t, srv, statewide...)
 	srv.registerInternalRoutes()
 
 	tests := []struct {
@@ -37,14 +38,14 @@ func TestHandleInternalFeatures(t *testing.T) {
 			name:       "no overrides returns the statewide defaults",
 			query:      "facility_id={id}",
 			wantStatus: http.StatusOK,
-			want:       srv.features,
+			want:       statewide,
 		},
 		{
 			name:       "an override turns on a feature that is off statewide",
 			overrides:  map[models.FeatureAccess]bool{models.LearningRecordAccess: true},
 			query:      "facility_id={id}",
 			wantStatus: http.StatusOK,
-			want:       append([]models.FeatureAccess{models.LearningRecordAccess}, srv.features...),
+			want:       append([]models.FeatureAccess{models.LearningRecordAccess}, statewide...),
 		},
 		{
 			name:       "turning off a parent turns off its sub-features",
@@ -77,7 +78,7 @@ func TestHandleInternalFeatures(t *testing.T) {
 			require.NoError(t, srv.Db.Create(&facility).Error)
 			args := models.QueryContext{Ctx: context.Background()}
 			for feature, enabled := range tt.overrides {
-				require.NoError(t, srv.Db.UpsertFacilityFeatureFlag(&args, facility.ID, feature, enabled, srv.features))
+				require.NoError(t, srv.Db.UpsertFacilityFeatureFlag(&args, facility.ID, feature, enabled))
 			}
 
 			query := strings.ReplaceAll(tt.query, "{id}", strconv.Itoa(int(facility.ID)))

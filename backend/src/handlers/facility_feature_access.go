@@ -31,7 +31,11 @@ func (srv *Server) handleGetFacilityFeatureOverview(w http.ResponseWriter, r *ht
 	var filterEnabled *bool
 	if raw := r.URL.Query().Get("feature"); raw != "" {
 		feature := models.FeatureAccess(raw)
-		if !models.ValidFeature(feature) {
+		catalog, err := srv.Db.FeatureCatalog()
+		if err != nil {
+			return newDatabaseServiceError(err)
+		}
+		if _, ok := catalog.Find(feature); !ok {
 			return newBadRequestServiceError(errors.New("invalid feature"), "invalid feature filter")
 		}
 		filterFeature = &feature
@@ -46,7 +50,7 @@ func (srv *Server) handleGetFacilityFeatureOverview(w http.ResponseWriter, r *ht
 		}
 	}
 
-	rows, err := srv.Db.GetFacilityFeatureOverview(&args, srv.features, filterFeature, filterEnabled)
+	rows, err := srv.Db.GetFacilityFeatureOverview(&args, filterFeature, filterEnabled)
 	if err != nil {
 		return newDatabaseServiceError(err)
 	}
@@ -64,7 +68,7 @@ func (srv *Server) handleGetFacilityFeatureDetail(w http.ResponseWriter, r *http
 		return newInvalidIdServiceError(err, "facility ID")
 	}
 	log.add("facility_id", id)
-	rows, err := srv.Db.GetFacilityFeatureDetail(uint(id), srv.features)
+	rows, err := srv.Db.GetFacilityFeatureDetail(uint(id))
 	if err != nil {
 		return newDatabaseServiceError(err)
 	}
@@ -98,7 +102,7 @@ func (srv *Server) handleSetFacilityFeature(w http.ResponseWriter, r *http.Reque
 	}
 
 	args := srv.getQueryContext(r)
-	if err := srv.Db.UpsertFacilityFeatureFlag(&args, uint(id), feature, *req.Enabled, srv.features); err != nil {
+	if err := srv.Db.UpsertFacilityFeatureFlag(&args, uint(id), feature, *req.Enabled); err != nil {
 		return newDatabaseServiceError(err)
 	}
 	return writeJsonResponse(w, http.StatusOK, "facility feature updated successfully")
@@ -122,7 +126,7 @@ func (srv *Server) handleApplyFacilityFeaturesToAll(w http.ResponseWriter, r *ht
 	log.add("source_facility_id", req.SourceFacilityID)
 
 	args := srv.getQueryContext(r)
-	if err := srv.Db.ApplyFacilityFeaturesToAll(&args, req.SourceFacilityID, srv.features); err != nil {
+	if err := srv.Db.ApplyFacilityFeaturesToAll(&args, req.SourceFacilityID); err != nil {
 		return newDatabaseServiceError(err)
 	}
 	return writeJsonResponse(w, http.StatusOK, "settings applied to all facilities successfully")

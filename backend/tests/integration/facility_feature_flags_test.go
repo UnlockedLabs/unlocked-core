@@ -6,11 +6,20 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/UnlockedLabs/unlocked-contracts/features"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 
 	"github.com/stretchr/testify/require"
 )
+
+// setStatewideDefaults turns on by default exactly the features named, and
+// every other feature off.
+func setStatewideDefaults(t *testing.T, on ...models.FeatureAccess) {
+	t.Helper()
+	require.NoError(t, env.DB.Model(&models.FeatureFlags{}).Where("1 = 1").Update("default_enabled", false).Error)
+	require.NoError(t, env.DB.Model(&models.FeatureFlags{}).Where("name IN ?", on).Update("default_enabled", true).Error)
+}
 
 func TestFacilityFeatureAccess_EffectiveMatrix(t *testing.T) {
 	env = SetupTestEnv(t)
@@ -20,27 +29,28 @@ func TestFacilityFeatureAccess_EffectiveMatrix(t *testing.T) {
 	require.NoError(t, err)
 
 	statewide := []models.FeatureAccess{models.OpenContentAccess, models.ProgramAccess}
+	setStatewideDefaults(t, statewide...)
 	args := &models.QueryContext{Ctx: env.Context}
 
 	t.Run("no override inherits the statewide default", func(t *testing.T) {
-		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID, statewide)
+		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID)
 		require.NoError(t, err)
 		require.ElementsMatch(t, statewide, effective)
 	})
 
 	t.Run("facility override disables a statewide-enabled feature", func(t *testing.T) {
-		require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.ProgramAccess, false, statewide))
+		require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.ProgramAccess, false))
 
-		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID, statewide)
+		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID)
 		require.NoError(t, err)
 		require.NotContains(t, effective, models.ProgramAccess)
 		require.Contains(t, effective, models.OpenContentAccess)
 	})
 
 	t.Run("re-enabling the override restores it", func(t *testing.T) {
-		require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.ProgramAccess, true, statewide))
+		require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.ProgramAccess, true))
 
-		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID, statewide)
+		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID)
 		require.NoError(t, err)
 		require.Contains(t, effective, models.ProgramAccess)
 	})
@@ -48,9 +58,9 @@ func TestFacilityFeatureAccess_EffectiveMatrix(t *testing.T) {
 	t.Run("a feature disabled statewide can be enabled for a single facility", func(t *testing.T) {
 		// The statewide value is only the default for facilities with no row of
 		// their own; an explicit override wins in both directions.
-		require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.LearningRecordAccess, true, statewide)) // not in statewide slice
+		require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.LearningRecordAccess, true)) // not in statewide slice
 
-		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID, statewide)
+		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID)
 		require.NoError(t, err)
 		require.Contains(t, effective, models.LearningRecordAccess)
 	})
@@ -59,13 +69,13 @@ func TestFacilityFeatureAccess_EffectiveMatrix(t *testing.T) {
 		other, err := env.CreateTestFacility("Feature Matrix Facility 2")
 		require.NoError(t, err)
 
-		require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.LearningRecordAccess, false, statewide))
+		require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.LearningRecordAccess, false))
 
-		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID, statewide)
+		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID)
 		require.NoError(t, err)
 		require.NotContains(t, effective, models.LearningRecordAccess)
 
-		otherEffective, err := env.DB.GetFacilityFeatureAccess(other.ID, statewide)
+		otherEffective, err := env.DB.GetFacilityFeatureAccess(other.ID)
 		require.NoError(t, err)
 		require.ElementsMatch(t, statewide, otherEffective,
 			"a facility with no rows of its own still inherits the statewide defaults")
@@ -79,9 +89,6 @@ func TestFacilityFeatureAccess_EffectiveMatrix(t *testing.T) {
 func TestFacilityFeatureAccess_RealDefaults(t *testing.T) {
 	env = SetupTestEnv(t)
 	defer env.CleanupTestEnv()
-
-	statewide, err := env.DB.GetFeatureAccess()
-	require.NoError(t, err)
 
 	defaults := []models.FeatureAccess{
 		models.OpenContentAccess, models.RequestContentAccess, models.HelpfulLinksAccess, models.UploadVideoAccess,
@@ -163,11 +170,47 @@ func TestFacilityFeatureAccess_RealDefaults(t *testing.T) {
 				}).Error)
 			}
 
-			effective, err := env.DB.GetFacilityFeatureAccess(facility.ID, statewide)
+			effective, err := env.DB.GetFacilityFeatureAccess(facility.ID)
 			require.NoError(t, err)
 			require.ElementsMatch(t, tt.want, effective)
 		})
 	}
+}
+
+// A feature added as a row, with no code change, starts off everywhere, shows
+// up in Feature Control, and can be turned on for one facility (EN-257).
+func TestFacilityFeatureAccess_FeatureAddedAsData(t *testing.T) {
+	env = SetupTestEnv(t)
+	defer env.CleanupTestEnv()
+
+	facility, err := env.CreateTestFacility("Added Feature Facility")
+	require.NoError(t, err)
+	other, err := env.CreateTestFacility("Added Feature Other")
+	require.NoError(t, err)
+	const myTool models.FeatureAccess = "my_tool"
+	require.NoError(t, env.DB.Create(&models.FeatureFlags{Name: myTool, Title: "My Tool"}).Error)
+	args := &models.QueryContext{Ctx: env.Context}
+
+	effective, err := env.DB.GetFacilityFeatureAccess(facility.ID)
+	require.NoError(t, err)
+	require.NotContains(t, effective, myTool)
+
+	overview, err := env.DB.GetFacilityFeatureOverview(args, nil, nil)
+	require.NoError(t, err)
+	for _, row := range overview {
+		on, listed := row.Features[myTool]
+		require.True(t, listed, "every facility's overview lists the new feature")
+		require.False(t, on)
+	}
+
+	require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility.ID, myTool, true))
+	effective, err = env.DB.GetFacilityFeatureAccess(facility.ID)
+	require.NoError(t, err)
+	require.Contains(t, effective, myTool)
+
+	otherEffective, err := env.DB.GetFacilityFeatureAccess(other.ID)
+	require.NoError(t, err)
+	require.NotContains(t, otherEffective, myTool)
 }
 
 func TestFacilityFeatureAccess_SubFeatureGuard(t *testing.T) {
@@ -178,20 +221,21 @@ func TestFacilityFeatureAccess_SubFeatureGuard(t *testing.T) {
 	require.NoError(t, err)
 
 	statewide := []models.FeatureAccess{models.OpenContentAccess, models.RequestContentAccess}
+	setStatewideDefaults(t, statewide...)
 	args := &models.QueryContext{Ctx: env.Context}
 
 	t.Run("enabling a sub-feature succeeds while its parent is enabled", func(t *testing.T) {
-		require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.RequestContentAccess, true, statewide))
+		require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.RequestContentAccess, true))
 	})
 
 	t.Run("disabling the parent, then re-enabling the sub-feature is rejected", func(t *testing.T) {
-		require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.OpenContentAccess, false, statewide))
-		require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.RequestContentAccess, false, statewide))
+		require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.OpenContentAccess, false))
+		require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.RequestContentAccess, false))
 
-		err := env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.RequestContentAccess, true, statewide)
+		err := env.DB.UpsertFacilityFeatureFlag(args, facility.ID, models.RequestContentAccess, true)
 		require.Error(t, err)
 
-		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID, statewide)
+		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID)
 		require.NoError(t, err)
 		require.NotContains(t, effective, models.RequestContentAccess)
 	})
@@ -200,9 +244,9 @@ func TestFacilityFeatureAccess_SubFeatureGuard(t *testing.T) {
 		facility2, err := env.CreateTestFacility("Cascade Facility")
 		require.NoError(t, err)
 
-		require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility2.ID, models.OpenContentAccess, false, statewide))
+		require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, facility2.ID, models.OpenContentAccess, false))
 
-		effective, err := env.DB.GetFacilityFeatureAccess(facility2.ID, statewide)
+		effective, err := env.DB.GetFacilityFeatureAccess(facility2.ID)
 		require.NoError(t, err)
 		require.NotContains(t, effective, models.OpenContentAccess)
 		require.NotContains(t, effective, models.RequestContentAccess,
@@ -221,16 +265,17 @@ func TestApplyFacilityFeaturesToAll(t *testing.T) {
 	target2, err := env.CreateTestFacility("Target Facility 2")
 	require.NoError(t, err)
 
-	statewide := models.AllFeatures
+	statewide := features.All
+	setStatewideDefaults(t, statewide...)
 	args := &models.QueryContext{Ctx: env.Context}
 
-	require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, source.ID, models.ProgramAccess, false, statewide))
-	require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, source.ID, models.UploadVideoAccess, false, statewide))
+	require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, source.ID, models.ProgramAccess, false))
+	require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, source.ID, models.UploadVideoAccess, false))
 
-	require.NoError(t, env.DB.ApplyFacilityFeaturesToAll(args, source.ID, statewide))
+	require.NoError(t, env.DB.ApplyFacilityFeaturesToAll(args, source.ID))
 
 	for _, target := range []*models.Facility{target1, target2} {
-		effective, err := env.DB.GetFacilityFeatureAccess(target.ID, statewide)
+		effective, err := env.DB.GetFacilityFeatureAccess(target.ID)
 		require.NoError(t, err)
 		require.NotContains(t, effective, models.ProgramAccess, "top-level feature should propagate")
 		require.NotContains(t, effective, models.UploadVideoAccess, "sub-feature should propagate too")
@@ -251,24 +296,25 @@ func TestApplyFacilityFeaturesToAll_UnknownSourceChangesNothing(t *testing.T) {
 	target2, err := env.CreateTestFacility("Unknown Source Target 2")
 	require.NoError(t, err)
 
-	statewide := models.AllFeatures
+	statewide := features.All
+	setStatewideDefaults(t, statewide...)
 	args := &models.QueryContext{Ctx: env.Context}
 
-	require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, target1.ID, models.ProgramAccess, false, statewide))
-	require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, target2.ID, models.UploadVideoAccess, false, statewide))
+	require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, target1.ID, models.ProgramAccess, false))
+	require.NoError(t, env.DB.UpsertFacilityFeatureFlag(args, target2.ID, models.UploadVideoAccess, false))
 
 	before := map[uint][]models.FeatureAccess{}
 	for _, target := range []*models.Facility{target1, target2} {
-		effective, err := env.DB.GetFacilityFeatureAccess(target.ID, statewide)
+		effective, err := env.DB.GetFacilityFeatureAccess(target.ID)
 		require.NoError(t, err)
 		before[target.ID] = effective
 	}
 
-	err = env.DB.ApplyFacilityFeaturesToAll(args, target2.ID+9999, statewide)
+	err = env.DB.ApplyFacilityFeaturesToAll(args, target2.ID+9999)
 	require.Error(t, err, "an unknown source facility must be rejected")
 
 	for _, target := range []*models.Facility{target1, target2} {
-		effective, err := env.DB.GetFacilityFeatureAccess(target.ID, statewide)
+		effective, err := env.DB.GetFacilityFeatureAccess(target.ID)
 		require.NoError(t, err)
 		require.ElementsMatch(t, before[target.ID], effective,
 			"no facility's overrides may change when the source facility doesn't exist")
@@ -368,7 +414,8 @@ func TestFacilityFeatureRoutes_EnabledRequired(t *testing.T) {
 	facility, err := env.CreateTestFacility("Enabled Required Facility")
 	require.NoError(t, err)
 
-	statewide := models.AllFeatures
+	statewide := features.All
+	setStatewideDefaults(t, statewide...)
 
 	t.Run("a body without enabled is rejected and changes nothing", func(t *testing.T) {
 		NewRequest[any](env.Client, t, http.MethodPut,
@@ -378,7 +425,7 @@ func TestFacilityFeatureRoutes_EnabledRequired(t *testing.T) {
 			Do().
 			ExpectStatus(http.StatusBadRequest)
 
-		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID, statewide)
+		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID)
 		require.NoError(t, err)
 		require.Contains(t, effective, models.ProgramAccess, "the rejected request must not have written an override")
 	})
@@ -391,7 +438,7 @@ func TestFacilityFeatureRoutes_EnabledRequired(t *testing.T) {
 			Do().
 			ExpectStatus(http.StatusOK)
 
-		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID, statewide)
+		effective, err := env.DB.GetFacilityFeatureAccess(facility.ID)
 		require.NoError(t, err)
 		require.NotContains(t, effective, models.ProgramAccess)
 	})

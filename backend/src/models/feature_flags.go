@@ -1,7 +1,6 @@
 package models
 
 import (
-	"slices"
 	"time"
 
 	"github.com/UnlockedLabs/unlocked-contracts/features"
@@ -19,7 +18,7 @@ type (
 		Description    *string       `json:"description"`
 		// IsPageFeature marks a shadow row copied from page_feature_flags, so every
 		// feature (top-level or sub) has one real id for facility_feature_flags to
-		// reference. GetFeatureAccess() excludes these to avoid double-counting.
+		// reference. FeatureCatalog reads their parent from page_feature_flags.
 		IsPageFeature bool               `json:"-" gorm:"not null;default:false"`
 		PageFeatures  []PageFeatureFlags `gorm:"foreignKey:FeatureFlagID"`
 	}
@@ -58,43 +57,55 @@ const (
 	ResidentProgramsAccess = features.ResidentPrograms
 )
 
-var AllFeatures = features.All
-
-// TopLevelFeatures are the features shown as their own card/pill on the Feature Control
-// page. Page-level (sub-)features are nested under their parent below.
-var TopLevelFeatures = []FeatureAccess{OpenContentAccess, ProviderAccess, ProgramAccess, LearningRecordAccess, AiTutorAccess}
-
-// SubFeatureParent maps a page-level feature to the top-level feature that gates it:
-// a sub-feature can never be enabled at a facility where its parent is disabled.
-var SubFeatureParent = map[FeatureAccess]FeatureAccess{
-	RequestContentAccess:   OpenContentAccess,
-	HelpfulLinksAccess:     OpenContentAccess,
-	UploadVideoAccess:      OpenContentAccess,
-	ResidentProgramsAccess: ProgramAccess,
+// CatalogFeature is one feature in the list core reads from feature_flags.
+// Parent is set only for a sub-feature, which is never on where its parent is
+// off.
+type CatalogFeature struct {
+	ID             uint
+	Name           FeatureAccess
+	Title          string
+	Description    *string
+	DefaultEnabled bool
+	Parent         FeatureAccess
 }
 
-// DefaultEnabled is the statewide default for every feature (top-level and sub),
-// replacing both the dropped feature_flags.enabled and page_feature_flags.enabled
-// columns -- nothing ever edited either after their initial seed insert.
-var DefaultEnabled = map[FeatureAccess]bool{
-	OpenContentAccess:    true,
-	ProviderAccess:       true,
-	ProgramAccess:        true,
-	LearningRecordAccess: false,
-	AiTutorAccess:        false,
+// FeatureCatalog is every feature core knows, top-level ones first: core's own
+// and any a product registered (EN-257).
+type FeatureCatalog []CatalogFeature
 
-	RequestContentAccess:   true,
-	HelpfulLinksAccess:     true,
-	UploadVideoAccess:      true,
-	ResidentProgramsAccess: true,
+func (c FeatureCatalog) Find(name FeatureAccess) (CatalogFeature, bool) {
+	for _, f := range c {
+		if f.Name == name {
+			return f, true
+		}
+	}
+	return CatalogFeature{}, false
+}
+
+func (c FeatureCatalog) Names() []FeatureAccess {
+	names := make([]FeatureAccess, len(c))
+	for i, f := range c {
+		names[i] = f.Name
+	}
+	return names
+}
+
+// TopLevel are the features shown as their own card on the Feature Control
+// page; sub-features are nested under their parent.
+func (c FeatureCatalog) TopLevel() []FeatureAccess {
+	var names []FeatureAccess
+	for _, f := range c {
+		if f.Parent == "" {
+			names = append(names, f.Name)
+		}
+	}
+	return names
 }
 
 func Feature(kinds ...FeatureAccess) []FeatureAccess {
 	return kinds
 }
-func ValidFeature(feature FeatureAccess) bool {
-	return slices.Contains(AllFeatures, feature)
-}
+
 func (FeatureFlags) TableName() string { return "feature_flags" }
 
 func (PageFeatureFlags) TableName() string { return "page_feature_flags" }

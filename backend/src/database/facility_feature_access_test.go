@@ -11,8 +11,11 @@ import (
 // A facility override is authoritative in both directions; the statewide default
 // applies only where the facility has no row.
 func TestResolveFeatures_OverrideWinsOverStatewide(t *testing.T) {
-	// learning_record is off statewide (migration 00069 seeds it disabled).
-	statewide := []models.FeatureAccess{models.OpenContentAccess, models.ProgramAccess}
+	catalog := models.FeatureCatalog{
+		{ID: 1, Name: models.OpenContentAccess, DefaultEnabled: true},
+		{ID: 2, Name: models.ProgramAccess, DefaultEnabled: true},
+		{ID: 3, Name: models.LearningRecordAccess, DefaultEnabled: false},
+	}
 
 	tests := []struct {
 		name      string
@@ -48,7 +51,7 @@ func TestResolveFeatures_OverrideWinsOverStatewide(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			states := resolveFeatures(statewide, tt.overrides)
+			states := resolveFeatures(catalog, tt.overrides)
 			assert.Equal(t, tt.want, states[tt.feature])
 		})
 	}
@@ -57,9 +60,35 @@ func TestResolveFeatures_OverrideWinsOverStatewide(t *testing.T) {
 // Every known feature gets an entry, so callers can distinguish "off" from
 // "absent from the statewide list".
 func TestResolveFeatures_CoversAllFeatures(t *testing.T) {
-	states := resolveFeatures([]models.FeatureAccess{models.OpenContentAccess}, nil)
-	for _, f := range models.AllFeatures {
-		_, ok := states[f]
-		assert.True(t, ok, "expected an entry for %s", f)
+	catalog := models.FeatureCatalog{
+		{ID: 1, Name: models.OpenContentAccess, DefaultEnabled: true},
+		{ID: 2, Name: models.UploadVideoAccess, DefaultEnabled: true, Parent: models.OpenContentAccess},
+		{ID: 3, Name: "registered_tool"},
+	}
+	states := resolveFeatures(catalog, nil)
+	for _, f := range catalog {
+		_, ok := states[f.Name]
+		assert.True(t, ok, "expected an entry for %s", f.Name)
+	}
+}
+
+// A sub-feature is on by default only when its parent is too.
+func TestStatewideDefaults(t *testing.T) {
+	tests := []struct {
+		name          string
+		parentDefault bool
+		want          []models.FeatureAccess
+	}{
+		{"parent on by default", true, []models.FeatureAccess{models.OpenContentAccess, models.UploadVideoAccess}},
+		{"parent off by default", false, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			catalog := models.FeatureCatalog{
+				{ID: 1, Name: models.OpenContentAccess, DefaultEnabled: tt.parentDefault},
+				{ID: 2, Name: models.UploadVideoAccess, DefaultEnabled: true, Parent: models.OpenContentAccess},
+			}
+			assert.Equal(t, tt.want, statewideDefaults(catalog))
+		})
 	}
 }

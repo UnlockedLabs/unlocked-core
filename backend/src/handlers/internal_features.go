@@ -38,7 +38,7 @@ func (srv *Server) handleInternalFeatures(w http.ResponseWriter, r *http.Request
 	if _, err := srv.Db.GetFacilityByID(id); err != nil {
 		return newDatabaseServiceError(err)
 	}
-	features, err := srv.Db.GetFacilityFeatureAccess(uint(id), srv.features)
+	features, err := srv.Db.GetFacilityFeatureAccess(uint(id))
 	if err != nil {
 		return newDatabaseServiceError(err)
 	}
