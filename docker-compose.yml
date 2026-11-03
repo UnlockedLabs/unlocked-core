@@ -87,7 +87,9 @@ services:
       - LOG_LEVEL=debug
       - APP_URL=http://127.0.0.1
       - APP_KEY=base64:NTQxODNmNDMyM2YzNzdiNzM3NDMzYTFlOTgyMjllYWQwZmRjNjg2ZjkzYmFiMDU3ZWNiNjEyZGFhOTQwMDJiNSAgLQo=
-      - PROVIDER_SERVICE_URL=http://providerplatforms-worker:8081
+      # The Provider Platforms service (EN-206) and the secret they share.
+      - PROVIDER_PLATFORMS_URL=http://providerplatforms:8080
+      - &service-token SERVICE_TOKEN=dev-service-token
       - HYDRA_ADMIN_URL=http://hydra:4445
       - HYDRA_PUBLIC_URL=http://hydra:4444
       - KRATOS_ADMIN_URL=http://kratos:4434
@@ -144,6 +146,9 @@ services:
       - NATS_URL=nats:4222
       - NATS_USER=unlocked
       - NATS_PASSWORD=dev
+      # It unlinks deleted users from Provider Platforms (EN-206).
+      - PROVIDER_PLATFORMS_URL=http://providerplatforms:8080
+      - *service-token
     restart: unless-stopped
     depends_on: [server]
 
@@ -173,32 +178,71 @@ services:
     restart: unless-stopped
     depends_on: [server]
 
-  # Provider Platforms' LMS jobs (EN-197): the Canvas, Brightspace and Kolibri
-  # syncs, run as `backend worker providerplatforms`, which also serves the
-  # provider user lists the server asks for. No hot reload: restart it after
-  # changing job code.
-  providerplatforms-worker:
-    build:
-      context: ./
-      dockerfile: backend/dev.Dockerfile
-    command: ["go", "run", "./backend/cmd/main.go", "worker", "providerplatforms"]
+  # Provider Platforms (EN-206) is its own repo. These three services build it
+  # from the checkout next to this one (../unlocked-provider-platforms), which
+  # needs the unlocked-contracts release it requires. No hot reload: rebuild
+  # after changing it (`docker compose up -d --build providerplatforms`).
+  #
+  # One-shot: its migrations run after core's, because the first one moves the
+  # tables core created into the provider schema.
+  providerplatforms-migrate:
+    build: &providerplatforms-build
+      context: ../unlocked-provider-platforms
+    command: ["migrate"]
     networks:
       - intranet
-    # The provider user lists, as provider-service published them (.env.example
-    # points a server run outside compose here).
+    environment:
+      - *app-dsn
+    depends_on:
+      server-migrate:
+        condition: service_completed_successfully
+
+  # The API core forwards Provider Platforms' routes to, and the job scheduler.
+  providerplatforms:
+    build: *providerplatforms-build
+    command: ["serve"]
+    networks:
+      - intranet
+    ports:
+      - 8082:8080
+    environment:
+      - *app-dsn
+      - *service-token
+      - APP_ENV=dev
+      - APP_URL=http://127.0.0.1
+      - APP_KEY=base64:NTQxODNmNDMyM2YzNzdiNzM3NDMzYTFlOTgyMjllYWQwZmRjNjg2ZjkzYmFiMDU3ZWNiNjEyZGFhOTQwMDJiNSAgLQo=
+      - CORE_URL=http://server:8080
+      - HYDRA_ADMIN_URL=http://hydra:4445
+      - HYDRA_PUBLIC_URL=http://hydra:4444
+      - LOG_LEVEL=debug
+      - ORY_TOKEN=eyJvZmZzZXQiOiItMjUwIiwidmo8iV*@
+      - NATS_URL=nats:4222
+      - NATS_USER=unlocked
+      - NATS_PASSWORD=dev
+      - MIDDLEWARE_CRON_SCHEDULE=0 22 * * *
+      - PROVIDER_SERVICE_URL=http://providerplatforms-worker:8081
+    restart: unless-stopped
+    depends_on:
+      providerplatforms-migrate:
+        condition: service_completed_successfully
+
+  # The LMS jobs: the Canvas, Brightspace and Kolibri syncs. It also serves the
+  # provider user lists the API asks for.
+  providerplatforms-worker:
+    build: *providerplatforms-build
+    command: ["worker"]
+    networks:
+      - intranet
     ports:
       - 8081:8081
     volumes:
-      - ./:/app
       - csvs:/csvs
     environment:
-      - APP_DSN=postgres://unlocked:dev@postgres:5432/unlocked
+      - *app-dsn
       - APP_ENV=dev
       - APP_URL=http://server:8080
       - APP_KEY=base64:NTQxODNmNDMyM2YzNzdiNzM3NDMzYTFlOTgyMjllYWQwZmRjNjg2ZjkzYmFiMDU3ZWNiNjEyZGFhOTQwMDJiNSAgLQo=
       - LOG_LEVEL=debug
-      # Where it reads the migration files it waits for server-migrate to apply.
-      - MIGRATION_DIR=backend/migrations
       - NATS_URL=nats:4222
       - NATS_USER=unlocked
       - NATS_PASSWORD=dev
@@ -208,7 +252,9 @@ services:
       - KOLIBRI_DB_PASSWORD=dev
       - BRIGHTSPACE_TEMP_DIR=/csvs
     restart: unless-stopped
-    depends_on: [server]
+    depends_on:
+      providerplatforms-migrate:
+        condition: service_completed_successfully
 
   # AI tutor sidecar (served under basePath /tutor; see tutor-integration.md)
   tutor-service:
