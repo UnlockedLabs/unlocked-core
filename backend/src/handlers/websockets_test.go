@@ -2,11 +2,15 @@ package handlers
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	ocapi "github.com/UnlockedLabs/unlocked-contracts/opencontent"
+	"github.com/coder/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -99,6 +103,42 @@ func TestClientManagerClose(t *testing.T) {
 	assert.Empty(t, cm.clients)
 	for _, tab := range tabs {
 		assert.Error(t, tab.ctx.Err(), "user %d's tab is canceled", tab.UserID)
+	}
+}
+
+// Shutting down while a tab's reader waits on its connection ends the reader
+// without racing it for the connection.
+func TestClientManagerCloseOpenTab(t *testing.T) {
+	srv := newTestingServer()
+	srv.wsClient = newClientManager()
+	readerDone := make(chan struct{})
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if !assert.NoError(t, err) {
+			return
+		}
+		tab := newTab(7, 0)
+		tab.Conn = conn
+		srv.wsClient.addClient(tab)
+		srv.handleWsReader(tab.ctx, tab)
+		close(readerDone)
+	}))
+	defer ts.Close()
+	conn, _, err := websocket.Dial(t.Context(), "ws"+strings.TrimPrefix(ts.URL, "http"), nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.CloseNow() })
+	require.Eventually(t, func() bool {
+		srv.wsClient.mutex.RLock()
+		defer srv.wsClient.mutex.RUnlock()
+		return len(srv.wsClient.clients) == 1
+	}, time.Second, 10*time.Millisecond)
+
+	within(t, "Close", func() { srv.wsClient.Close(srv.Db, &endingOpenContent{}) })
+
+	select {
+	case <-readerDone:
+	case <-time.After(time.Second):
+		require.FailNow(t, "the tab's reader didn't stop")
 	}
 }
 

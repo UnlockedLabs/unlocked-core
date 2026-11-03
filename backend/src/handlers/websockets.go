@@ -86,6 +86,8 @@ func (c *ClientManager) Close(db *database.DB, openContent ocapi.OpenContent) {
 	for _, end := range ends {
 		wg.Go(func() { end.run(db, openContent) })
 	}
+	// Conn isn't set to nil: the tab's reader and heartbeat may still be
+	// using it, and closing it makes their next call fail.
 	for key, client := range clients {
 		client.cancel()
 		if client.Conn != nil {
@@ -93,7 +95,6 @@ func (c *ClientManager) Close(db *database.DB, openContent ocapi.OpenContent) {
 			if err != nil {
 				log.Warnf("Failed to close WebSocket for user %d: %v", key, err)
 			}
-			client.Conn = nil
 		}
 	}
 	wg.Wait()
