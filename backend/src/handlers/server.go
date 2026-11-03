@@ -114,11 +114,7 @@ func init() {
 
 func securityHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/proxy/") {
-			w.Header().Set("X-Frame-Options", "SAMEORIGIN")
-		} else {
-			w.Header().Set("X-Frame-Options", "DENY")
-		}
+		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		if os.Getenv("APP_ENV") != "dev" {
 			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")

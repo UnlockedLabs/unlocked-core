@@ -135,9 +135,7 @@ services:
       - NATS_USER=unlocked
       - NATS_PASSWORD=dev
       - IMG_FILEPATH=/imgs
-      - KIWIX_SERVER_URL=https://kiwix.dev.unlockedlabs.xyz
       - CORS_ALLOWED_ORIGINS=http://localhost,http://127.0.0.1,https://kiwix.dev.unlockedlabs.xyz
-      - PROXY_SCHEME_OVERRIDE=false
       - JASPER_TEMP_DIR=/jaspertmp
       - JASPER_TEMPLATE_DIR=/app/backend/src/templates
       - GIT_COMMIT=${GIT_COMMIT:-unknown}
