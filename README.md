@@ -187,7 +187,9 @@ and our conventional commits (CI checks every commit subject and the PR title).
 2. When it's time to release, review and merge that PR. It tags `vX.Y.Z` and
    creates the GitHub Release.
 3. CI then builds `frontend` and `unlockedv2` at `X.Y.Z`
-   in ECR. Staging keeps following `:latest` from `main`.
+   in ECR. Staging keeps following `main`: every merge builds `sha-<commit>`
+   images and CI sets staging's site file in `unlocked-platform` to them,
+   which deploys staging (EN-184).
 
 `feat` bumps the minor version, `fix` the patch, and a breaking change (`!`)
 the major.
