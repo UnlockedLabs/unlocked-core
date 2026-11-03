@@ -53,8 +53,13 @@ func (m jobModule) RegisterJobs(s module.Scheduler, deps module.Deps) {
 	}
 }
 
-// Start gives each module the scheduler's deps and schedules only the jobs
-// the modules register: core has none of its own since EN-197.
+type noUnlinker struct{}
+
+func (noUnlinker) DeleteUserMappings(context.Context, uint) error { return nil }
+
+// Start gives each module the scheduler's deps and schedules the jobs the
+// modules register, plus the one job core has of its own: unlinking deleted
+// users from Provider Platforms.
 func TestStart(t *testing.T) {
 	db := database.InitDB(context.Background(), true)
 	// An enabled LMS provider: its jobs are Provider Platforms', not core's.
@@ -64,14 +69,14 @@ func TestStart(t *testing.T) {
 
 	var got module.Deps
 	mods := []module.Module{jobModule{deps: &got}}
-	s := Start(nil, mods, database.OpenModuleDBs(db.DB, mods))
+	s := Start(nil, mods, database.OpenModuleDBs(db.DB, mods), db, noUnlinker{})
 	t.Cleanup(func() { _ = s.Shutdown() })
 
 	if got.DB != db.DB {
 		t.Errorf("the module got DB %p, want the scheduler's %p", got.DB, db.DB)
 	}
-	if n := len(s.Jobs()); n != 2 {
-		t.Errorf("scheduled %d jobs, want the module's 2", n)
+	if n := len(s.Jobs()); n != 3 {
+		t.Errorf("scheduled %d jobs, want the module's 2 and the unlinking job", n)
 	}
 }
 

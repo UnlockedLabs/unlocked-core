@@ -1,4 +1,18 @@
 {
-  "data": [],
+  "data": [
+    {
+      "authentication_provider_status": "none",
+      "create_user_id": null,
+      "created_at": "<time>",
+      "external_login_id": null,
+      "external_user_id": "k-4001",
+      "external_username": "new.bie",
+      "id": 3,
+      "provider_platform_id": 1,
+      "update_user_id": null,
+      "updated_at": "<time>",
+      "user_id": 4
+    }
+  ],
   "message": "Data fetched successfully"
 }

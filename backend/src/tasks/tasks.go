@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"context"
 	"os"
 	"strconv"
 	"time"
@@ -13,8 +14,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Scheduler runs the feature modules' background jobs (module.Scheduler).
-// Core has none of its own since EN-197.
+// Scheduler runs the feature modules' background jobs (module.Scheduler) and
+// core's one job, unlinking deleted users from Provider Platforms.
 type Scheduler struct {
 	gocron.Scheduler
 }
@@ -22,7 +23,7 @@ type Scheduler struct {
 // Start schedules every feature module's background jobs, each module's on
 // its own connection (moduleDBs). The scheduler process (`backend scheduler`)
 // calls it, and so does the API server while ServerRunsJobs is true.
-func Start(nats *nats.Conn, mods []module.Module, moduleDBs database.ModuleDBs) *Scheduler {
+func Start(nats *nats.Conn, mods []module.Module, moduleDBs database.ModuleDBs, core *database.DB, unlinker MappingUnlinker) *Scheduler {
 	gs, err := gocron.NewScheduler()
 	if err != nil {
 		log.Fatalf("Failed to create scheduler: %v", err)
@@ -33,7 +34,26 @@ func Start(nats *nats.Conn, mods []module.Module, moduleDBs database.ModuleDBs) 
 	for _, m := range mods {
 		m.RegisterJobs(s, module.Deps{DB: moduleDBs.For(m.Name()), NATS: nats})
 	}
+	if err := s.Cron(unlinkSchedule, func() { unlinkDeletedUsers(core, unlinker) }); err != nil {
+		log.Fatalf("Failed to schedule unlinking deleted users: %v", err)
+	}
 	return s
+}
+
+// MappingUnlinker is Provider Platforms' removal of a user's provider account
+// links.
+type MappingUnlinker interface {
+	DeleteUserMappings(ctx context.Context, userID uint) error
+}
+
+const unlinkSchedule = "* * * * *"
+
+// unlinkDeletedUsers unlinks every user DeleteUser queued. One that fails
+// stays queued for the next run.
+func unlinkDeletedUsers(core *database.DB, unlinker MappingUnlinker) {
+	if err := core.DrainMappingDeletions(context.Background(), unlinker.DeleteUserMappings); err != nil {
+		log.Errorf("Unlinking deleted users from Provider Platforms: %v", err)
+	}
 }
 
 // ServerRunsJobs reports whether the API server runs the background jobs

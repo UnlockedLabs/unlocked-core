@@ -212,7 +212,7 @@ func newServer(ctx context.Context) *Server {
 	}
 	server.wsClient = newClientManager()
 	if tasks.ServerRunsJobs() {
-		server.scheduler = tasks.Start(server.nats, server.modules, server.moduleDBs)
+		server.scheduler = tasks.Start(server.nats, server.modules, server.moduleDBs, server.Db, server.providerPlatforms)
 	} else {
 		log.Info("RUN_SCHEDULER=false: background jobs run in the scheduler process, not here")
 	}

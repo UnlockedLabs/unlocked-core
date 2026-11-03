@@ -304,6 +304,7 @@ func MigrateTesting(db *gorm.DB) {
 		&models.LoginMetrics{},
 		&models.LoginActivity{},
 		&models.FailedLoginAttempts{},
+		&models.ProviderMappingDeletion{},
 		// ⚠️  Hand-maintained. An omission here fails at RUNTIME (missing table in the
 		//     in-memory SQLite test DB), not at compile time.
 		&models.Facility{},

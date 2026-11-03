@@ -76,7 +76,8 @@ func runScheduler(ctx context.Context) {
 		log.Info("Scheduler stopped before migrations finished")
 		return
 	}
-	s := tasks.Start(nc, mods, database.OpenModuleDBs(db, mods))
+	moduleDBs := database.OpenModuleDBs(db, mods)
+	s := tasks.Start(nc, mods, moduleDBs, database.NewDB(db), registry.ProviderPlatforms(moduleDBs.For))
 	log.Info("Scheduler started")
 	<-ctx.Done()
 	if err := s.Stop(); err != nil {
