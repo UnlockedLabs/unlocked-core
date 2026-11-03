@@ -4,6 +4,7 @@ import (
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 
 	"github.com/sirupsen/logrus"
+	"gorm.io/gorm/clause"
 )
 
 // FeatureCatalog reads every feature from feature_flags, top-level ones first.
@@ -22,6 +23,21 @@ func (db *DB) FeatureCatalog() (models.FeatureCatalog, error) {
 		return nil, newGetRecordsDBError(err, "feature_flags")
 	}
 	return catalog, nil
+}
+
+// UpsertFeature adds a feature, or updates the title and description of one
+// that exists. It never sets a feature's default or any facility's setting,
+// so a new feature starts off everywhere and registering again changes only
+// its text.
+func (db *DB) UpsertFeature(name models.FeatureAccess, title string, description *string) error {
+	flag := models.FeatureFlags{Name: name, Title: title, Description: description}
+	if err := db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "name"}},
+		DoUpdates: clause.AssignmentColumns([]string{"title", "description", "updated_at", "deleted_at"}),
+	}).Create(&flag).Error; err != nil {
+		return newCreateDBError(err, "feature_flags")
+	}
+	return nil
 }
 
 // statewideDefaults is every feature on by default: a top-level feature by its
