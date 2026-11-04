@@ -39,12 +39,13 @@ import { cn } from '@/lib/utils';
 // group applies, and for Programs why it defaults on, so admins read turning it
 // off as a deliberate setup step rather than a suggested one. A group whose
 // parent is off stays visible but disabled, so admins can see which
-// sub-features exist.
-const SUB_FEATURE_NOTES: Partial<Record<string, string>> = {
-    [FeatureAccess.OpenContentAccess]:
-        'Sub-features (only available when Knowledge Center is enabled)',
-    [FeatureAccess.ProgramAccess]:
-        'Residents can see their own program information by default (only available when Program Hub & Tracking is enabled).'
+// sub-features exist. Each takes the parent's title from the feature list, so
+// a retitle shows up here too.
+const SUB_FEATURE_NOTES: Partial<Record<string, (title: string) => string>> = {
+    [FeatureAccess.OpenContentAccess]: (title) =>
+        `Sub-features (only available when ${title} is enabled)`,
+    [FeatureAccess.ProgramAccess]: (title) =>
+        `Residents can see their own program information by default (only available when ${title} is enabled).`
 };
 
 type FilterValue = 'all' | `${string}:true` | `${string}:false`;
@@ -400,7 +401,9 @@ export default function FeatureControl() {
                                     const subs = catalog.filter(
                                         (f) => f.parent === card.name
                                     );
-                                    const note = SUB_FEATURE_NOTES[card.name];
+                                    const note = SUB_FEATURE_NOTES[card.name]?.(
+                                        card.title
+                                    );
                                     return (
                                         <div
                                             key={card.name}
