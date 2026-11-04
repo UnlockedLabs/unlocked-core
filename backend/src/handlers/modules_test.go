@@ -310,7 +310,8 @@ func TestHTTPClient(t *testing.T) {
 // that is off.
 func TestFacilityFeatures(t *testing.T) {
 	srv := newTestingServer()
-	srv.features = []models.FeatureAccess{models.OpenContentAccess, models.HelpfulLinksAccess, models.ProviderAccess}
+	statewide := []models.FeatureAccess{models.OpenContentAccess, models.HelpfulLinksAccess, models.ProviderAccess}
+	setStatewideDefaults(t, srv, statewide...)
 	features := srv.moduleDeps().Features
 
 	tests := []struct {
@@ -318,8 +319,8 @@ func TestFacilityFeatures(t *testing.T) {
 		overrides map[models.FeatureAccess]bool
 		want      []models.FeatureAccess
 	}{
-		{"statewide", nil, srv.features},
-		{"turned on at the facility", map[models.FeatureAccess]bool{models.ProgramAccess: true}, append([]models.FeatureAccess{models.ProgramAccess}, srv.features...)},
+		{"statewide", nil, statewide},
+		{"turned on at the facility", map[models.FeatureAccess]bool{models.ProgramAccess: true}, append([]models.FeatureAccess{models.ProgramAccess}, statewide...)},
 		{"turned off at the facility", map[models.FeatureAccess]bool{models.ProviderAccess: false}, []models.FeatureAccess{models.OpenContentAccess, models.HelpfulLinksAccess}},
 		{"parent turned off", map[models.FeatureAccess]bool{models.OpenContentAccess: false}, []models.FeatureAccess{models.ProviderAccess}},
 	}
@@ -328,7 +329,7 @@ func TestFacilityFeatures(t *testing.T) {
 			facility := createTestFacility(t, srv, tt.name)
 			args := models.QueryContext{Ctx: context.Background()}
 			for feature, enabled := range tt.overrides {
-				require.NoError(t, srv.Db.UpsertFacilityFeatureFlag(&args, facility, feature, enabled, srv.features))
+				require.NoError(t, srv.Db.UpsertFacilityFeatureFlag(&args, facility, feature, enabled))
 			}
 			got, err := features.FacilityFeatures(context.Background(), facility)
 			require.NoError(t, err)
@@ -456,6 +457,14 @@ func createTestFacility(t *testing.T, srv *Server, name string) uint {
 	f := &models.Facility{Name: name, Timezone: "America/Chicago"}
 	require.NoError(t, srv.Db.CreateFacility(f))
 	return f.ID
+}
+
+// setStatewideDefaults turns on by default exactly the features named, and
+// every other feature off.
+func setStatewideDefaults(t *testing.T, srv *Server, on ...models.FeatureAccess) {
+	t.Helper()
+	require.NoError(t, srv.Db.Model(&models.FeatureFlags{}).Where("1 = 1").Update("default_enabled", false).Error)
+	require.NoError(t, srv.Db.Model(&models.FeatureFlags{}).Where("name IN ?", on).Update("default_enabled", true).Error)
 }
 
 func createTestUser(t *testing.T, srv *Server, username string, role models.UserRole, facilityID uint) *models.User {

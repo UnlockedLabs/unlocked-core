@@ -165,7 +165,7 @@ func (c httpClient) Do(req *http.Request) (*http.Response, error) {
 type facilityFeatures struct{ srv *Server }
 
 func (f facilityFeatures) FacilityFeatures(ctx context.Context, facilityID uint) ([]models.FeatureAccess, error) {
-	access, err := database.NewDB(f.srv.Db.WithContext(ctx)).GetFacilityFeatureAccess(facilityID, f.srv.features)
+	access, err := database.NewDB(f.srv.Db.WithContext(ctx)).GetFacilityFeatureAccess(facilityID)
 	if err != nil {
 		return nil, fmt.Errorf("get features for facility %d: %w", facilityID, dbCause(err))
 	}
