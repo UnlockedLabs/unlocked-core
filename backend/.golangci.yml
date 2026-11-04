@@ -29,7 +29,6 @@ linters:
             - github.com/UnlockedLabs/unlocked-core/backend/src/modules/module
             - github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry
             - github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api
-            - github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api
             - github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api
             - github.com/UnlockedLabs/unlocked-core/backend/src/modules/learningrecord/api
         # The seam imports nothing from core. depguard only sees each file's
@@ -43,18 +42,6 @@ linters:
               desc: the module seam must not expose core types to feature modules (EN-188)
           allow:
             - github.com/UnlockedLabs/unlocked-core/backend/src/modules/module
-        opencontent:
-          list-mode: lax
-          files: ["**/src/modules/opencontent/**"]
-          deny:
-            - pkg: github.com/UnlockedLabs/unlocked-core/backend
-              desc: a feature module reaches core only through src/modules/module and unlocked-contracts, and other modules only through their api package (EN-186, EN-188)
-          allow:
-            - github.com/UnlockedLabs/unlocked-core/backend/src/modules/module
-            - github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent
-            - github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api
-            - github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api
-            - github.com/UnlockedLabs/unlocked-core/backend/src/modules/learningrecord/api
         providerplatforms:
           list-mode: lax
           files: ["**/src/modules/providerplatforms/**"]
@@ -64,7 +51,6 @@ linters:
           allow:
             - github.com/UnlockedLabs/unlocked-core/backend/src/modules/module
             - github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms
-            - github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api
             - github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api
             - github.com/UnlockedLabs/unlocked-core/backend/src/modules/learningrecord/api
         programs:
@@ -76,7 +62,6 @@ linters:
           allow:
             - github.com/UnlockedLabs/unlocked-core/backend/src/modules/module
             - github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs
-            - github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api
             - github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api
             - github.com/UnlockedLabs/unlocked-core/backend/src/modules/learningrecord/api
         learningrecord:
@@ -88,6 +73,5 @@ linters:
           allow:
             - github.com/UnlockedLabs/unlocked-core/backend/src/modules/module
             - github.com/UnlockedLabs/unlocked-core/backend/src/modules/learningrecord
-            - github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api
             - github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api
             - github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api

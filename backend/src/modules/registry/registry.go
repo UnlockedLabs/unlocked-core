@@ -7,8 +7,6 @@ package registry
 import (
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/learningrecord"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent"
-	ocapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms"
@@ -23,16 +21,9 @@ import (
 func All() []module.Module {
 	return []module.Module{
 		providerplatforms.Module{},
-		opencontent.Module{},
 		programsModule(),
 		learningrecord.Module{},
 	}
-}
-
-// OpenContent is Open Content's answers to core, on the connection db gives
-// the Open Content module (database.ModuleDBs.For).
-func OpenContent(db func(name string) *gorm.DB) ocapi.OpenContent {
-	return opencontent.NewAPI(db(opencontent.Module{}.Name()))
 }
 
 // ProviderPlatforms is Provider Platforms' answers to core, on the connection

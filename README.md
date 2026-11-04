@@ -57,6 +57,12 @@ If you would like to contribute, please have a look at our [contribution guideli
 Subsequent runs can be done with `make dev`, which will start all the necessary containers
 with hot reloading on the client and the backend.
 
+**Open Content** ([unlocked-open-content](https://github.com/UnlockedLabs/unlocked-open-content))
+runs as its own service. `make dev` builds its `main` branch straight from GitHub, so you don't need
+a checkout of it. To work on it, clone it and set `OPEN_CONTENT_DIR` in `.env` to your checkout
+(such as `../unlocked-open-content`); `make dev` then builds your changes. To try another branch
+without a checkout, such as one in review, set `OPEN_CONTENT_REF` to the branch name.
+
 
 **NOTE:** you _must_ be sure to use `127.0.0.1` in place of `localhost` in your browser, as the cookies required for authentication are not shared between the two,
 and this can cause bad states in the browser that will prevent successful login/auth flow.
@@ -130,7 +136,7 @@ If this does not work because your directory is named something different, you c
  - **Videos**:
    Videos can be hosted locally for development, in which case they are simply downloaded and moved into the `frontend/public/videos` directory,
    If you wish to use `s3` and test out hosting videos between multiple instances, you need to set the following environment variables in either
-   the docker-compose.yml for both the `opencontent-worker` and `server` or in your production environment.
+   the docker-compose.yml for both `open-content` and `open-content-worker` (in `x-open-content`), or in your production environment.
  ```
      - AWS_REGION=
      - S3_BUCKET_NAME=

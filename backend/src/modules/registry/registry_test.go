@@ -25,8 +25,9 @@ func TestAllModules(t *testing.T) {
 			t.Errorf("module %q has no migrations folder: %v", name, err)
 		}
 	}
-	if len(seen) != 4 {
-		t.Errorf("got %d modules, want 4 (EN-186)", len(seen))
+	// Open Content moved to its own service in EN-205.
+	if len(seen) != 3 {
+		t.Errorf("got %d modules, want 3 (EN-186, EN-205)", len(seen))
 	}
 }
 

@@ -3,8 +3,9 @@ package models
 import (
 	"time"
 
-	ocapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api"
 	ppapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api"
+
+	ocapi "github.com/UnlockedLabs/unlocked-contracts/opencontent"
 )
 
 // KnowledgeCenterMetrics is the Knowledge Center page's numbers, from Open

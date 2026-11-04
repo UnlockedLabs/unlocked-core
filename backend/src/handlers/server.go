@@ -14,12 +14,12 @@ import (
 	database "github.com/UnlockedLabs/unlocked-core/backend/src/database"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
-	ocapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api"
 	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
 	ppapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/tasks"
 
+	ocapi "github.com/UnlockedLabs/unlocked-contracts/opencontent"
 	"github.com/nats-io/nats.go"
 	ory "github.com/ory/kratos-client-go"
 	"github.com/prometheus/client_golang/prometheus"
@@ -114,11 +114,7 @@ func init() {
 
 func securityHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/proxy/") {
-			w.Header().Set("X-Frame-Options", "SAMEORIGIN")
-		} else {
-			w.Header().Set("X-Frame-Options", "DENY")
-		}
+		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		if os.Getenv("APP_ENV") != "dev" {
 			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
@@ -193,7 +189,7 @@ func newServer(ctx context.Context) *Server {
 		dev:               dev,
 		modules:           mods,
 		moduleDBs:         moduleDBs,
-		openContent:       registry.OpenContent(moduleDBs.For),
+		openContent:       ocapi.NewClient(openContentURL(), os.Getenv("OPEN_CONTENT_TOKEN"), nil),
 		providerPlatforms: registry.ProviderPlatforms(moduleDBs.For),
 		programs:          registry.Programs(moduleDBs.For),
 	}
@@ -211,6 +207,9 @@ func newServer(ctx context.Context) *Server {
 		log.Fatal("Error setting up default admin in Kratos")
 	}
 	server.wsClient = newClientManager()
+	if err := server.forwardOpenContentNotifications(); err != nil {
+		log.Fatalf("Failed to subscribe to Open Content's notifications: %v", err)
+	}
 	if tasks.ServerRunsJobs() {
 		server.scheduler = tasks.Start(server.nats, server.modules, server.moduleDBs)
 	} else {
@@ -233,10 +232,19 @@ func newTestingServer() *Server {
 		testingMode:       true,
 		modules:           mods,
 		moduleDBs:         moduleDBs,
-		openContent:       registry.OpenContent(moduleDBs.For),
+		openContent:       ocapi.NewClient(openContentURL(), os.Getenv("OPEN_CONTENT_TOKEN"), nil),
 		providerPlatforms: registry.ProviderPlatforms(moduleDBs.For),
 		programs:          registry.Programs(moduleDBs.For),
 	}
+}
+
+// openContentURL is where core asks Open Content's service its questions:
+// OPEN_CONTENT_URL, else the service's name in the cluster.
+func openContentURL() string {
+	if url := os.Getenv("OPEN_CONTENT_URL"); url != "" {
+		return url
+	}
+	return "http://open-content:8080"
 }
 
 // ConnectNATS connects to NATS with NATS_URL, NATS_USER and NATS_PASSWORD. The
