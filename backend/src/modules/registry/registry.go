@@ -76,7 +76,5 @@ func LiveProviders(deps module.Deps) coreapi.LiveProviders {
 // programsModule is the Programs module, which asks the Provider Platforms
 // service about providers.
 func programsModule() programs.Module {
-	return programs.Module{ProviderPlatforms: func(module.Deps) providerplatforms.ProviderPlatforms {
-		return ProviderPlatforms()
-	}}
+	return programs.Module{ProviderPlatforms: ProviderPlatforms()}
 }

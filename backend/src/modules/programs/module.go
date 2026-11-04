@@ -24,11 +24,10 @@ import (
 //go:embed migrations
 var migrations embed.FS
 
-// Module is the Programs module. The registry gives it Provider Platforms'
-// api, on Provider Platforms' own connection, which it asks about providers
-// and the users linked to them.
+// Module is the Programs module. The registry gives it the Provider Platforms
+// service's client, which it asks about providers and the users linked to them.
 type Module struct {
-	ProviderPlatforms func(deps module.Deps) providerplatforms.ProviderPlatforms
+	ProviderPlatforms providerplatforms.ProviderPlatforms
 }
 
 var (
@@ -63,7 +62,7 @@ func (m Module) newServer(deps module.Deps) *server {
 	srv := &server{
 		store:             &Store{deps.DB},
 		Client:            deps.HTTP,
-		providerPlatforms: m.ProviderPlatforms(deps),
+		providerPlatforms: m.ProviderPlatforms,
 		facilityFeatures:  deps.Features,
 		reports:           deps.Reports,
 	}
