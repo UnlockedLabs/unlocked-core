@@ -63,6 +63,14 @@ a checkout of it. To work on it, clone it and set `OPEN_CONTENT_DIR` in `.env` t
 (such as `../unlocked-open-content`); `make dev` then builds your changes. To try another branch
 without a checkout, such as one in review, set `OPEN_CONTENT_REF` to the branch name.
 
+**Provider Platforms** ([unlocked-provider-platforms](https://github.com/UnlockedLabs/unlocked-provider-platforms))
+runs as its own service the same way: `make dev` builds its `main` branch from GitHub, or your
+checkout when `PROVIDER_PLATFORMS_DIR` is set, or another branch with `PROVIDER_PLATFORMS_REF`.
+The repo is private for now, so building from GitHub fails without access: clone it and set
+`PROVIDER_PLATFORMS_DIR` (such as `../unlocked-provider-platforms`). Core forwards its `/api`
+routes to it and both call each other with `PROVIDER_PLATFORMS_TOKEN`; if you run the server outside
+compose, `.env.example` points `PROVIDER_PLATFORMS_URL` at its port, 8083.
+
 
 **NOTE:** you _must_ be sure to use `127.0.0.1` in place of `localhost` in your browser, as the cookies required for authentication are not shared between the two,
 and this can cause bad states in the browser that will prevent successful login/auth flow.
@@ -118,20 +126,14 @@ If this does not work because your directory is named something different, you c
 
   To connect UnlockEd to it, log in to Canvas at `localhost:3001` as that admin, go to Account -> Settings ->
   New Access Token, and copy the token. Back in UnlockEd, enable the `provider_platforms` feature
-  flag for your facility (every Canvas call is gated on it) and add a Canvas provider platform:
-  `base_url` `http://canvas`, `account_id` `1`, and the token you just copied as `access_key`.
-  `make seed` no longer adds one, because Provider Platforms is its own service (EN-206).
+  flag for your facility (every Canvas call is gated on it) and edit the Canvas provider platform
+  `make seed` added (Provider Platforms' `seed-dev`): `base_url` `http://canvas`, `account_id` `1`,
+  and paste the token you just copied as its `access_key`.
 
   **Note** the base url is `http://canvas`, not `localhost:3001`. UnlockEd calls the Canvas API
   from inside the `providerplatforms` and `providerplatforms-worker` containers, so it needs the
   compose service name. `localhost:3001` only works from your browser.
 
-- **Provider Platforms** (EN-206) is its own repo, `unlocked-provider-platforms`. Compose builds it
-  from the checkout next to this one (`../unlocked-provider-platforms`) as `providerplatforms`,
-  `providerplatforms-worker` and a one-shot `providerplatforms-migrate` that runs after
-  `server-migrate`. Core forwards the `/api` routes to it and calls it, and it calls core, with the
-  shared `SERVICE_TOKEN` (`PROVIDER_PLATFORMS_URL` is where it is). If you run the server outside
-  compose, set both in `.env`.
 
  - **Videos**:
    Videos can be hosted locally for development, in which case they are simply downloaded and moved into the `frontend/public/videos` directory,
