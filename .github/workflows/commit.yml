@@ -1,18 +1,35 @@
+# Every commit on a branch must be a conventional commit: release-please builds
+# versions and the changelog from commit subjects. Same check as the other
+# UnlockEd repos (see docs/repo-standard.md). Merge commits are skipped.
 name: commits
 
-on: [push, pull_request]
+on:
+  pull_request:
+
+permissions:
+  contents: read
 
 jobs:
-  build:
+  commits:
     name: conventional commits
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-
-      - uses: webiny/action-conventional-commits@8bc41ff4e7d423d56fa4905f6ff79209a78776c7 # v1.3.0
         with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Same types as pr-title.yml. The action's default also allows wip and
-          # merge, which release-please ignores. Git's own "Merge ..." and
-          # "Revert ..." messages are always allowed.
-          allowed-commit-types: "feat,fix,docs,style,refactor,test,build,perf,ci,chore,revert"
+          fetch-depth: 0
+
+      - name: Check commit subjects
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          pattern='^(feat|fix|chore|docs|refactor|test|ci|build|perf|revert|style)(\([a-z0-9._/-]+\))?!?: .+'
+          bad=0
+          while IFS= read -r subject; do
+            if ! printf '%s' "$subject" | grep -Eq "$pattern"; then
+              echo "::error::not a conventional commit: $subject"
+              bad=1
+            fi
+          done < <(git log --no-merges --format=%s "$BASE..$HEAD")
+          exit $bad
