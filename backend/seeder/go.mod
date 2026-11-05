@@ -3,7 +3,7 @@ module seeder
 go 1.26.10
 
 require (
-	github.com/UnlockedLabs/unlocked-contracts v0.3.2-0.20261105174553-f3516cf56ee0
+	github.com/UnlockedLabs/unlocked-contracts v0.4.0
 	github.com/UnlockedLabs/unlocked-core/backend v0.0.0
 	github.com/go-faker/faker/v4 v4.6.0
 	github.com/joho/godotenv v1.5.1
