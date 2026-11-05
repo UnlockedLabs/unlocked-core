@@ -180,10 +180,13 @@ func ValidateUserRow(row []string, rowNum int, headerMap *HeaderMapping, existin
 	}
 
 	if residentID != "" {
-		if existingRowNum, exists := existingResidentIDs[residentID]; exists {
+		// Resident IDs are unique case-insensitively (see ResidentIDExists), so
+		// the intra-batch check folds case too.
+		lowerResidentID := strings.ToLower(residentID)
+		if existingRowNum, exists := existingResidentIDs[lowerResidentID]; exists {
 			errors = append(errors, fmt.Sprintf("Duplicate Resident ID - also found in row %d", existingRowNum))
 		} else {
-			existingResidentIDs[residentID] = rowNum
+			existingResidentIDs[lowerResidentID] = rowNum
 		}
 	}
 
