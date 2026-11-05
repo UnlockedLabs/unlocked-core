@@ -24,7 +24,7 @@ require (
 )
 
 require (
-	github.com/UnlockedLabs/unlocked-contracts v0.3.2-0.20261105171320-7b17ec6d27b0
+	github.com/UnlockedLabs/unlocked-contracts v0.3.2-0.20261105174553-f3516cf56ee0
 	github.com/xuri/excelize/v2 v2.11.1-0.20260915055537-22f76f9acb94
 )
 
