@@ -15,6 +15,11 @@ Please provide a brief description of the changes included in this PR.
 
 - **Related issues**: Link to related JIRA ticket that this closes.
 
+## Release
+
+- **Changelog type**: `feat` (minor bump), `fix` (patch bump), or none (`chore`, `docs`, `ci`, `test`, `refactor`).
+- **Breaking change?**: yes / no. If yes, add `!` to the title (`feat!:`) and list what consumers must change.
+
 ## Screenshot(s)
 
 If the PR includes changes to the UI:
