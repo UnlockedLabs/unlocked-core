@@ -9,6 +9,8 @@ on:
       - "backend/go.mod"
       - "backend/go.sum"
       - ".github/workflows/security-go.yml"
+      - ".github/scan-result.sh"
+      - ".github/scan-result_test.sh"
 
 permissions:
   contents: read
@@ -23,6 +25,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Test scan classifier
+        run: bash .github/scan-result_test.sh
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -46,72 +51,89 @@ jobs:
         run: |
           echo "Running govulncheck on the backend module..."
 
-          backend_vuln=false
-
           echo "Scanning backend module..."
           cd backend
-          if govulncheck ./... > ../backend_vuln_output.txt 2>&1; then
-            echo "No vulnerabilities found in backend"
-          else
-            backend_vuln=true
-            echo "Vulnerabilities found in backend"
-          fi
+          set +e
+          govulncheck ./... > ../backend_vuln_output.txt 2>&1
+          code=$?
+          set -e
           cd ..
 
-          if [ "$backend_vuln" = true ]; then
-            echo "vulnerabilities_found=true" >> $GITHUB_OUTPUT
-            echo "Security vulnerabilities detected - this PR cannot be merged"
-            exit 1
-          else
-            echo "vulnerabilities_found=false" >> $GITHUB_OUTPUT
-            echo "No vulnerabilities found in any Go modules"
-          fi
+          result=$(.github/scan-result.sh go "$code")
+          echo "govulncheck exit code $code -> $result"
+
+          case "$result" in
+            clean)
+              echo "vulnerabilities_found=false" >> "$GITHUB_OUTPUT"
+              echo "No vulnerabilities found in any Go modules"
+              ;;
+            vulnerabilities_found)
+              echo "vulnerabilities_found=true" >> "$GITHUB_OUTPUT"
+              echo "Security vulnerabilities detected - this PR cannot be merged"
+              exit 1
+              ;;
+            *)
+              echo "vulnerabilities_found=false" >> "$GITHUB_OUTPUT"
+              echo "scan_failed=true" >> "$GITHUB_OUTPUT"
+              cat backend_vuln_output.txt
+              echo "::error::Scan failed (govulncheck exit code $code), re-run"
+              exit 1
+              ;;
+          esac
 
       - name: Send Slack notification
         if: failure() && steps.vuln-scan.outputs.vulnerabilities_found == 'true'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
           BACKEND_VULN=$(cat backend_vuln_output.txt 2>/dev/null || echo "No backend vulnerabilities output")
 
           VULN_OUTPUT=$(printf "=== BACKEND VULNERABILITIES ===\n%s" "$BACKEND_VULN")
 
-          VULN_ESCAPED=$(echo "$VULN_OUTPUT" | sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/' | tr -d '\n' | head -c 2000)
+          VULN_TEXT=$(printf '%s' "$VULN_OUTPUT" | head -c 2000)
           if [ ${#VULN_OUTPUT} -gt 2000 ]; then
-            VULN_ESCAPED="$VULN_ESCAPED... (truncated, see full output in workflow logs)"
+            VULN_TEXT="$VULN_TEXT... (truncated, see full output in workflow logs)"
           fi
 
           SLACK_MESSAGE=$(cat <<EOF
           🚨 *SECURITY VULNERABILITIES DETECTED* 🚨
 
-          Repository: ${{ github.repository }}
-          PR: #${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}
-          Author: ${{ github.event.pull_request.user.login }}
-          Branch: ${{ github.event.pull_request.head.ref }}
+          Repository: $REPO
+          PR: #$PR_NUMBER - $PR_TITLE
+          Author: $PR_AUTHOR
+          Branch: $PR_BRANCH
 
           This PR contains Go security vulnerabilities and has been blocked from merging until fixed.
 
           *Vulnerability Details:*
-          $VULN_ESCAPED
+          $VULN_TEXT
 
           🔧 *Actions needed:*
           1. Update affected dependencies: \`go get -u <package>@<safe-version>\`
           2. Push updates to the PR
 
-          *PR Link:* ${{ github.event.pull_request.html_url }}
+          *PR Link:* $PR_URL
           EOF
           )
+
+          PAYLOAD=$(jq -n --arg text "$SLACK_MESSAGE" '{channel: "#unlockedv2-alerts", username: "Security Bot", icon_emoji: ":warning:", text: $text}')
 
           if ! curl -X POST -H 'Content-type: application/json' \
                --max-time 10 \
                --silent \
                --fail \
-               --data "{\"channel\":\"#unlockedv2-alerts\",\"username\":\"Security Bot\",\"icon_emoji\":\":warning:\",\"text\":\"$SLACK_MESSAGE\"}" \
-               "${{ secrets.SLACK_WEBHOOK_URL }}"; then
+               --data "$PAYLOAD" \
+               "$SLACK_WEBHOOK_URL"; then
             echo "Warning: Failed to send Slack notification"
           else
             echo "Slack notification sent successfully to #unlockedv2-alerts"
           fi
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Security check summary
         if: always()
@@ -129,6 +151,8 @@ jobs:
             echo ""
             echo "Slack notification sent to #unlockedv2-alerts"
             echo ""
+          elif [ "${{ steps.vuln-scan.outputs.scan_failed }}" == 'true' ]; then
+            echo "SCAN FAILED - govulncheck did not complete, re-run the job"
           else
             echo "SECURITY CHECK PASSED - No vulnerabilities found in any Go modules"
           fi
