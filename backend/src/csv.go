@@ -180,10 +180,12 @@ func ValidateUserRow(row []string, rowNum int, headerMap *HeaderMapping, existin
 	}
 
 	if residentID != "" {
-		if existingRowNum, exists := existingResidentIDs[residentID]; exists {
+		// The intra-batch check compares IDs the way the database check does.
+		residentKey := models.NormalizeResidentID(residentID)
+		if existingRowNum, exists := existingResidentIDs[residentKey]; exists {
 			errors = append(errors, fmt.Sprintf("Duplicate Resident ID - also found in row %d", existingRowNum))
 		} else {
-			existingResidentIDs[residentID] = rowNum
+			existingResidentIDs[residentKey] = rowNum
 		}
 	}
 

@@ -281,15 +281,28 @@ func (db *DB) UserIdentityExists(username string, doc string) (bool, bool) {
 		log.Error("Error checking username: ", err)
 	}
 	if doc != "" {
-		if err := db.Model(&models.User{}).
-			Select("1").
-			Where("doc_id = ?", doc).
-			Limit(1).
-			Find(&docIDExists).Error; err != nil {
+		exists, err := db.ResidentIDExists(doc)
+		if err != nil {
 			log.Error("Error checking doc_id: ", err)
 		}
+		docIDExists = exists
 	}
 	return usernameExists, docIDExists
+}
+
+// ResidentIDExists reports whether any user already has docID as their
+// resident ID, compared as models.NormalizeResidentID compares them.
+func (db *DB) ResidentIDExists(docID string) (bool, error) {
+	var exists bool
+	if err := db.Model(&models.User{}).
+		Select("1").
+		// The stored side of models.NormalizeResidentID; change both together.
+		Where("LOWER(TRIM(doc_id)) = ?", models.NormalizeResidentID(docID)).
+		Limit(1).
+		Find(&exists).Error; err != nil {
+		return false, newGetRecordsDBError(err, "users")
+	}
+	return exists, nil
 }
 
 func (db *DB) UpdateUser(user *models.User) error {

@@ -136,6 +136,47 @@ func TestCreateUserHandler(t *testing.T) {
 		_, err = env.CreateTestUser("importedresident", models.Student, facility.ID, "")
 		require.NoError(t, err)
 	})
+
+	t.Run("resident ID already in use", func(t *testing.T) {
+		facility, err := env.CreateTestFacility("Duplicate ID Facility")
+		require.NoError(t, err)
+		_, err = env.CreateTestUser("crtowner", models.Student, facility.ID, "RID-4000")
+		require.NoError(t, err)
+
+		tests := []struct {
+			name     string
+			username string
+			docID    string
+		}{
+			{"same ID", "crtsame", "RID-4000"},
+			{"different case and spaces", "crtcase", "  rid-4000 "},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				var form struct {
+					User      models.User `json:"user"`
+					Providers []int       `json:"provider_platforms"`
+				}
+				form.User = models.User{
+					Username:   tt.username,
+					NameFirst:  "Test",
+					NameLast:   "User",
+					Role:       models.Student,
+					Email:      tt.username + "@example.com",
+					DocID:      models.StringPtr(tt.docID),
+					FacilityID: facility.ID,
+				}
+
+				NewRequest[struct {
+					User models.User `json:"user"`
+				}](env.Client, t, http.MethodPost, "/api/users", form).
+					WithTestClaims(&handlers.Claims{Role: models.SystemAdmin}).
+					Do().
+					ExpectStatus(http.StatusConflict).
+					ExpectMessage("This resident ID is already in use")
+			})
+		}
+	})
 }
 
 func TestUpdateUserHandler(t *testing.T) {
@@ -186,6 +227,60 @@ func TestUpdateUserHandler(t *testing.T) {
 		require.NoError(t, err)
 
 		got := patch(t, admin.ID, map[string]any{"name_first": "Renamed"}).
+			ExpectStatus(http.StatusOK).
+			GetData()
+
+		require.Equal(t, "Renamed", got.NameFirst)
+	})
+
+	// A resident ID belongs to one user across every facility, ignoring case
+	// and surrounding spaces.
+	t.Run("resident ID already in use", func(t *testing.T) {
+		otherFacility, err := env.CreateTestFacility("Other Facility")
+		require.NoError(t, err)
+		_, err = env.CreateTestUser("updowner", models.Student, otherFacility.ID, "RID-3000")
+		require.NoError(t, err)
+
+		tests := []struct {
+			name       string
+			username   string
+			ownID      string
+			newID      string
+			wantStatus int
+		}{
+			{"another resident's ID", "updtaken", "RID-3001", "RID-3000", http.StatusConflict},
+			{"another resident's ID in different case", "updtakencase", "RID-3002", "rid-3000", http.StatusConflict},
+			{"another resident's ID with spaces", "updtakenspace", "RID-3003", "  RID-3000 ", http.StatusConflict},
+			{"own ID unchanged", "updown", "RID-3004", "RID-3004", http.StatusOK},
+			{"own ID in different case", "updowncase", "RID-3005", "rid-3005", http.StatusOK},
+			{"an unused ID", "updunused", "RID-3006", "RID-3999", http.StatusOK},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				user, err := env.CreateTestUser(tt.username, models.Student, facility.ID, tt.ownID)
+				require.NoError(t, err)
+
+				resp := patch(t, user.ID, map[string]any{"name_first": "Renamed", "doc_id": tt.newID}).
+					ExpectStatus(tt.wantStatus)
+				if tt.wantStatus == http.StatusConflict {
+					resp.ExpectMessage("This resident ID is already in use")
+					stored, err := env.DB.GetUserByID(user.ID)
+					require.NoError(t, err)
+					require.Equal(t, tt.ownID, models.FormatNullableString(stored.DocID))
+				}
+			})
+		}
+	})
+
+	// Sites may already have two residents sharing an ID. Editing one without
+	// changing the ID must still work.
+	t.Run("resident already sharing an ID can be renamed", func(t *testing.T) {
+		_, err := env.CreateTestUser("updshareda", models.Student, facility.ID, "RID-3100")
+		require.NoError(t, err)
+		user, err := env.CreateTestUser("updsharedb", models.Student, facility.ID, "RID-3100")
+		require.NoError(t, err)
+
+		got := patch(t, user.ID, map[string]any{"name_first": "Renamed", "doc_id": "RID-3100"}).
 			ExpectStatus(http.StatusOK).
 			GetData()
 

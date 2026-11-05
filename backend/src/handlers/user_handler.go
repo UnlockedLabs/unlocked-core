@@ -26,6 +26,12 @@ import (
 // Postgres and fails as a 22001 (500) instead of a 400.
 const maxDocIDLen = 32
 
+// A taken resident ID is a 409, so the frontend can show this message on the
+// Resident ID field.
+func newResidentIDInUseError() serviceError {
+	return NewServiceError(errors.New("resident id in use"), http.StatusConflict, "This resident ID is already in use")
+}
+
 func (srv *Server) registerUserRoutes() []routeDef {
 	resolver := UserRoleResolver("id")
 	return []routeDef{
@@ -238,7 +244,7 @@ func (srv *Server) handleCreateUser(w http.ResponseWriter, r *http.Request, log 
 		return newBadRequestServiceError(err, "Username already exists")
 	}
 	if docExists {
-		return newBadRequestServiceError(err, "Resident ID already exists")
+		return newResidentIDInUseError()
 	}
 	reqForm.User.Username = stripNonAlphaChars(reqForm.User.Username, isUsernameChar)
 	err = srv.WithUserContext(r).CreateUser(&reqForm.User)
@@ -358,6 +364,18 @@ func (srv *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request, log 
 
 	if invalidDocID := validateResidentID(toUpdate.Role, models.FormatNullableString(user.DocID)); invalidDocID != "" {
 		return newBadRequestServiceError(errors.New("invalid resident id"), invalidDocID)
+	}
+	// Only a changed ID is checked, so saving a resident with their own ID
+	// always works, even one another resident already shares.
+	newDocID := models.NormalizeResidentID(models.FormatNullableString(user.DocID))
+	if newDocID != "" && newDocID != models.NormalizeResidentID(models.FormatNullableString(toUpdate.DocID)) {
+		exists, err := srv.Db.ResidentIDExists(newDocID)
+		if err != nil {
+			return newDatabaseServiceError(err)
+		}
+		if exists {
+			return newResidentIDInUseError()
+		}
 	}
 	invalidUser := validateUser(&user)
 	if invalidUser != "" {
