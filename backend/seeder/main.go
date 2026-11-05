@@ -13,7 +13,6 @@ import (
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 
@@ -94,19 +93,6 @@ func seedTestData(db *gorm.DB) {
 	err := db.Find(&facilities).Error
 	if err != nil {
 		log.Printf("Failed to get facilities: %v", err)
-	}
-	videos := generateFakeVideos(3, 25)
-	for i := range videos {
-		// create open_content_url for each video
-		_ = db.Create(&opencontent.OpenContentUrl{
-			ContentURL: fmt.Sprintf("/api/proxy/videos/%d", videos[i].ID),
-		}).Error
-	}
-
-	for i := range videos {
-		if err := db.Create(&videos[i]).Error; err != nil {
-			log.Printf("Failed to create fake video: %v", err)
-		}
 	}
 	users := generateFakeUsers(facilities)
 	for idx := range users {
@@ -282,147 +268,8 @@ func createUserSessionActivity(db *gorm.DB, dbUsers []models.User) {
 			}
 		}
 	}
-
-	// libraries come from the kiwix scrape, so seed activity against whatever exists
-	var libraries []opencontent.Library
-	if err := db.Model(&opencontent.Library{}).Find(&libraries).Error; err != nil {
-		log.Printf("Failed to get libraries: %v", err)
-	}
-	for _, lib := range libraries {
-		if err := db.Create(&opencontent.OpenContentUrl{ContentURL: fmt.Sprintf("/api/proxy/libraries/%d/", lib.ID)}).Error; err != nil {
-			log.Printf("Failed to create openconenturl: %v", err)
-		}
-	}
-	var openContentUrls []opencontent.OpenContentUrl
-	if err := db.Find(&openContentUrls).Error; err != nil {
-		log.Printf("Failed to get open content urls: %v", err)
-	}
-	var videos []opencontent.Video
-	if err := db.Model(&opencontent.Video{}).Find(&videos).Error; err != nil {
-		log.Printf("Failed to get videos: %v", err)
-	}
-	generateOpenContentFavorites(db, dbUsers, libraries, videos)
-	for _, user := range dbUsers {
-		if user.Role != "student" {
-			continue
-		}
-		for _, video := range videos {
-			numSessions := rand.Intn(20)
-			for range numSessions {
-				if rand.Intn(100)%3 == 0 {
-					randomDayOffset := rand.Intn(int(now.Sub(threeMonthsInPast).Hours() / 24))
-					requestDate := threeMonthsInPast.Add(time.Duration(randomDayOffset*24) * time.Hour)
-					requestHour := rand.Intn(23)
-					requestMinute := rand.Intn(60)
-					requestSecond := rand.Intn(60)
-					requestTS := time.Date(requestDate.Year(), requestDate.Month(), requestDate.Day(), requestHour, requestMinute, requestSecond, 0, time.UTC)
-					stopTS := requestTS.Add(time.Duration(rand.Intn(360)) * time.Minute)
-					contentActivity := opencontent.OpenContentActivity{
-						OpenContentUrlID:      getRandomURLForLibrary(openContentUrls),
-						RequestTS:             requestTS,
-						OpenContentProviderID: video.OpenContentProviderID,
-						FacilityID:            user.FacilityID,
-						UserID:                user.ID,
-						ContentID:             video.ID,
-						StopTS:                stopTS,
-					}
-					if err := db.Create(&contentActivity).Error; err != nil {
-						log.Printf("Failed to create open content activity: %v", err)
-					}
-				}
-			}
-		}
-		for _, kiwix := range libraries {
-			numSessions := rand.Intn(20)
-			for range numSessions {
-				if rand.Intn(100)%3 == 0 {
-					// Select random facility, provider, and content
-					urlID := getRandomURLForLibrary(openContentUrls)
-					randomDayOffset := rand.Intn(int(now.Sub(threeMonthsInPast).Hours() / 24))
-					requestDate := threeMonthsInPast.Add(time.Duration(randomDayOffset*24) * time.Hour)
-					requestHour := rand.Intn(23)
-					requestMinute := rand.Intn(60)
-					requestSecond := rand.Intn(60)
-					requestTS := time.Date(requestDate.Year(), requestDate.Month(), requestDate.Day(), requestHour, requestMinute, requestSecond, 0, time.UTC)
-					stopTS := requestTS.Add(time.Duration(rand.Intn(360)) * time.Minute)
-					contentActivity := opencontent.OpenContentActivity{
-						RequestTS:             requestTS,
-						OpenContentProviderID: kiwix.OpenContentProviderID,
-						FacilityID:            user.FacilityID,
-						UserID:                user.ID,
-						ContentID:             kiwix.ID,
-						OpenContentUrlID:      urlID,
-						StopTS:                stopTS,
-					}
-					if err := db.Create(&contentActivity).Error; err != nil {
-						log.Printf("Failed to create open content activity: %v", err)
-					}
-				}
-			}
-
-		}
-	}
 }
 
-func getRandomURLForLibrary(urls []opencontent.OpenContentUrl) uint {
-	selectedURL := urls[rand.Intn(len(urls))]
-	return selectedURL.ID
-}
-
-func generateOpenContentFavorites(db *gorm.DB, users []models.User, libraries []opencontent.Library, videos []opencontent.Video) {
-	var urls []opencontent.OpenContentUrl
-
-	if err := db.Find(&urls).Error; err != nil {
-		log.Printf("Failed to fetch open content URLs: %v", err)
-		return
-	}
-	for _, user := range users {
-		if user.Role != "student" {
-			continue
-		}
-		numFavorites := rand.Intn(8) + 3 // 3-10 favorites
-		for range numFavorites {
-			isLibrary := rand.Intn(2) == 0
-			var fav opencontent.OpenContentFavorite
-
-			if isLibrary && len(libraries) > 0 {
-				lib := libraries[rand.Intn(len(libraries))]
-				var urlID *uint
-				for _, url := range urls {
-					if strings.Contains(url.ContentURL, fmt.Sprintf("/libraries/%d/", lib.ID)) {
-						urlID = &url.ID
-						break
-					}
-				}
-
-				fav = opencontent.OpenContentFavorite{
-					UserID:                user.ID,
-					ContentID:             lib.ID,
-					OpenContentProviderID: lib.OpenContentProviderID,
-					OpenContentUrlID:      urlID,
-					Name:                  models.StringPtr(lib.Title),
-					CreatedAt:             time.Now().AddDate(0, 0, -rand.Intn(90)),
-				}
-			} else if len(videos) > 0 {
-				vid := videos[rand.Intn(len(videos))]
-				fav = opencontent.OpenContentFavorite{
-					UserID:                user.ID,
-					ContentID:             vid.ID,
-					OpenContentProviderID: vid.OpenContentProviderID,
-					OpenContentUrlID:      nil, // videos never have one
-					Name:                  models.StringPtr(vid.Title),
-					CreatedAt:             time.Now().AddDate(0, 0, -rand.Intn(90)),
-				}
-			} else {
-				continue
-			}
-
-			if err := db.Create(&fav).Error; err != nil {
-				log.Printf("Failed to create favorite: %v", err)
-			}
-		}
-	}
-}
 func getRandomProgram(programMap map[string]programs.ProgType) string {
 	keySlice := make([]string, 0, len(programMap))
 	for key := range programMap {
@@ -431,26 +278,6 @@ func getRandomProgram(programMap map[string]programs.ProgType) string {
 	return keySlice[rand.Intn(len(keySlice))]
 }
 
-func generateFakeVideos(providerID uint, count int) []opencontent.Video {
-	videos := make([]opencontent.Video, 0, count)
-	for range count {
-		title := faker.Sentence()
-		channel := faker.Name()
-		video := opencontent.Video{
-			ExternalID:            fmt.Sprintf("vid-%d-%s", rand.Intn(999999), faker.Word()),
-			Url:                   fmt.Sprintf("https://video.example.com/watch?v=%d", rand.Intn(999999)),
-			Title:                 title,
-			Availability:          opencontent.VideoAvailable,
-			ChannelTitle:          &channel,
-			Duration:              rand.Intn(7200) + 60, // 1–120 mins
-			Description:           models.StringPtr(faker.Paragraph()),
-			ThumbnailUrl:          models.StringPtr(fmt.Sprintf("https://img.example.com/thumbs/%d.jpg", rand.Intn(999999))),
-			OpenContentProviderID: providerID,
-		}
-		videos = append(videos, video)
-	}
-	return videos
-}
 func createFacilityPrograms(db *gorm.DB) ([]programs.ProgramClassCohort, error) {
 	facilities := []models.Facility{}
 	fundingTypes := [6]programs.FundingType{programs.EduGrants, programs.FederalGrants, programs.InmateWelfare, programs.NonProfitOrgs, programs.Other, programs.StateGrants}

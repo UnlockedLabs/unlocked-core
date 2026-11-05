@@ -24,16 +24,20 @@ type TestEnv struct {
 	// Programs is the Programs module's database, for tests that call its
 	// queries directly.
 	Programs *programs.Store
-	Client   *Client
-	Context  context.Context
-	Cancel   context.CancelFunc
-	T        *testing.T
+	// OpenContent is the stand-in for Open Content's service, whose answers a
+	// test sets.
+	OpenContent *fakeOpenContent
+	Client      *Client
+	Context     context.Context
+	Cancel      context.CancelFunc
+	T           *testing.T
 }
 
 func SetupTestEnv(t *testing.T) *TestEnv {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	providers := startFakeProviderPlatforms(t)
+	openContent := startFakeOpenContent(t)
 	server := handlers.NewServer(true, ctx)
 	if server == nil {
 		t.Fatal("Failed to create test server")
@@ -48,14 +52,15 @@ func SetupTestEnv(t *testing.T) *TestEnv {
 	client := NewClient(ts.URL)
 
 	return &TestEnv{
-		Server:     server,
-		TestServer: ts,
-		DB:         server.Db,
-		Programs:   &programs.Store{DB: server.Db.DB},
-		Client:     client,
-		Context:    ctx,
-		Cancel:     cancel,
-		T:          t,
+		Server:      server,
+		TestServer:  ts,
+		DB:          server.Db,
+		Programs:    &programs.Store{DB: server.Db.DB},
+		OpenContent: openContent,
+		Client:      client,
+		Context:     ctx,
+		Cancel:      cancel,
+		T:           t,
 	}
 }
 

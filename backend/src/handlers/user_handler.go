@@ -839,7 +839,7 @@ func (srv *Server) handleGenerateUsageReportPDF(w http.ResponseWriter, r *http.R
 	if err != nil {
 		return newDatabaseServiceError(err)
 	}
-	subjectFeatures, err := srv.Db.GetFacilityFeatureAccess(subject.FacilityID, srv.features)
+	subjectFeatures, err := srv.Db.GetFacilityFeatureAccess(subject.FacilityID)
 	if err != nil {
 		return newDatabaseServiceError(err)
 	}

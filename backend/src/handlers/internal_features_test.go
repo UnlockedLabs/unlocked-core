@@ -19,11 +19,12 @@ func TestHandleInternalFeatures(t *testing.T) {
 	srv := newTestingServer()
 	// Statewide defaults as a fresh install has them: learning_record and
 	// ai_tutor off, everything else on.
-	srv.features = []models.FeatureAccess{
+	statewide := []models.FeatureAccess{
 		models.OpenContentAccess, models.RequestContentAccess, models.HelpfulLinksAccess, models.UploadVideoAccess,
 		models.ProviderAccess,
 		models.ProgramAccess, models.ResidentProgramsAccess,
 	}
+	setStatewideDefaults(t, srv, statewide...)
 	srv.registerInternalRoutes()
 
 	tests := []struct {
@@ -37,14 +38,14 @@ func TestHandleInternalFeatures(t *testing.T) {
 			name:       "no overrides returns the statewide defaults",
 			query:      "facility_id={id}",
 			wantStatus: http.StatusOK,
-			want:       srv.features,
+			want:       statewide,
 		},
 		{
 			name:       "an override turns on a feature that is off statewide",
 			overrides:  map[models.FeatureAccess]bool{models.LearningRecordAccess: true},
 			query:      "facility_id={id}",
 			wantStatus: http.StatusOK,
-			want:       append([]models.FeatureAccess{models.LearningRecordAccess}, srv.features...),
+			want:       append([]models.FeatureAccess{models.LearningRecordAccess}, statewide...),
 		},
 		{
 			name:       "turning off a parent turns off its sub-features",
@@ -77,7 +78,7 @@ func TestHandleInternalFeatures(t *testing.T) {
 			require.NoError(t, srv.Db.Create(&facility).Error)
 			args := models.QueryContext{Ctx: context.Background()}
 			for feature, enabled := range tt.overrides {
-				require.NoError(t, srv.Db.UpsertFacilityFeatureFlag(&args, facility.ID, feature, enabled, srv.features))
+				require.NoError(t, srv.Db.UpsertFacilityFeatureFlag(&args, facility.ID, feature, enabled))
 			}
 
 			query := strings.ReplaceAll(tt.query, "{id}", strconv.Itoa(int(facility.ID)))
@@ -92,6 +93,96 @@ func TestHandleInternalFeatures(t *testing.T) {
 			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 			assert.Equal(t, facility.ID, resp.Data.FacilityID)
 			assert.ElementsMatch(t, tt.want, resp.Data.Features)
+		})
+	}
+}
+
+func TestHandleInternalRegisterFeature(t *testing.T) {
+	srv := newTestingServer()
+	srv.registerInternalRoutes()
+	put := func(name, body string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		srv.Mux.ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/internal/v1/features/"+name, strings.NewReader(body)))
+		return w
+	}
+	find := func(name models.FeatureAccess) (models.CatalogFeature, bool) {
+		catalog, err := srv.Db.FeatureCatalog()
+		require.NoError(t, err)
+		return catalog.Find(name)
+	}
+	facility := models.Facility{Name: "Register Feature", Timezone: "America/Chicago"}
+	require.NoError(t, srv.Db.Create(&facility).Error)
+
+	t.Run("a new feature is created and starts off", func(t *testing.T) {
+		w := put("my_tool", `{"title":" My Tool ","description":"  "}`)
+		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+		f, ok := find("my_tool")
+		require.True(t, ok)
+		assert.Equal(t, "My Tool", f.Title)
+		assert.Nil(t, f.Description, "a blank description is stored as NULL")
+		assert.False(t, f.DefaultEnabled)
+		assert.Empty(t, f.Parent)
+		effective, err := srv.Db.GetFacilityFeatureAccess(facility.ID)
+		require.NoError(t, err)
+		assert.NotContains(t, effective, models.FeatureAccess("my_tool"))
+	})
+
+	t.Run("registering again changes only the text", func(t *testing.T) {
+		args := models.QueryContext{Ctx: context.Background()}
+		require.NoError(t, srv.Db.UpsertFacilityFeatureFlag(&args, facility.ID, "my_tool", true))
+		require.NoError(t, srv.Db.Model(&models.FeatureFlags{}).Where("name = ?", "my_tool").Update("default_enabled", true).Error)
+
+		w := put("my_tool", `{"title":"My Tool 2","description":"Does things"}`)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+		f, ok := find("my_tool")
+		require.True(t, ok)
+		assert.Equal(t, "My Tool 2", f.Title)
+		require.NotNil(t, f.Description)
+		assert.Equal(t, "Does things", *f.Description)
+		assert.True(t, f.DefaultEnabled, "registering never changes the default")
+		effective, err := srv.Db.GetFacilityFeatureAccess(facility.ID)
+		require.NoError(t, err)
+		assert.Contains(t, effective, models.FeatureAccess("my_tool"), "registering never changes a facility's setting")
+	})
+
+	tests := []struct {
+		name, feature, body string
+		wantStatus          int
+	}{
+		{"longest name", strings.Repeat("a", 64), `{"title":"Long"}`, http.StatusCreated},
+		{"longest title", "long_title", `{"title":"` + strings.Repeat("t", 100) + `"}`, http.StatusCreated},
+		{"longest description", "long_description", `{"title":"x","description":"` + strings.Repeat("d", 500) + `"}`, http.StatusCreated},
+		{"uppercase", "My_Tool", `{"title":"x"}`, http.StatusBadRequest},
+		{"dash", "my-tool", `{"title":"x"}`, http.StatusBadRequest},
+		{"leading underscore", "_tool", `{"title":"x"}`, http.StatusBadRequest},
+		{"leading digit", "1tool", `{"title":"x"}`, http.StatusBadRequest},
+		{"name too long", strings.Repeat("a", 65), `{"title":"x"}`, http.StatusBadRequest},
+		{"no title", "no_title", `{}`, http.StatusBadRequest},
+		{"blank title", "blank_title", `{"title":"   "}`, http.StatusBadRequest},
+		{"title too long", "big_title", `{"title":"` + strings.Repeat("t", 101) + `"}`, http.StatusBadRequest},
+		{"description too long", "big_description", `{"title":"x","description":"` + strings.Repeat("d", 501) + `"}`, http.StatusBadRequest},
+		{"NUL in title", "nul_title", `{"title":"My\u0000Tool"}`, http.StatusBadRequest},
+		{"NUL in description", "nul_description", `{"title":"x","description":"a\u0000b"}`, http.StatusBadRequest},
+		{"not json", "bad_body", `title`, http.StatusBadRequest},
+		{"body too large", "huge_body", `{"title":"x","description":"` + strings.Repeat("d", 17*1024) + `"}`, http.StatusBadRequest},
+		{"a core feature's name", string(models.OpenContentAccess), `{"title":"x"}`, http.StatusConflict},
+		{"a core feature's name, no description", string(models.AiTutorAccess), `{"title":"AI Tutor"}`, http.StatusConflict},
+		{"a sub-feature's name", string(models.UploadVideoAccess), `{"title":"x"}`, http.StatusConflict},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			before, existed := find(models.FeatureAccess(tt.feature))
+			w := put(tt.feature, tt.body)
+			require.Equal(t, tt.wantStatus, w.Code, w.Body.String())
+			after, exists := find(models.FeatureAccess(tt.feature))
+			if tt.wantStatus == http.StatusCreated {
+				assert.True(t, exists)
+				return
+			}
+			assert.Equal(t, existed, exists, "a refused request adds nothing")
+			assert.Equal(t, before, after, "a refused request changes nothing")
 		})
 	}
 }

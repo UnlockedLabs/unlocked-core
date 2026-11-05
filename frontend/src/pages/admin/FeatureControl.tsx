@@ -7,6 +7,7 @@ import {
     FeatureAccess,
     FacilityFeatureOverviewRow,
     FacilityFeatureDetailRow,
+    FeatureCatalogEntry,
     ServerResponseMany
 } from '@/types';
 import API from '@/api/api';
@@ -34,111 +35,20 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 
-// The 5 features shown as their own card/pill. Order drives both the list-panel
-// pills and the detail-panel cards.
-const TOP_LEVEL_FEATURES = [
-    FeatureAccess.OpenContentAccess,
-    FeatureAccess.ProviderAccess,
-    FeatureAccess.ProgramAccess,
-    FeatureAccess.LearningRecordAccess,
-    FeatureAccess.AiTutorAccess
-];
-
-const FEATURE_CARDS: {
-    feature: FeatureAccess;
-    title: string;
-    description: string;
-}[] = [
-    {
-        feature: FeatureAccess.OpenContentAccess,
-        title: 'Knowledge Center',
-        description:
-            'Provides educational content, videos, and resources for residents'
-    },
-    {
-        feature: FeatureAccess.ProviderAccess,
-        title: 'Learning Platforms',
-        description:
-            'Enables access to third-party provider platforms and courses'
-    },
-    {
-        feature: FeatureAccess.ProgramAccess,
-        title: 'Program Hub & Tracking',
-        description:
-            'Enables program management, class scheduling, attendance tracking, and resident enrollment functionality'
-    },
-    {
-        feature: FeatureAccess.LearningRecordAccess,
-        title: 'Learning Record',
-        description:
-            'Allows residents to log and track their learning achievements and generate a personal learning record'
-    },
-    {
-        feature: FeatureAccess.AiTutorAccess,
-        title: 'AI Tutor',
-        description:
-            'Provides an AI-powered HiSET tutor and writing assistant for residents'
-    }
-];
-
-const FEATURE_LABELS: Partial<Record<FeatureAccess, string>> =
-    Object.fromEntries(FEATURE_CARDS.map((c) => [c.feature, c.title]));
-
-interface SubFeature {
-    feature: FeatureAccess;
-    label: string;
-    description: string;
-}
-
-// Sub-features nested under the top-level feature that gates them. `note` is the
-// line above the group explaining when the group applies — for Programs it also
-// explains why the default is on, so admins read turning it off as a deliberate
-// setup step rather than a suggested one. A group whose parent is off stays
-// visible but disabled, so admins can see which sub-features exist.
-const SUB_FEATURE_GROUPS: Partial<
-    Record<FeatureAccess, { note: string; features: SubFeature[] }>
-> = {
-    [FeatureAccess.OpenContentAccess]: {
-        note: 'Sub-features (only available when Knowledge Center is enabled)',
-        features: [
-            {
-                feature: FeatureAccess.RequestContentAccess,
-                label: 'Request Content Button',
-                description:
-                    'Allows residents to submit requests for new content to be added to the Knowledge Center'
-            },
-            {
-                feature: FeatureAccess.HelpfulLinksAccess,
-                label: 'Helpful Links',
-                description:
-                    'Enables the Helpful Links tab for residents and allows admins to add/manage helpful resources'
-            },
-            {
-                feature: FeatureAccess.UploadVideoAccess,
-                label: 'Videos',
-                description:
-                    'Enables video content viewing for residents and allows admins to upload/manage videos'
-            }
-        ]
-    },
-    [FeatureAccess.ProgramAccess]: {
-        note: 'Residents can see their own program information by default (only available when Program Hub & Tracking is enabled).',
-        features: [
-            {
-                feature: FeatureAccess.ResidentProgramsAccess,
-                label: 'Programs Page for Residents',
-                description:
-                    'Shows the Programs page and its nav item in the resident portal. Program tracking, data, and admin views are unaffected either way.'
-            }
-        ]
-    }
+// The line above each group of sub-features, keyed by their parent: when the
+// group applies, and for Programs why it defaults on, so admins read turning it
+// off as a deliberate setup step rather than a suggested one. A group whose
+// parent is off stays visible but disabled, so admins can see which
+// sub-features exist. Each takes the parent's title from the feature list, so
+// a retitle shows up here too.
+const SUB_FEATURE_NOTES: Partial<Record<string, (title: string) => string>> = {
+    [FeatureAccess.OpenContentAccess]: (title) =>
+        `Sub-features (only available when ${title} is enabled)`,
+    [FeatureAccess.ProgramAccess]: (title) =>
+        `Residents can see their own program information by default (only available when ${title} is enabled).`
 };
 
-const ALL_SUB_FEATURES: SubFeature[] = Object.values(
-    SUB_FEATURE_GROUPS
-).flatMap((group) => group.features);
-
-type FilterValue = 'all' | `${FeatureAccess}:true` | `${FeatureAccess}:false`;
+type FilterValue = 'all' | `${string}:true` | `${string}:false`;
 
 function overviewUrl(search: string, filter: FilterValue): string {
     const params = new URLSearchParams();
@@ -152,11 +62,14 @@ function overviewUrl(search: string, filter: FilterValue): string {
     return `/api/facilities/features${qs ? `?${qs}` : ''}`;
 }
 
-function onCount(row: FacilityFeatureOverviewRow): number {
-    return TOP_LEVEL_FEATURES.filter((f) => row.features[f]).length;
+function onCount(
+    row: FacilityFeatureOverviewRow,
+    topLevel: FeatureCatalogEntry[]
+): number {
+    return topLevel.filter((f) => row.features[f.name]).length;
 }
 
-function FeaturePill({ feature, on }: { feature: FeatureAccess; on: boolean }) {
+function FeaturePill({ label, on }: { label: string; on: boolean }) {
     return (
         <span
             className={cn(
@@ -166,7 +79,7 @@ function FeaturePill({ feature, on }: { feature: FeatureAccess; on: boolean }) {
                     : 'bg-muted text-muted-foreground border-border'
             )}
         >
-            {FEATURE_LABELS[feature]}
+            {label}
         </span>
     );
 }
@@ -177,7 +90,7 @@ function SubFeatureRow({
     disabled,
     onToggle
 }: {
-    sub: SubFeature;
+    sub: FeatureCatalogEntry;
     enabled: boolean;
     disabled: boolean;
     onToggle: () => void;
@@ -191,14 +104,16 @@ function SubFeatureRow({
         >
             <div className="flex-1 pr-4">
                 <h4 className="text-sm font-medium text-brand-dark dark:text-white">
-                    {sub.label}
+                    {sub.title}
                 </h4>
-                <p className="text-xs text-muted-foreground mt-1">
-                    {sub.description}
-                </p>
+                {sub.description && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                        {sub.description}
+                    </p>
+                )}
             </div>
             <Switch
-                aria-label={`Toggle ${sub.label}`}
+                aria-label={`Toggle ${sub.title}`}
                 checked={enabled}
                 disabled={disabled}
                 onCheckedChange={onToggle}
@@ -217,14 +132,22 @@ export default function FeatureControl() {
     );
     const [confirmApplyAll, setConfirmApplyAll] = useState(false);
     const [applying, setApplying] = useState(false);
-    const [pendingFeature, setPendingFeature] = useState<FeatureAccess | null>(
-        null
-    );
+    const [pendingFeature, setPendingFeature] = useState<string | null>(null);
 
     useEffect(() => {
         const timer = setTimeout(() => setDebouncedSearch(search), 300);
         return () => clearTimeout(timer);
     }, [search]);
+
+    // Every feature, including any a product registered, so a new one shows up
+    // here without a frontend change.
+    const {
+        data: catalogResp,
+        isLoading: catalogLoading,
+        error: catalogError
+    } = useSWR<ServerResponseMany<FeatureCatalogEntry>, Error>('/api/features');
+    const catalog = useMemo(() => catalogResp?.data ?? [], [catalogResp]);
+    const topLevel = useMemo(() => catalog.filter((f) => !f.parent), [catalog]);
 
     const {
         data: overviewResp,
@@ -245,7 +168,7 @@ export default function FeatureControl() {
             : null
     );
     const detailRows = detailResp?.data ?? [];
-    const isEnabled = (feature: FeatureAccess) =>
+    const isEnabled = (feature: string) =>
         detailRows.find((r) => r.feature === feature)?.enabled ?? false;
 
     // Default to the acting admin's own facility once the list loads.
@@ -264,6 +187,16 @@ export default function FeatureControl() {
 
     if (!user) return null;
 
+    if (catalogError) {
+        return (
+            <div className="full-page-center">
+                <div className="text-red-600">
+                    Error loading the feature list
+                </div>
+            </div>
+        );
+    }
+
     async function refreshOwnClaimsIfAffected(facilityId: number) {
         if (user?.facility_id === facilityId) {
             const updated = await fetchUser();
@@ -271,13 +204,10 @@ export default function FeatureControl() {
         }
     }
 
-    async function handleToggle(feature: FeatureAccess, currentValue: boolean) {
+    async function handleToggle(feature: string, currentValue: boolean) {
         if (selectedFacilityId === null || pendingFeature !== null || applying)
             return;
-        const label =
-            FEATURE_LABELS[feature] ??
-            ALL_SUB_FEATURES.find((s) => s.feature === feature)?.label ??
-            feature;
+        const label = catalog.find((f) => f.name === feature)?.title ?? feature;
         setPendingFeature(feature);
         try {
             const resp = await API.put<string, { enabled: boolean }>(
@@ -358,25 +288,21 @@ export default function FeatureControl() {
                                 <SelectItem value="all">
                                     All facilities
                                 </SelectItem>
-                                {TOP_LEVEL_FEATURES.map((feature) => (
-                                    <SelectGroup key={feature}>
+                                {topLevel.map((feature) => (
+                                    <SelectGroup key={feature.name}>
                                         <SelectSeparator />
                                         <SelectLabel>
-                                            {FEATURE_LABELS[feature]}
+                                            {feature.title}
                                         </SelectLabel>
                                         <SelectItem
-                                            value={
-                                                `${feature}:true` as FilterValue
-                                            }
+                                            value={`${feature.name}:true`}
                                         >
-                                            {FEATURE_LABELS[feature]}: On
+                                            {feature.title}: On
                                         </SelectItem>
                                         <SelectItem
-                                            value={
-                                                `${feature}:false` as FilterValue
-                                            }
+                                            value={`${feature.name}:false`}
                                         >
-                                            {FEATURE_LABELS[feature]}: Off
+                                            {feature.title}: Off
                                         </SelectItem>
                                     </SelectGroup>
                                 ))}
@@ -384,7 +310,7 @@ export default function FeatureControl() {
                         </Select>
                     </div>
                     <div className="max-h-[calc(100vh-20rem)] overflow-y-auto p-2">
-                        {overviewLoading ? (
+                        {overviewLoading || catalogLoading ? (
                             <p className="px-2 py-3 text-xs text-gray-400">
                                 Loading facilities…
                             </p>
@@ -418,16 +344,16 @@ export default function FeatureControl() {
                                                 {row.facility_name}
                                             </span>
                                             <span className="text-xs text-gray-500 dark:text-gray-400">
-                                                {onCount(row)} of{' '}
-                                                {TOP_LEVEL_FEATURES.length} on
+                                                {onCount(row, topLevel)} of{' '}
+                                                {topLevel.length} on
                                             </span>
                                         </div>
                                         <div className="mt-1.5 flex flex-wrap gap-1">
-                                            {TOP_LEVEL_FEATURES.map((f) => (
+                                            {topLevel.map((f) => (
                                                 <FeaturePill
-                                                    key={f}
-                                                    feature={f}
-                                                    on={!!row.features[f]}
+                                                    key={f.name}
+                                                    label={f.title}
+                                                    on={!!row.features[f.name]}
                                                 />
                                             ))}
                                         </div>
@@ -455,21 +381,32 @@ export default function FeatureControl() {
                                     variant="outline"
                                     onClick={() => setConfirmApplyAll(true)}
                                     disabled={
-                                        pendingFeature !== null || applying
+                                        pendingFeature !== null ||
+                                        applying ||
+                                        catalogLoading
                                     }
                                 >
                                     Apply these settings to all facilities
                                 </Button>
                             </div>
 
+                            {catalogLoading && (
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    Loading features…
+                                </p>
+                            )}
                             <div className="space-y-4">
-                                {FEATURE_CARDS.map((card) => {
-                                    const enabled = isEnabled(card.feature);
-                                    const subGroup =
-                                        SUB_FEATURE_GROUPS[card.feature];
+                                {topLevel.map((card) => {
+                                    const enabled = isEnabled(card.name);
+                                    const subs = catalog.filter(
+                                        (f) => f.parent === card.name
+                                    );
+                                    const note = SUB_FEATURE_NOTES[card.name]?.(
+                                        card.title
+                                    );
                                     return (
                                         <div
-                                            key={card.feature}
+                                            key={card.name}
                                             className="bg-background border border-border rounded-lg p-6"
                                         >
                                             <div className="flex items-start justify-between mb-3">
@@ -477,9 +414,11 @@ export default function FeatureControl() {
                                                     <h3 className="text-lg font-semibold text-brand-dark dark:text-white">
                                                         {card.title}
                                                     </h3>
-                                                    <p className="text-sm text-muted-foreground mt-1">
-                                                        {card.description}
-                                                    </p>
+                                                    {card.description && (
+                                                        <p className="text-sm text-muted-foreground mt-1">
+                                                            {card.description}
+                                                        </p>
+                                                    )}
                                                 </div>
                                                 <Switch
                                                     aria-label={`Toggle ${card.title}`}
@@ -492,56 +431,52 @@ export default function FeatureControl() {
                                                     }
                                                     onCheckedChange={() =>
                                                         void handleToggle(
-                                                            card.feature,
+                                                            card.name,
                                                             enabled
                                                         )
                                                     }
                                                 />
                                             </div>
 
-                                            {subGroup && (
+                                            {subs.length > 0 && (
                                                 <div className="mt-4 bg-surface-hover rounded-md p-4">
-                                                    <div className="flex items-start gap-2 mb-4 text-sm text-muted-foreground">
-                                                        <AlertCircle className="size-4 shrink-0" />
-                                                        <span>
-                                                            {subGroup.note}
-                                                        </span>
-                                                    </div>
+                                                    {note && (
+                                                        <div className="flex items-start gap-2 mb-4 text-sm text-muted-foreground">
+                                                            <AlertCircle className="size-4 shrink-0" />
+                                                            <span>{note}</span>
+                                                        </div>
+                                                    )}
                                                     <div className="space-y-4">
-                                                        {subGroup.features.map(
-                                                            (sub) => {
-                                                                const subEnabled =
-                                                                    isEnabled(
-                                                                        sub.feature
-                                                                    );
-                                                                return (
-                                                                    <SubFeatureRow
-                                                                        key={
-                                                                            sub.feature
-                                                                        }
-                                                                        sub={
-                                                                            sub
-                                                                        }
-                                                                        enabled={
-                                                                            subEnabled
-                                                                        }
-                                                                        disabled={
-                                                                            !enabled ||
-                                                                            pendingFeature !==
-                                                                                null ||
-                                                                            detailLoading ||
-                                                                            applying
-                                                                        }
-                                                                        onToggle={() =>
-                                                                            void handleToggle(
-                                                                                sub.feature,
-                                                                                subEnabled
-                                                                            )
-                                                                        }
-                                                                    />
+                                                        {subs.map((sub) => {
+                                                            const subEnabled =
+                                                                isEnabled(
+                                                                    sub.name
                                                                 );
-                                                            }
-                                                        )}
+                                                            return (
+                                                                <SubFeatureRow
+                                                                    key={
+                                                                        sub.name
+                                                                    }
+                                                                    sub={sub}
+                                                                    enabled={
+                                                                        subEnabled
+                                                                    }
+                                                                    disabled={
+                                                                        !enabled ||
+                                                                        pendingFeature !==
+                                                                            null ||
+                                                                        detailLoading ||
+                                                                        applying
+                                                                    }
+                                                                    onToggle={() =>
+                                                                        void handleToggle(
+                                                                            sub.name,
+                                                                            subEnabled
+                                                                        )
+                                                                    }
+                                                                />
+                                                            );
+                                                        })}
                                                     </div>
                                                 </div>
                                             )}

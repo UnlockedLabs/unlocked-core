@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/UnlockedLabs/unlocked-contracts/features"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 
 	log "github.com/sirupsen/logrus"
@@ -103,7 +104,7 @@ func (s *Server) authMiddleware(next http.Handler, resolver RouteResolver) http.
 					// wants to assert restricted access must set it explicitly (even to
 					// an empty slice), since nil and [] would otherwise be indistinguishable.
 					if testClaims.FeatureAccess == nil {
-						testClaims.FeatureAccess = models.AllFeatures
+						testClaims.FeatureAccess = features.All
 					}
 					claims = &testClaims
 				}
@@ -257,7 +258,7 @@ func (srv *Server) handleCheckAuth(w http.ResponseWriter, r *http.Request, log s
 	traits["name_last"] = user.NameLast
 	traits["timezone"] = claims.TimeZone
 	traits["facility"] = fac
-	if traits["feature_access"] == nil || len(srv.features) == 0 {
+	if traits["feature_access"] == nil {
 		traits["feature_access"] = []models.FeatureAccess{}
 	}
 	return writeJsonResponse(w, http.StatusOK, traits)
@@ -364,7 +365,7 @@ func (srv *Server) claimsForKratosID(kratosID string) (*Claims, error) {
 	if user.DeactivatedAt != nil {
 		return nil, errUserDeactivated
 	}
-	featureAccess, err := srv.Db.GetFacilityFeatureAccess(user.FacilityID, srv.features)
+	featureAccess, err := srv.Db.GetFacilityFeatureAccess(user.FacilityID)
 	if err != nil {
 		log.WithFields(log.Fields{"handler": "claimsForKratosID", "user_id": user.ID}).Errorf("Error resolving facility feature access: %v", err)
 		featureAccess = []models.FeatureAccess{}

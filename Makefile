@@ -14,6 +14,13 @@ BUILD_RECREATE=--build --force-recreate
 # somewhere other than a sibling ../ai/ directory. Docker Compose reads the
 # same variable from .env for the tutor build context, so the two never drift.
 DEFAULT_AI_DIR=../ai/unlocked-hiset-ai
+# Open Content runs as its own service (EN-205). `make dev` builds it straight
+# from GitHub (OPEN_CONTENT_REF, default main), so no checkout is needed; set
+# OPEN_CONTENT_DIR in .env (or the environment) to your checkout to build your
+# own changes. Docker Compose reads the same variables for the build context.
+OPEN_CONTENT_REPO=https://github.com/UnlockedLabs/unlocked-open-content.git
+# Open Content's one-off commands run in its migrate service's container.
+OPEN_CONTENT_RUN=docker compose run --rm --no-deps open-content-migrate
 # Canvas admin created on first `make canvas`. Override in the environment if
 # you want different credentials. These are also what you log into Canvas with
 # at localhost:3001 to mint the API token.
@@ -46,6 +53,22 @@ define run_dev_compose
 	fi; \
 	export GIT_COMMIT=$$(git rev-parse --short HEAD 2>/dev/null || echo unknown); \
 	export GIT_BRANCH=$$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown); \
+	OC_DIR=$${OPEN_CONTENT_DIR:-$$(sed -n 's/^OPEN_CONTENT_DIR=//p' .env | tail -1)}; \
+	if [ -n "$$OC_DIR" ]; then \
+		if [ ! -d "$$OC_DIR" ]; then \
+			echo "OPEN_CONTENT_DIR is $$OC_DIR, but there's no checkout there. Clone it, or unset OPEN_CONTENT_DIR to build Open Content from GitHub."; \
+			exit 1; \
+		fi; \
+		export OPEN_CONTENT_GIT_COMMIT=$$(git -C "$$OC_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown); \
+		export OPEN_CONTENT_GIT_BRANCH=$$(git -C "$$OC_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown); \
+		echo "Building Open Content from your checkout $$OC_DIR @ $$OPEN_CONTENT_GIT_BRANCH ($$OPEN_CONTENT_GIT_COMMIT)"; \
+	else \
+		OC_REF=$${OPEN_CONTENT_REF:-$$(sed -n 's/^OPEN_CONTENT_REF=//p' .env | tail -1)}; \
+		export OPEN_CONTENT_GIT_BRANCH=$${OC_REF:-main}; \
+		OC_COMMIT=$$(git ls-remote $(OPEN_CONTENT_REPO) "refs/heads/$$OPEN_CONTENT_GIT_BRANCH" 2>/dev/null | cut -c1-7); \
+		export OPEN_CONTENT_GIT_COMMIT=$${OC_COMMIT:-unknown}; \
+		echo "Building Open Content from GitHub @ $$OPEN_CONTENT_GIT_BRANCH ($$OPEN_CONTENT_GIT_COMMIT)"; \
+	fi; \
 	AI_DIR=$${TUTOR_DIR:-$$(sed -n 's/^TUTOR_DIR=//p' .env | tail -1)}; \
 	AI_DIR=$${AI_DIR:-$(DEFAULT_AI_DIR)}; \
 	TUTOR_READY=0; TUTOR_WHY=; \
@@ -210,11 +233,19 @@ install-dep: ascii_art
 	fi
 	docker compose down && docker volume rm -f unlockedv2_node_modules && cd frontend && yarn add $(NAME) && cd ..
 	$(call run_dev_compose,)
+# Open Content's migrations roll back first, since they move tables that
+# core's reset drops, and run again after it. Its services restart because
+# their connections switch to the role the reset recreates, and the worker
+# seeds the fresh database when it starts.
 migrate-fresh: ascii_art
+	$(OPEN_CONTENT_RUN) migrate-reset
 	go run -tags dev $(MIGRATE_MAIN) --fresh
+	$(OPEN_CONTENT_RUN) migrate
+	docker compose restart open-content open-content-worker
 
 migrate: ascii_art
 	go run $(MIGRATE_MAIN)
+	$(OPEN_CONTENT_RUN) migrate
 
 kolibri: ascii_art
 	$(call run_dev_compose,-f $(DOCKER_COMPOSE) -f $(KOLIBRI_COMPOSE))
@@ -245,6 +276,7 @@ canvas-seed: ascii_art
 
 seed: ascii_art
 	go run $(SEED_MAIN)
+	$(OPEN_CONTENT_RUN) seed-dev
 
 build: ascii_art
 	@if [ -z "$(ACCOUNT_ID)" ]; then \

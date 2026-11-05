@@ -8,8 +8,9 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
-	ocapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api"
 	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
+
+	ocapi "github.com/UnlockedLabs/unlocked-contracts/opencontent"
 )
 
 func (srv *Server) registerFacilitiesRoutes() []routeDef {

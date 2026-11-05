@@ -10,8 +10,6 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/learningrecord"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent"
-	ocapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
 
@@ -25,29 +23,28 @@ import (
 // since EN-206, so it isn't here.
 func All() []module.Module {
 	return []module.Module{
-		opencontent.Module{},
 		programsModule(),
 		learningrecord.Module{},
 	}
 }
 
-// OpenContent is Open Content's answers to core, on the connection db gives
-// the Open Content module (database.ModuleDBs.For).
-func OpenContent(db func(name string) *gorm.DB) ocapi.OpenContent {
-	return opencontent.NewAPI(db(opencontent.Module{}.Name()))
+// ProviderPlatformsURL is where the Provider Platforms service is:
+// PROVIDER_PLATFORMS_URL, else the service's name in the cluster.
+func ProviderPlatformsURL() string {
+	if url := os.Getenv("PROVIDER_PLATFORMS_URL"); url != "" {
+		return url
+	}
+	return "http://provider-platforms:8080"
 }
 
-// ProviderPlatformsURL is where the Provider Platforms service is, such as
-// "http://provider-platforms:8080".
-func ProviderPlatformsURL() string { return os.Getenv("PROVIDER_PLATFORMS_URL") }
-
-// ServiceToken is the secret core and the product services send each other.
-func ServiceToken() string { return os.Getenv("SERVICE_TOKEN") }
+// ProviderPlatformsToken is the site's secret core and the Provider Platforms
+// service call each other with.
+func ProviderPlatformsToken() string { return os.Getenv("PROVIDER_PLATFORMS_TOKEN") }
 
 // ProviderPlatforms is the Provider Platforms service's answers to core, asked
 // over HTTP.
 func ProviderPlatforms() providerplatforms.ProviderPlatforms {
-	return providerplatforms.NewClient(ProviderPlatformsURL(), ServiceToken(), http.DefaultClient)
+	return providerplatforms.NewClient(ProviderPlatformsURL(), ProviderPlatformsToken(), http.DefaultClient)
 }
 
 // Programs is Programs' answers to core, on the connection db gives the

@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
-	ocapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api"
 
+	ocapi "github.com/UnlockedLabs/unlocked-contracts/opencontent"
 	"github.com/coder/websocket"
+	"github.com/nats-io/nats.go"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -68,22 +69,60 @@ type ClientManager struct {
 	mutex   sync.RWMutex
 }
 
+// Close ends every open tab, as the server shuts down. It takes the tabs out
+// under the lock and ends them after releasing it, all at once, since ending
+// a tab's visit asks Open Content over HTTP.
 func (c *ClientManager) Close(db *database.DB, openContent ocapi.OpenContent) {
 	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	for _, client := range c.clients {
-		key := client.getClientKey()
-		c.handleCleanup(db, openContent, key)
+	clients := c.clients
+	c.clients = make(map[uint]*WsClient)
+	ends := make([]tabEnd, 0, len(clients))
+	for _, client := range clients {
+		ends = append(ends, client.tabEnd())
+	}
+	c.mutex.Unlock()
+
+	var wg sync.WaitGroup
+	for _, end := range ends {
+		wg.Go(func() { end.run(db, openContent) })
+	}
+	// Conn isn't set to nil: the tab's reader and heartbeat may still be
+	// using it, and closing it makes their next call fail.
+	for key, client := range clients {
 		client.cancel()
 		if client.Conn != nil {
 			err := client.Conn.Close(websocket.StatusNormalClosure, "server shutdown")
 			if err != nil {
 				log.Warnf("Failed to close WebSocket for user %d: %v", key, err)
 			}
-			client.Conn = nil
 		}
-		delete(c.clients, key)
 	}
+	wg.Wait()
+}
+
+// forwardOpenContentNotifications sends each message Open Content publishes
+// to the user's open tab. Every server subscribes, without a queue group,
+// since each holds different tabs.
+func (srv *Server) forwardOpenContentNotifications() error {
+	_, err := srv.nats.Subscribe(ocapi.NotifySubject, func(msg *nats.Msg) {
+		srv.notifyFromOpenContent(msg.Data)
+	})
+	return err
+}
+
+// notifyFromOpenContent sends one of Open Content's messages to the user's
+// open tab. The tab ends the message's activity when it closes.
+func (srv *Server) notifyFromOpenContent(data []byte) {
+	var n ocapi.Notification
+	if err := json.Unmarshal(data, &n); err != nil {
+		log.Errorf("Failed to read an Open Content notification: %v", err)
+		return
+	}
+	srv.wsClient.notifyUser(WsMsg{
+		EventType: WsEventType(n.Event),
+		UserID:    n.UserID,
+		Msg:       MsgContent{ActivityID: n.ActivityID, Msg: n.Text},
+	})
 }
 
 func newClientManager() *ClientManager {
@@ -192,24 +231,49 @@ func (srv *Server) handleWebsocketConnection(w http.ResponseWriter, r *http.Requ
 	return nil
 }
 
+// handleCleanup ends the session and the Open Content visit of the user's
+// open tab. It reads them under the lock and ends them after releasing it,
+// since ending the visit asks Open Content over HTTP, and every other user's
+// connect waits on the lock.
 func (cm *ClientManager) handleCleanup(db *database.DB, openContent ocapi.OpenContent, clientKey uint) {
 	cm.mutex.RLock()
-	defer cm.mutex.RUnlock()
 	client, ok := cm.clients[clientKey]
-	if !ok {
-		return
+	var end tabEnd
+	if ok {
+		end = client.tabEnd()
 	}
-	if client.SessionID != "" {
-		db.LogUserSessionEnded(client.UserID, client.SessionID)
+	cm.mutex.RUnlock()
+	if ok {
+		end.run(db, openContent)
 	}
-	if client.OpenContentActivityID > 0 {
-		openContent.EndActivity(context.Background(), client.OpenContentActivityID)
+}
+
+// tabEnd is what ends when a user's tab closes: its login session and its
+// Open Content visit.
+type tabEnd struct {
+	userID     uint
+	sessionID  string
+	activityID int64
+}
+
+func (client *WsClient) tabEnd() tabEnd {
+	return tabEnd{userID: client.UserID, sessionID: client.SessionID, activityID: client.OpenContentActivityID}
+}
+
+func (end tabEnd) run(db *database.DB, openContent ocapi.OpenContent) {
+	if end.sessionID != "" {
+		db.LogUserSessionEnded(end.userID, end.sessionID)
+	}
+	if end.activityID > 0 {
+		openContent.EndActivity(context.Background(), end.activityID)
 	}
 }
 
 func (srv *Server) handleIfClientExists(client *WsClient, reason string) {
 	clientKey := client.getClientKey()
+	srv.wsClient.mutex.RLock()
 	existingClient, exists := srv.wsClient.clients[clientKey]
+	srv.wsClient.mutex.RUnlock()
 	if exists {
 		log.Warnf("client exists for key/user_id %d. Closing connection.", clientKey)
 		srv.wsClient.handleCleanup(srv.Db, srv.openContent, clientKey)

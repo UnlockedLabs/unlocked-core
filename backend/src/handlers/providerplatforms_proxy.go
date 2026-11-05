@@ -21,7 +21,7 @@ import (
 // (providerplatforms.Routes), then the service gets the request with the
 // service token and the caller's claims.
 func (srv *Server) registerProviderPlatformsRoutes() {
-	proxy, err := newProviderPlatformsProxy(registry.ProviderPlatformsURL(), registry.ServiceToken())
+	proxy, err := newProviderPlatformsProxy(registry.ProviderPlatformsURL(), registry.ProviderPlatformsToken())
 	if err != nil {
 		log.Fatalf("Provider Platforms URL: %v", err)
 	}

@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.10.0](https://github.com/UnlockedLabs/unlocked-core/compare/v1.9.0...v1.10.0) (2026-11-04)
+
+
+### Features
+
+* add a product's feature flag without code changes (EN-257) ([2353748](https://github.com/UnlockedLabs/unlocked-core/commit/235374858bf3ee8ceb2912904e0a721e6e6caa96))
+
+## [1.9.0](https://github.com/UnlockedLabs/unlocked-core/compare/v1.8.0...v1.9.0) (2026-11-04)
+
+
+### Features
+
+* **learningrecord:** give Learning Record its own database schema (EN-286) ([#1283](https://github.com/UnlockedLabs/unlocked-core/issues/1283)) ([9dd57e8](https://github.com/UnlockedLabs/unlocked-core/commit/9dd57e8cc441a2f2886ac9460b00c6b36433e7ad))
+* move Open Content out of core (EN-205) ([57759d2](https://github.com/UnlockedLabs/unlocked-core/commit/57759d29718a4ef2bc1c099983e9e05b59208cb8))
+
 ## [1.8.0](https://github.com/UnlockedLabs/unlocked-core/compare/v1.7.0...v1.8.0) (2026-10-30)
 
 

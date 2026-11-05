@@ -14,11 +14,11 @@ import (
 	database "github.com/UnlockedLabs/unlocked-core/backend/src/database"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
-	ocapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api"
 	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/tasks"
 
+	ocapi "github.com/UnlockedLabs/unlocked-contracts/opencontent"
 	"github.com/nats-io/nats.go"
 	ory "github.com/ory/kratos-client-go"
 	"github.com/prometheus/client_golang/prometheus"
@@ -37,7 +37,6 @@ type Server struct {
 	nats              *nats.Conn
 	dev               bool
 	buckets           map[string]nats.KeyValue
-	features          []models.FeatureAccess
 	testingMode       bool
 	wsClient          *ClientManager
 	scheduler         *tasks.Scheduler
@@ -116,11 +115,7 @@ func init() {
 
 func securityHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/proxy/") {
-			w.Header().Set("X-Frame-Options", "SAMEORIGIN")
-		} else {
-			w.Header().Set("X-Frame-Options", "DENY")
-		}
+		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		if os.Getenv("APP_ENV") != "dev" {
 			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
@@ -195,17 +190,11 @@ func newServer(ctx context.Context) *Server {
 		dev:               dev,
 		modules:           mods,
 		moduleDBs:         moduleDBs,
-		openContent:       registry.OpenContent(moduleDBs.For),
+		openContent:       ocapi.NewClient(openContentURL(), os.Getenv("OPEN_CONTENT_TOKEN"), nil),
 		providerPlatforms: registry.ProviderPlatforms(),
 		programs:          registry.Programs(moduleDBs.For),
 	}
-	features, err := server.Db.GetFeatureAccess()
-	if err != nil {
-		log.Fatal("Failed to fetch feature flags")
-	}
-	server.features = features
-	err = server.setupNatsKvBuckets()
-	if err != nil {
+	if err := server.setupNatsKvBuckets(); err != nil {
 		log.Fatalf("Failed to setup JetStream KV store: %v", err)
 	}
 	server.RegisterRoutes()
@@ -213,6 +202,9 @@ func newServer(ctx context.Context) *Server {
 		log.Fatal("Error setting up default admin in Kratos")
 	}
 	server.wsClient = newClientManager()
+	if err := server.forwardOpenContentNotifications(); err != nil {
+		log.Fatalf("Failed to subscribe to Open Content's notifications: %v", err)
+	}
 	if tasks.ServerRunsJobs() {
 		server.scheduler = tasks.Start(server.nats, server.modules, server.moduleDBs, server.Db, server.providerPlatforms)
 	} else {
@@ -223,7 +215,6 @@ func newServer(ctx context.Context) *Server {
 
 func newTestingServer() *Server {
 	db := database.InitDB(context.Background(), true)
-	features := models.AllFeatures
 	mods := registry.All()
 	moduleDBs := database.OpenModuleDBs(db.DB, mods)
 	return &Server{
@@ -231,14 +222,22 @@ func newTestingServer() *Server {
 		Mux:               http.NewServeMux(),
 		OryClient:         nil,
 		Client:            nil,
-		features:          features,
 		testingMode:       true,
 		modules:           mods,
 		moduleDBs:         moduleDBs,
-		openContent:       registry.OpenContent(moduleDBs.For),
+		openContent:       ocapi.NewClient(openContentURL(), os.Getenv("OPEN_CONTENT_TOKEN"), nil),
 		providerPlatforms: registry.ProviderPlatforms(),
 		programs:          registry.Programs(moduleDBs.For),
 	}
+}
+
+// openContentURL is where core asks Open Content's service its questions:
+// OPEN_CONTENT_URL, else the service's name in the cluster.
+func openContentURL() string {
+	if url := os.Getenv("OPEN_CONTENT_URL"); url != "" {
+		return url
+	}
+	return "http://open-content:8080"
 }
 
 // ConnectNATS connects to NATS with NATS_URL, NATS_USER and NATS_PASSWORD. The

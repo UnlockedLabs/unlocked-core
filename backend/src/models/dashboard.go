@@ -3,8 +3,7 @@ package models
 import (
 	"time"
 
-	ocapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api"
-
+	ocapi "github.com/UnlockedLabs/unlocked-contracts/opencontent"
 	"github.com/UnlockedLabs/unlocked-contracts/providerplatforms"
 )
 

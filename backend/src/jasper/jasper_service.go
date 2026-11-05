@@ -15,9 +15,9 @@ import (
 	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
-	ocapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/opencontent/api"
 	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
 
+	ocapi "github.com/UnlockedLabs/unlocked-contracts/opencontent"
 	"github.com/evertonvps/go-jasper"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"

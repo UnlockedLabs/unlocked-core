@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const fakeServiceToken = "test-service-token"
+const fakeProviderPlatformsToken = "test-service-token"
 
 // fakeProviderPlatforms stands in for the Provider Platforms service, which is
 // its own repo since EN-206. It answers core's questions from the two tables a
@@ -27,10 +27,10 @@ type fakeProviderPlatforms struct {
 func startFakeProviderPlatforms(t *testing.T) *fakeProviderPlatforms {
 	t.Helper()
 	fake := &fakeProviderPlatforms{}
-	srv := httptest.NewServer(providerplatforms.NewHandler(fake, fakeServiceToken))
+	srv := httptest.NewServer(providerplatforms.NewHandler(fake, fakeProviderPlatformsToken))
 	t.Cleanup(srv.Close)
 	t.Setenv("PROVIDER_PLATFORMS_URL", srv.URL)
-	t.Setenv("SERVICE_TOKEN", fakeServiceToken)
+	t.Setenv("PROVIDER_PLATFORMS_TOKEN", fakeProviderPlatformsToken)
 	return fake
 }
 

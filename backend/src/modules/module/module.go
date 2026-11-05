@@ -37,7 +37,7 @@ type Module interface {
 	Migrations() fs.FS
 }
 
-// Route is one HTTP route, such as "GET /api/libraries". The module writes
+// Route is one HTTP route, such as "GET /api/programs". The module writes
 // its own responses and errors (EN-188: handler helpers stay in each module).
 type Route struct {
 	Pattern string
@@ -102,8 +102,6 @@ type Worker interface {
 type Deps struct {
 	DB   *gorm.DB
 	NATS *nats.Conn
-	// Notify sends messages to a user's open browser tabs.
-	Notify Notifier
 	// HTTP is core's HTTP client, for calls to services outside Unlocked,
 	// such as an LMS. Only routes get it.
 	HTTP HTTPClient
@@ -117,22 +115,6 @@ type Deps struct {
 	// on that module's own connection. A module never queries through it.
 	// Only routes get it.
 	ModuleDBs func(name string) *gorm.DB
-}
-
-// Notifier sends a message to a user over core's websocket. A user with no
-// open tab misses it.
-type Notifier interface {
-	Notify(userID uint, msg Message)
-}
-
-// Message is one websocket message to a user.
-type Message struct {
-	// Event is the message's type, such as "visits".
-	Event string
-	// ActivityID is the Open Content activity the message is about, if any.
-	// Core ends that activity when the user's tab closes.
-	ActivityID int64
-	Text       string
 }
 
 // HTTPClient sends a request with core's HTTP client. *http.Client is one.

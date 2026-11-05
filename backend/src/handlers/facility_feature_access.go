@@ -11,11 +11,25 @@ import (
 
 func (srv *Server) registerFacilityFeatureAccessRoutes() []routeDef {
 	return []routeDef{
+		newDeptAdminRoute("GET /api/features", srv.handleGetFeatureCatalog),
 		newDeptAdminRoute("GET /api/facilities/features", srv.handleGetFacilityFeatureOverview),
 		newDeptAdminRoute("PUT /api/facilities/features/apply-all", srv.handleApplyFacilityFeaturesToAll),
 		newDeptAdminRoute("GET /api/facilities/{id}/features", srv.handleGetFacilityFeatureDetail),
 		newDeptAdminRoute("PUT /api/facilities/{id}/features/{feature}", srv.handleSetFacilityFeature),
 	}
+}
+
+/**
+* GET: /api/features
+* Every feature Feature Control shows, top-level ones first: core's own and any
+* a product registered. A sub-feature carries its parent's name.
+**/
+func (srv *Server) handleGetFeatureCatalog(w http.ResponseWriter, r *http.Request, log sLog) error {
+	catalog, err := srv.Db.FeatureCatalog()
+	if err != nil {
+		return newDatabaseServiceError(err)
+	}
+	return writeJsonResponse(w, http.StatusOK, catalog)
 }
 
 /**
@@ -31,7 +45,11 @@ func (srv *Server) handleGetFacilityFeatureOverview(w http.ResponseWriter, r *ht
 	var filterEnabled *bool
 	if raw := r.URL.Query().Get("feature"); raw != "" {
 		feature := models.FeatureAccess(raw)
-		if !models.ValidFeature(feature) {
+		catalog, err := srv.Db.FeatureCatalog()
+		if err != nil {
+			return newDatabaseServiceError(err)
+		}
+		if _, ok := catalog.Find(feature); !ok {
 			return newBadRequestServiceError(errors.New("invalid feature"), "invalid feature filter")
 		}
 		filterFeature = &feature
@@ -46,7 +64,7 @@ func (srv *Server) handleGetFacilityFeatureOverview(w http.ResponseWriter, r *ht
 		}
 	}
 
-	rows, err := srv.Db.GetFacilityFeatureOverview(&args, srv.features, filterFeature, filterEnabled)
+	rows, err := srv.Db.GetFacilityFeatureOverview(&args, filterFeature, filterEnabled)
 	if err != nil {
 		return newDatabaseServiceError(err)
 	}
@@ -64,7 +82,7 @@ func (srv *Server) handleGetFacilityFeatureDetail(w http.ResponseWriter, r *http
 		return newInvalidIdServiceError(err, "facility ID")
 	}
 	log.add("facility_id", id)
-	rows, err := srv.Db.GetFacilityFeatureDetail(uint(id), srv.features)
+	rows, err := srv.Db.GetFacilityFeatureDetail(uint(id))
 	if err != nil {
 		return newDatabaseServiceError(err)
 	}
@@ -98,7 +116,7 @@ func (srv *Server) handleSetFacilityFeature(w http.ResponseWriter, r *http.Reque
 	}
 
 	args := srv.getQueryContext(r)
-	if err := srv.Db.UpsertFacilityFeatureFlag(&args, uint(id), feature, *req.Enabled, srv.features); err != nil {
+	if err := srv.Db.UpsertFacilityFeatureFlag(&args, uint(id), feature, *req.Enabled); err != nil {
 		return newDatabaseServiceError(err)
 	}
 	return writeJsonResponse(w, http.StatusOK, "facility feature updated successfully")
@@ -122,7 +140,7 @@ func (srv *Server) handleApplyFacilityFeaturesToAll(w http.ResponseWriter, r *ht
 	log.add("source_facility_id", req.SourceFacilityID)
 
 	args := srv.getQueryContext(r)
-	if err := srv.Db.ApplyFacilityFeaturesToAll(&args, req.SourceFacilityID, srv.features); err != nil {
+	if err := srv.Db.ApplyFacilityFeaturesToAll(&args, req.SourceFacilityID); err != nil {
 		return newDatabaseServiceError(err)
 	}
 	return writeJsonResponse(w, http.StatusOK, "settings applied to all facilities successfully")

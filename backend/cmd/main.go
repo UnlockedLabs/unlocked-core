@@ -50,6 +50,12 @@ func main() {
 			return
 		}
 	}
+	// The API server asks Open Content its questions, which it answers only
+	// with the site's secret. The dev seeder builds a server too, but never
+	// asks, so the check is here rather than in NewServer.
+	if !testing && os.Getenv("OPEN_CONTENT_TOKEN") == "" {
+		log.Fatal("OPEN_CONTENT_TOKEN must be set: it's the secret the server asks Open Content's questions with")
+	}
 	srv := server.NewServer(testing, ctx)
 	if srv == nil {
 		log.Info("Server stopped before migrations finished")

@@ -276,32 +276,8 @@ func TestModuleRouterLogFields(t *testing.T) {
 	assert.Equal(t, "facadmin", coreFields["username"])
 }
 
-// Module messages reach the user's open tab as the websocket's own message
-// shape, and are dropped when the server has no websocket.
-func TestWsNotifier(t *testing.T) {
-	msg := module.Message{Event: "visits", ActivityID: 42, Text: "hi"}
-
-	t.Run("no websocket", func(t *testing.T) {
-		assert.NotPanics(t, func() { wsNotifier{newTestingServer()}.Notify(7, msg) })
-	})
-
-	t.Run("open tab", func(t *testing.T) {
-		srv := newTestingServer()
-		srv.wsClient = newClientManager()
-		client := &WsClient{UserID: 7, sendChan: make(chan []byte, 1)}
-		srv.wsClient.clients[7] = client
-
-		wsNotifier{srv}.Notify(7, msg)
-
-		assert.JSONEq(t, `{"event_type":"visits","user_id":7,"session_id":"","msg":{"activity_id":42,"msg":"hi"}}`, string(<-client.sendChan))
-		// The websocket ends this activity when the tab closes.
-		assert.Equal(t, int64(42), client.OpenContentActivityID)
-	})
-}
-
 func TestModuleDeps(t *testing.T) {
 	deps := newTestingServer().moduleDeps()
-	assert.NotNil(t, deps.Notify)
 	assert.NotNil(t, deps.HTTP)
 	assert.NotNil(t, deps.Features)
 	assert.NotNil(t, deps.Reports)
@@ -332,7 +308,8 @@ func TestHTTPClient(t *testing.T) {
 // that is off.
 func TestFacilityFeatures(t *testing.T) {
 	srv := newTestingServer()
-	srv.features = []models.FeatureAccess{models.OpenContentAccess, models.HelpfulLinksAccess, models.ProviderAccess}
+	statewide := []models.FeatureAccess{models.OpenContentAccess, models.HelpfulLinksAccess, models.ProviderAccess}
+	setStatewideDefaults(t, srv, statewide...)
 	features := srv.moduleDeps().Features
 
 	tests := []struct {
@@ -340,8 +317,8 @@ func TestFacilityFeatures(t *testing.T) {
 		overrides map[models.FeatureAccess]bool
 		want      []models.FeatureAccess
 	}{
-		{"statewide", nil, srv.features},
-		{"turned on at the facility", map[models.FeatureAccess]bool{models.ProgramAccess: true}, append([]models.FeatureAccess{models.ProgramAccess}, srv.features...)},
+		{"statewide", nil, statewide},
+		{"turned on at the facility", map[models.FeatureAccess]bool{models.ProgramAccess: true}, append([]models.FeatureAccess{models.ProgramAccess}, statewide...)},
 		{"turned off at the facility", map[models.FeatureAccess]bool{models.ProviderAccess: false}, []models.FeatureAccess{models.OpenContentAccess, models.HelpfulLinksAccess}},
 		{"parent turned off", map[models.FeatureAccess]bool{models.OpenContentAccess: false}, []models.FeatureAccess{models.ProviderAccess}},
 	}
@@ -350,7 +327,7 @@ func TestFacilityFeatures(t *testing.T) {
 			facility := createTestFacility(t, srv, tt.name)
 			args := models.QueryContext{Ctx: context.Background()}
 			for feature, enabled := range tt.overrides {
-				require.NoError(t, srv.Db.UpsertFacilityFeatureFlag(&args, facility, feature, enabled, srv.features))
+				require.NoError(t, srv.Db.UpsertFacilityFeatureFlag(&args, facility, feature, enabled))
 			}
 			got, err := features.FacilityFeatures(context.Background(), facility)
 			require.NoError(t, err)
@@ -480,6 +457,14 @@ func createTestFacility(t *testing.T, srv *Server, name string) uint {
 	return f.ID
 }
 
+// setStatewideDefaults turns on by default exactly the features named, and
+// every other feature off.
+func setStatewideDefaults(t *testing.T, srv *Server, on ...models.FeatureAccess) {
+	t.Helper()
+	require.NoError(t, srv.Db.Model(&models.FeatureFlags{}).Where("1 = 1").Update("default_enabled", false).Error)
+	require.NoError(t, srv.Db.Model(&models.FeatureFlags{}).Where("name IN ?", on).Update("default_enabled", true).Error)
+}
+
 func createTestUser(t *testing.T, srv *Server, username string, role models.UserRole, facilityID uint) *models.User {
 	t.Helper()
 	u := &models.User{Username: username, NameFirst: "Test", NameLast: "User", Email: username + "@example.com", Role: role, FacilityID: facilityID}
@@ -490,7 +475,7 @@ func createTestUser(t *testing.T, srv *Server, username string, role models.User
 // The Provider Platforms service reaches core's users and live providers over
 // /internal/v1/core with the service token, and nothing else gets in.
 func TestInternalCoreAPI(t *testing.T) {
-	t.Setenv("SERVICE_TOKEN", "s3cret")
+	t.Setenv("PROVIDER_PLATFORMS_TOKEN", "s3cret")
 	srv := newTestingServer()
 	srv.registerInternalRoutes()
 	core := httptest.NewServer(srv.Mux)

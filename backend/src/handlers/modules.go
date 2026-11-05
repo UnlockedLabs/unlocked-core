@@ -100,24 +100,9 @@ func (c *Claims) identityClaims() *identity.Claims {
 	}
 }
 
-// wsNotifier sends module messages over the websocket. It reads srv.wsClient
-// on each call because the server creates the websocket after registering
-// routes, and the testing server has none.
-type wsNotifier struct{ srv *Server }
-
-func (n wsNotifier) Notify(userID uint, msg module.Message) {
-	if n.srv.wsClient == nil {
-		return
-	}
-	n.srv.wsClient.notifyUser(WsMsg{
-		EventType: WsEventType(msg.Event),
-		UserID:    userID,
-		Msg:       MsgContent{ActivityID: msg.ActivityID, Msg: msg.Text},
-	})
-}
-
 // coreUsers gives the Provider Platforms service core's user accounts
-// (coreapi.Users). It reads srv's fields on each call, like wsNotifier.
+// (coreapi.Users). It reads srv's fields on each call, since the testing
+// server sets some after startup.
 type coreUsers struct{ srv *Server }
 
 func (u coreUsers) Get(ctx context.Context, id uint) (coreapi.User, error) {
@@ -174,7 +159,7 @@ func (u coreUsers) Delete(ctx context.Context, id uint) error {
 }
 
 // httpClient sends module requests with srv.Client. It reads srv.Client on
-// each call, like wsNotifier, so a client set after startup is the one used.
+// each call, so a client set after startup is the one used.
 type httpClient struct{ srv *Server }
 
 func (c httpClient) Do(req *http.Request) (*http.Response, error) {
@@ -185,7 +170,7 @@ func (c httpClient) Do(req *http.Request) (*http.Response, error) {
 type facilityFeatures struct{ srv *Server }
 
 func (f facilityFeatures) FacilityFeatures(ctx context.Context, facilityID uint) ([]models.FeatureAccess, error) {
-	access, err := database.NewDB(f.srv.Db.WithContext(ctx)).GetFacilityFeatureAccess(facilityID, f.srv.features)
+	access, err := database.NewDB(f.srv.Db.WithContext(ctx)).GetFacilityFeatureAccess(facilityID)
 	if err != nil {
 		return nil, fmt.Errorf("get features for facility %d: %w", facilityID, dbCause(err))
 	}
@@ -224,7 +209,6 @@ func (srv *Server) moduleDeps() module.Deps {
 	return module.Deps{
 		DB:        srv.Db.DB,
 		NATS:      srv.nats,
-		Notify:    wsNotifier{srv},
 		HTTP:      httpClient{srv},
 		Features:  facilityFeatures{srv},
 		Reports:   pdfReports{},
