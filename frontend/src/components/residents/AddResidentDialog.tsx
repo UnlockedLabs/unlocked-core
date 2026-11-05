@@ -105,6 +105,8 @@ export function AddResidentDialog({
                 setKratosRegistered(response.data.kratos_registered);
                 setShowPasswordModal(true);
                 onSuccess(response.data.user);
+            } else if (response.status === 409) {
+                form.setError('doc_id', { message: response.message });
             } else {
                 toast.error(response.message ?? 'Failed to create resident');
             }

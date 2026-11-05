@@ -94,6 +94,8 @@ export function EditResidentDialog({
             );
             onOpenChange(false);
             onSuccess();
+        } else if (response.status === 409) {
+            form.setError('doc_id', { message: response.message });
         } else {
             toast.error(response.message ?? 'Failed to update resident');
         }
