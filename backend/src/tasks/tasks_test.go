@@ -2,15 +2,19 @@ package tasks
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"testing"
 	"testing/fstest"
 	"time"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
 
 	"github.com/go-co-op/gocron/v2"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestServerRunsJobs(t *testing.T) {
@@ -53,25 +57,25 @@ func (m jobModule) RegisterJobs(s module.Scheduler, deps module.Deps) {
 	}
 }
 
-// Start gives each module the scheduler's deps and schedules only the jobs
-// the modules register: core has none of its own since EN-197.
+type noUnlinker struct{}
+
+func (noUnlinker) DeleteUserMappings(context.Context, uint) error { return nil }
+
+// Start gives each module the scheduler's deps and schedules the jobs the
+// modules register, plus the one job core has of its own: unlinking deleted
+// users from Provider Platforms.
 func TestStart(t *testing.T) {
 	db := database.InitDB(context.Background(), true)
-	// An enabled LMS provider: its jobs are Provider Platforms', not core's.
-	if err := db.Exec(`INSERT INTO provider_platforms (type, name, state) VALUES ('canvas_cloud', 'Canvas', 'enabled')`).Error; err != nil {
-		t.Fatal(err)
-	}
-
 	var got module.Deps
 	mods := []module.Module{jobModule{deps: &got}}
-	s := Start(nil, mods, database.OpenModuleDBs(db.DB, mods))
+	s := Start(nil, mods, database.OpenModuleDBs(db.DB, mods), db, noUnlinker{})
 	t.Cleanup(func() { _ = s.Shutdown() })
 
 	if got.DB != db.DB {
 		t.Errorf("the module got DB %p, want the scheduler's %p", got.DB, db.DB)
 	}
-	if n := len(s.Jobs()); n != 2 {
-		t.Errorf("scheduled %d jobs, want the module's 2", n)
+	if n := len(s.Jobs()); n != 3 {
+		t.Errorf("scheduled %d jobs, want the module's 2 and the unlinking job", n)
 	}
 }
 
@@ -107,4 +111,31 @@ func TestAtStart(t *testing.T) {
 		t.Error("the task ran right away, want it delayed")
 	default:
 	}
+}
+
+// unlinkFunc is a MappingUnlinker.
+type unlinkFunc func(ctx context.Context, userID uint) error
+
+func (f unlinkFunc) DeleteUserMappings(ctx context.Context, userID uint) error { return f(ctx, userID) }
+
+// A user Provider Platforms can't unlink stays queued for the next run, and
+// the rest still go.
+func TestUnlinkDeletedUsers(t *testing.T) {
+	db := database.InitDB(context.Background(), true)
+	require.NoError(t, db.Create(&[]models.ProviderMappingDeletion{{UserID: 1}, {UserID: 2}, {UserID: 3}}).Error)
+
+	var asked []uint
+	err := unlinkDeletedUsers(context.Background(), db, unlinkFunc(func(_ context.Context, id uint) error {
+		asked = append(asked, id)
+		if id == 2 {
+			return errors.New("service down")
+		}
+		return nil
+	}))
+
+	assert.ErrorContains(t, err, "service down")
+	assert.ElementsMatch(t, []uint{1, 2, 3}, asked, "one failure doesn't stop the rest")
+	left, err := db.QueuedMappingDeletions(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, []uint{2}, left, "only the failed one stays queued")
 }

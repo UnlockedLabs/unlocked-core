@@ -18,7 +18,7 @@ services:
     depends_on:
       - postgres
 
-  server:
+  providerplatforms:
     environment:
       KOLIBRI_URL: http://127.0.0.1:8000
       KOLIBRI_USERNAME: SuperAdmin

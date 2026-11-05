@@ -4,12 +4,12 @@ import (
 	"context"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
-	ppapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api"
 
 	ocapi "github.com/UnlockedLabs/unlocked-contracts/opencontent"
+	"github.com/UnlockedLabs/unlocked-contracts/providerplatforms"
 )
 
-func (db *DB) RunOrResetDemoSeed(facilityId uint, openContent ocapi.OpenContent, providerPlatforms ppapi.ProviderPlatforms) error {
+func (db *DB) RunOrResetDemoSeed(facilityId uint, openContent ocapi.OpenContent, providerPlatforms providerplatforms.ProviderPlatforms) error {
 	ctx := context.Background()
 	// seeding data for demo will only seed user activity/milestones/open-content activity for existing users
 	lastSeed, found, err := providerPlatforms.LastDemoSeed(ctx)
@@ -25,7 +25,7 @@ func (db *DB) RunOrResetDemoSeed(facilityId uint, openContent ocapi.OpenContent,
 	return db.RunDemoSeed(facilityId, openContent, providerPlatforms)
 }
 
-func (db *DB) RunDemoSeed(facilityId uint, openContent ocapi.OpenContent, providerPlatforms ppapi.ProviderPlatforms) error {
+func (db *DB) RunDemoSeed(facilityId uint, openContent ocapi.OpenContent, providerPlatforms providerplatforms.ProviderPlatforms) error {
 	var userIDs []uint
 	if err := db.Model(&models.User{}).Where("facility_id = ?", facilityId).Pluck("id", &userIDs).Error; err != nil {
 		return newGetRecordsDBError(err, "users")

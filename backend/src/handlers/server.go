@@ -15,7 +15,6 @@ import (
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
 	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
-	ppapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/tasks"
 
@@ -25,6 +24,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/UnlockedLabs/unlocked-contracts/providerplatforms"
 )
 
 type Server struct {
@@ -42,7 +43,7 @@ type Server struct {
 	modules           []module.Module
 	moduleDBs         database.ModuleDBs
 	openContent       ocapi.OpenContent
-	providerPlatforms ppapi.ProviderPlatforms
+	providerPlatforms providerplatforms.ProviderPlatforms
 	programs          programsapi.Programs
 }
 
@@ -100,6 +101,7 @@ func (srv *Server) RegisterRoutes() {
 		srv.register(route)
 	}
 	srv.registerModuleRoutes()
+	srv.registerProviderPlatformsRoutes()
 }
 
 func init() {
@@ -189,7 +191,7 @@ func newServer(ctx context.Context) *Server {
 		modules:           mods,
 		moduleDBs:         moduleDBs,
 		openContent:       ocapi.NewClient(openContentURL(), os.Getenv("OPEN_CONTENT_TOKEN"), nil),
-		providerPlatforms: registry.ProviderPlatforms(moduleDBs.For),
+		providerPlatforms: registry.ProviderPlatforms(),
 		programs:          registry.Programs(moduleDBs.For),
 	}
 	if err := server.setupNatsKvBuckets(); err != nil {
@@ -204,7 +206,7 @@ func newServer(ctx context.Context) *Server {
 		log.Fatalf("Failed to subscribe to Open Content's notifications: %v", err)
 	}
 	if tasks.ServerRunsJobs() {
-		server.scheduler = tasks.Start(server.nats, server.modules, server.moduleDBs)
+		server.scheduler = tasks.Start(server.nats, server.modules, server.moduleDBs, server.Db, server.providerPlatforms)
 	} else {
 		log.Info("RUN_SCHEDULER=false: background jobs run in the scheduler process, not here")
 	}
@@ -224,7 +226,7 @@ func newTestingServer() *Server {
 		modules:           mods,
 		moduleDBs:         moduleDBs,
 		openContent:       ocapi.NewClient(openContentURL(), os.Getenv("OPEN_CONTENT_TOKEN"), nil),
-		providerPlatforms: registry.ProviderPlatforms(moduleDBs.For),
+		providerPlatforms: registry.ProviderPlatforms(),
 		programs:          registry.Programs(moduleDBs.For),
 	}
 }

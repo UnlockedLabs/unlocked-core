@@ -56,12 +56,24 @@ func main() {
 	if !testing && os.Getenv("OPEN_CONTENT_TOKEN") == "" {
 		log.Fatal("OPEN_CONTENT_TOKEN must be set: it's the secret the server asks Open Content's questions with")
 	}
+	if !testing {
+		requireProviderPlatformsToken()
+	}
 	srv := server.NewServer(testing, ctx)
 	if srv == nil {
 		log.Info("Server stopped before migrations finished")
 		return
 	}
 	srv.ListenAndServe(ctx)
+}
+
+// requireProviderPlatformsToken stops the server and the scheduler without the
+// secret they call the Provider Platforms service with (EN-206): every call
+// would be refused.
+func requireProviderPlatformsToken() {
+	if registry.ProviderPlatformsToken() == "" {
+		log.Fatal("PROVIDER_PLATFORMS_TOKEN must be set: it's the secret the server and the scheduler call Provider Platforms with")
+	}
 }
 
 func cancelOnSignal(shutdown <-chan os.Signal, cancel context.CancelFunc) {
@@ -75,6 +87,7 @@ func cancelOnSignal(shutdown <-chan os.Signal, cancel context.CancelFunc) {
 // until ctx is canceled. It doesn't migrate: it waits until the database
 // is migrated.
 func runScheduler(ctx context.Context) {
+	requireProviderPlatformsToken()
 	mods := registry.All()
 	nc, db, ok := connectMigrated(ctx)
 	defer nc.Close()
@@ -82,7 +95,8 @@ func runScheduler(ctx context.Context) {
 		log.Info("Scheduler stopped before migrations finished")
 		return
 	}
-	s := tasks.Start(nc, mods, database.OpenModuleDBs(db, mods))
+	moduleDBs := database.OpenModuleDBs(db, mods)
+	s := tasks.Start(nc, mods, moduleDBs, database.NewDB(db), registry.ProviderPlatforms())
 	log.Info("Scheduler started")
 	<-ctx.Done()
 	if err := s.Stop(); err != nil {

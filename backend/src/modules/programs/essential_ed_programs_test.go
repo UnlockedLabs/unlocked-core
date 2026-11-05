@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
-	ppapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/UnlockedLabs/unlocked-contracts/coreapi"
+	"github.com/UnlockedLabs/unlocked-contracts/providerplatforms"
 )
 
 // The payloads here mirror what the real sandbox returns, including the quirks
@@ -21,15 +21,15 @@ import (
 // it as a JSON boolean, close_date arrives as null, and datetimes are space
 // separated rather than RFC3339.
 
-func essentialEdServer(t *testing.T, handler http.HandlerFunc) (*server, *ppapi.Provider, func()) {
+func essentialEdServer(t *testing.T, handler http.HandlerFunc) (*server, *providerplatforms.Provider, func()) {
 	t.Helper()
 	ts := httptest.NewTLSServer(handler)
 	srv := &server{Client: ts.Client()}
-	provider := &ppapi.Provider{
+	provider := &providerplatforms.Provider{
 		BaseURL:   ts.URL,
 		AccountID: "303",
 		AccessKey: "test-token",
-		Type:      ppapi.EssentialEd,
+		Type:      providerplatforms.EssentialEd,
 	}
 	return srv, provider, ts.Close
 }
@@ -316,7 +316,7 @@ func TestEssentialEdProviderListCourses(t *testing.T) {
 }
 
 func TestEssentialEdProviderIsLive(t *testing.T) {
-	provider := &ppapi.Provider{Type: ppapi.EssentialEd}
+	provider := &providerplatforms.Provider{Type: providerplatforms.EssentialEd}
 	assert.True(t, isLiveProgramProvider(provider))
 	assert.False(t, isCanvasProvider(provider), "essential ed must not be mistaken for canvas")
 	assert.Equal(t, "essential_ed", providerSourceLabel(provider))
@@ -370,7 +370,7 @@ func TestProviderCourseEnrolleeIDsDispatchesByType(t *testing.T) {
 
 	t.Run("a non-live provider is rejected", func(t *testing.T) {
 		srv := &server{}
-		_, err := srv.providerCourseEnrolleeIDs(&ppapi.Provider{Type: ppapi.Kolibri}, 1)
+		_, err := srv.providerCourseEnrolleeIDs(&providerplatforms.Provider{Type: providerplatforms.Kolibri}, 1)
 		assert.Error(t, err)
 	})
 }
@@ -660,7 +660,7 @@ func TestEssentialEdListUserCourses(t *testing.T) {
 // Canvas keeps its dedicated per-user endpoint rather than filtering a listing.
 func TestCanvasDoesNotImplementLiveUserCourseLister(t *testing.T) {
 	srv := &server{}
-	reader, err := srv.newLiveProgramProvider(&ppapi.Provider{Type: ppapi.CanvasOSS})
+	reader, err := srv.newLiveProgramProvider(&providerplatforms.Provider{Type: providerplatforms.CanvasOSS})
 	assert.NoError(t, err)
 	_, ok := reader.(liveUserCourseLister)
 	assert.False(t, ok)
@@ -670,9 +670,9 @@ func TestCanvasDoesNotImplementLiveUserCourseLister(t *testing.T) {
 // provider with no calendar endpoint still shows up beside Canvas classes.
 func TestWeeklyScheduleFacilityEvents(t *testing.T) {
 	march := func(day int) time.Time { return time.Date(2026, time.March, day, 0, 0, 0, 0, time.UTC) }
-	provider := &ppapi.Provider{
+	provider := &providerplatforms.Provider{
 		Name: "Essential Education",
-		Type: ppapi.EssentialEd,
+		Type: providerplatforms.EssentialEd,
 	}
 	provider.ID = 2
 	courses := []liveCourse{
@@ -706,18 +706,18 @@ func TestWeeklyScheduleFacilityEvents(t *testing.T) {
 func TestLiveUserListerFor(t *testing.T) {
 	tests := []struct {
 		name         string
-		providerType ppapi.ProviderType
+		providerType providerplatforms.ProviderType
 		isLister     bool
 	}{
-		{"essential ed lists its own users", ppapi.EssentialEd, true},
-		{"canvas oss goes through the worker", ppapi.CanvasOSS, false},
-		{"canvas cloud goes through the worker", ppapi.CanvasCloud, false},
-		{"a non-live provider has no lister", ppapi.Kolibri, false},
+		{"essential ed lists its own users", providerplatforms.EssentialEd, true},
+		{"canvas oss goes through the worker", providerplatforms.CanvasOSS, false},
+		{"canvas cloud goes through the worker", providerplatforms.CanvasCloud, false},
+		{"a non-live provider has no lister", providerplatforms.Kolibri, false},
 	}
 	srv := &server{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, ok := srv.liveUserListerFor(&ppapi.Provider{Type: tt.providerType})
+			_, ok := srv.liveUserListerFor(&providerplatforms.Provider{Type: tt.providerType})
 			assert.Equal(t, tt.isLister, ok)
 		})
 	}
@@ -857,11 +857,11 @@ func TestFetchLiveCoursesForUserHonoursProviderStatus(t *testing.T) {
 
 // fakeProviders is Provider Platforms' api answering Provider from a map.
 type fakeProviders struct {
-	ppapi.ProviderPlatforms
-	providers map[uint]ppapi.Provider
+	providerplatforms.ProviderPlatforms
+	providers map[uint]providerplatforms.Provider
 }
 
-func (f fakeProviders) Provider(_ context.Context, id uint) (ppapi.Provider, error) {
+func (f fakeProviders) Provider(_ context.Context, id uint) (providerplatforms.Provider, error) {
 	return f.providers[id], nil
 }
 
@@ -879,9 +879,9 @@ func TestLiveProvidersUsers(t *testing.T) {
 	const essentialEd, kolibri = 1, 2
 	live := liveProviders{&server{
 		Client: ts.Client(),
-		providerPlatforms: fakeProviders{providers: map[uint]ppapi.Provider{
-			essentialEd: {ID: essentialEd, Type: ppapi.EssentialEd, Name: "Essential Ed", AccountID: "303", AccessKey: "token", BaseURL: ts.URL},
-			kolibri:     {ID: kolibri, Type: ppapi.Kolibri, Name: "Kolibri", BaseURL: ts.URL},
+		providerPlatforms: fakeProviders{providers: map[uint]providerplatforms.Provider{
+			essentialEd: {ID: essentialEd, Type: providerplatforms.EssentialEd, Name: "Essential Ed", AccountID: "303", AccessKey: "token", BaseURL: ts.URL},
+			kolibri:     {ID: kolibri, Type: providerplatforms.Kolibri, Name: "Kolibri", BaseURL: ts.URL},
 		}},
 	}}
 
@@ -889,7 +889,7 @@ func TestLiveProvidersUsers(t *testing.T) {
 		users, ok, err := live.Users(context.Background(), essentialEd)
 		require.NoError(t, err)
 		assert.True(t, ok)
-		assert.Equal(t, []module.ProviderUser{{
+		assert.Equal(t, []coreapi.ProviderUser{{
 			Username: "jsmith", NameFirst: "Jane", NameLast: "Smith", Email: "jane@example.com",
 			ExternalUserID: "4329946", ExternalUsername: "jsmith",
 		}}, users)

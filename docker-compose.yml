@@ -27,6 +27,29 @@ x-open-content: &open-content
     # The secret core asks Open Content's questions with; the server's matches.
     OPEN_CONTENT_TOKEN: dev-open-content-token
 
+# Provider Platforms' three services (EN-206) share one image and environment.
+x-provider-platforms: &provider-platforms
+  image: unlocked-provider-platforms:dev
+  build:
+    # Built straight from GitHub (PROVIDER_PLATFORMS_REF, default main), so no
+    # checkout is needed. Set PROVIDER_PLATFORMS_DIR to your checkout to build
+    # your own changes instead.
+    context: ${PROVIDER_PLATFORMS_DIR:-https://github.com/UnlockedLabs/unlocked-provider-platforms.git#${PROVIDER_PLATFORMS_REF:-main}}
+    args:
+      APP_VERSION: dev
+      GIT_COMMIT: ${PROVIDER_PLATFORMS_GIT_COMMIT:-unknown}
+      GIT_BRANCH: ${PROVIDER_PLATFORMS_GIT_BRANCH:-unknown}
+  networks:
+    - intranet
+  environment: &provider-platforms-env
+    APP_DSN: postgres://unlocked:dev@postgres:5432/unlocked
+    APP_ENV: dev
+    APP_KEY: base64:NTQxODNmNDMyM2YzNzdiNzM3NDMzYTFlOTgyMjllYWQwZmRjNjg2ZjkzYmFiMDU3ZWNiNjEyZGFhOTQwMDJiNSAgLQo=
+    LOG_LEVEL: debug
+    NATS_URL: nats:4222
+    NATS_USER: unlocked
+    NATS_PASSWORD: dev
+
 services:
   postgres:
     image: postgres:16
@@ -116,9 +139,11 @@ services:
       - LOG_LEVEL=debug
       - APP_URL=http://127.0.0.1
       - APP_KEY=base64:NTQxODNmNDMyM2YzNzdiNzM3NDMzYTFlOTgyMjllYWQwZmRjNjg2ZjkzYmFiMDU3ZWNiNjEyZGFhOTQwMDJiNSAgLQo=
-      - PROVIDER_SERVICE_URL=http://providerplatforms-worker:8081
       - OPEN_CONTENT_URL=http://open-content:8080
       - OPEN_CONTENT_TOKEN=dev-open-content-token
+      # The Provider Platforms service (EN-206) and the secret they share.
+      - PROVIDER_PLATFORMS_URL=http://providerplatforms:8080
+      - &provider-platforms-token PROVIDER_PLATFORMS_TOKEN=dev-provider-platforms-token
       - HYDRA_ADMIN_URL=http://hydra:4445
       - HYDRA_PUBLIC_URL=http://hydra:4444
       - KRATOS_ADMIN_URL=http://kratos:4434
@@ -173,6 +198,9 @@ services:
       - NATS_URL=nats:4222
       - NATS_USER=unlocked
       - NATS_PASSWORD=dev
+      # It unlinks deleted users from Provider Platforms (EN-206).
+      - PROVIDER_PLATFORMS_URL=http://providerplatforms:8080
+      - *provider-platforms-token
     restart: unless-stopped
     depends_on: [server]
 
@@ -211,42 +239,61 @@ services:
       open-content-migrate:
         condition: service_completed_successfully
 
-  # Provider Platforms' LMS jobs (EN-197): the Canvas, Brightspace and Kolibri
-  # syncs, run as `backend worker providerplatforms`, which also serves the
-  # provider user lists the server asks for. No hot reload: restart it after
-  # changing job code.
+  # Provider Platforms (EN-206) runs as its own service, built from GitHub, or
+  # from your checkout when PROVIDER_PLATFORMS_DIR is set (see
+  # x-provider-platforms). No hot reload: `make dev` rebuilds it. Its
+  # migrations run after core's, because the first one moves the tables core
+  # created into the provider schema.
+  providerplatforms-migrate:
+    <<: *provider-platforms
+    command: ["migrate"]
+    depends_on:
+      server-migrate:
+        condition: service_completed_successfully
+
+  # The API core forwards Provider Platforms' routes to, and the job scheduler
+  # (.env.example points a server run outside compose at port 8083).
+  providerplatforms:
+    <<: *provider-platforms
+    command: ["serve"]
+    ports:
+      - 8083:8080
+    environment:
+      <<: *provider-platforms-env
+      PROVIDER_PLATFORMS_TOKEN: dev-provider-platforms-token
+      APP_URL: http://127.0.0.1
+      CORE_URL: http://server:8080
+      HYDRA_ADMIN_URL: http://hydra:4445
+      HYDRA_PUBLIC_URL: http://hydra:4444
+      ORY_TOKEN: eyJvZmZzZXQiOiItMjUwIiwidmo8iV*@
+      MIDDLEWARE_CRON_SCHEDULE: 0 22 * * *
+      PROVIDER_SERVICE_URL: http://providerplatforms-worker:8081
+    restart: unless-stopped
+    depends_on:
+      providerplatforms-migrate:
+        condition: service_completed_successfully
+
+  # The LMS jobs: the Canvas, Brightspace and Kolibri syncs. It also serves the
+  # provider user lists the API asks for.
   providerplatforms-worker:
-    build:
-      context: ./
-      dockerfile: backend/dev.Dockerfile
-    command: ["go", "run", "./backend/cmd/main.go", "worker", "providerplatforms"]
-    networks:
-      - intranet
-    # The provider user lists, as provider-service published them (.env.example
-    # points a server run outside compose here).
+    <<: *provider-platforms
+    command: ["worker"]
     ports:
       - 8081:8081
     volumes:
-      - ./:/app
       - csvs:/csvs
     environment:
-      - APP_DSN=postgres://unlocked:dev@postgres:5432/unlocked
-      - APP_ENV=dev
-      - APP_URL=http://server:8080
-      - APP_KEY=base64:NTQxODNmNDMyM2YzNzdiNzM3NDMzYTFlOTgyMjllYWQwZmRjNjg2ZjkzYmFiMDU3ZWNiNjEyZGFhOTQwMDJiNSAgLQo=
-      - LOG_LEVEL=debug
-      # Where it reads the migration files it waits for server-migrate to apply.
-      - MIGRATION_DIR=backend/migrations
-      - NATS_URL=nats:4222
-      - NATS_USER=unlocked
-      - NATS_PASSWORD=dev
+      <<: *provider-platforms-env
+      APP_URL: http://server:8080
       # Kolibri's own database, which the Kolibri sync reads.
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - KOLIBRI_DB_PASSWORD=dev
-      - BRIGHTSPACE_TEMP_DIR=/csvs
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      KOLIBRI_DB_PASSWORD: dev
+      BRIGHTSPACE_TEMP_DIR: /csvs
     restart: unless-stopped
-    depends_on: [server]
+    depends_on:
+      providerplatforms-migrate:
+        condition: service_completed_successfully
 
   # AI tutor sidecar (served under basePath /tutor; see tutor-integration.md)
   tutor-service:

@@ -11,7 +11,6 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
-	ppapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 
 	log "github.com/sirupsen/logrus"
@@ -245,10 +244,9 @@ func (db *DB) DeleteUser(id int) error {
 		if result.RowsAffected == 0 {
 			return newDeleteDBError(gorm.ErrRecordNotFound, "users")
 		}
-		if err := registry.ProviderPlatformsInTx(tx, func(p ppapi.ProviderPlatforms) error {
-			return p.DeleteUserMappings(context.Background(), uint(id))
-		}); err != nil {
-			return newDeleteDBError(err, "provider_user_mappings")
+		queued := models.ProviderMappingDeletion{UserID: uint(id)}
+		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&queued).Error; err != nil {
+			return newDeleteDBError(err, "provider_mapping_deletions")
 		}
 		return nil
 	})

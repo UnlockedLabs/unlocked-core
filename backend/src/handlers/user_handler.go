@@ -256,7 +256,7 @@ func (srv *Server) handleCreateUser(w http.ResponseWriter, r *http.Request, log 
 		for i, id := range reqForm.Providers {
 			providerIDs[i] = uint(id)
 		}
-		if err := srv.providerPlatforms.AddUserToProviders(r.Context(), toModuleUser(&reqForm.User), providerIDs); err != nil {
+		if err := srv.providerPlatforms.AddUserToProviders(r.Context(), toCoreUser(&reqForm.User), providerIDs); err != nil {
 			log.add("provider_ids", reqForm.Providers)
 			log.error("Error getting provider platform by id createProviderUserAccount")
 			return newDatabaseServiceError(database.NewDBError(err, "provider_platforms not found"))
@@ -293,7 +293,7 @@ func (srv *Server) handleCreateUser(w http.ResponseWriter, r *http.Request, log 
 		}
 		// still return 201 because user has been created in kratos,
 		// kolibri might not be set up/available
-		if err := srv.providerPlatforms.AddUserToKolibri(r.Context(), toModuleUser(&reqForm.User)); err != nil {
+		if err := srv.providerPlatforms.AddUserToKolibri(r.Context(), toCoreUser(&reqForm.User)); err != nil {
 			log.add("user_id", reqForm.User.ID)
 			log.errorf("error creating user in kolibri: %v", err)
 		}

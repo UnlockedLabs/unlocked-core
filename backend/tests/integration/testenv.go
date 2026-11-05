@@ -36,11 +36,13 @@ type TestEnv struct {
 func SetupTestEnv(t *testing.T) *TestEnv {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	providers := startFakeProviderPlatforms(t)
 	openContent := startFakeOpenContent(t)
 	server := handlers.NewServer(true, ctx)
 	if server == nil {
 		t.Fatal("Failed to create test server")
 	}
+	providers.attach(t, server.Db.DB)
 
 	//SeedTestData(server.Db)
 	server.RegisterRoutes()

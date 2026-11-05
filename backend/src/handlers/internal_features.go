@@ -12,6 +12,9 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-contracts/features"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
+
+	"github.com/UnlockedLabs/unlocked-contracts/coreapi"
 )
 
 // registerInternalRoutes registers routes that only other services call. They
@@ -22,6 +25,7 @@ func (srv *Server) registerInternalRoutes() {
 	srv.Mux.Handle("GET /internal/v1/features", srv.handleError(srv.handleInternalFeatures))
 	srv.Mux.Handle("GET /internal/v1/claims", srv.handleError(srv.handleInternalClaims))
 	srv.Mux.Handle("PUT /internal/v1/features/{name}", srv.handleError(srv.handleInternalRegisterFeature))
+	srv.Mux.Handle("/internal/v1/core/", coreapi.NewHandler(coreUsers{srv}, registry.LiveProviders(srv.moduleDeps()), registry.ProviderPlatformsToken()))
 }
 
 type internalFeaturesResponse struct {

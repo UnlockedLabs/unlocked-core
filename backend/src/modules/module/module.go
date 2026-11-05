@@ -17,7 +17,6 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-contracts/features"
 	"github.com/UnlockedLabs/unlocked-contracts/identity"
-	"github.com/UnlockedLabs/unlocked-contracts/users"
 
 	"github.com/nats-io/nats.go"
 	"github.com/pressly/goose/v3"
@@ -103,13 +102,6 @@ type Worker interface {
 type Deps struct {
 	DB   *gorm.DB
 	NATS *nats.Conn
-	// Users is core's user accounts. Only routes get it: it is nil in
-	// RegisterJobs.
-	Users Users
-	// LiveProviders is Programs' Canvas and Essential Education code, for
-	// Provider Platforms. Only routes get it. It goes away when Provider
-	// Platforms fetches and caches those providers' data itself.
-	LiveProviders LiveProviders
 	// HTTP is core's HTTP client, for calls to services outside Unlocked,
 	// such as an LMS. Only routes get it.
 	HTTP HTTPClient
@@ -123,22 +115,6 @@ type Deps struct {
 	// on that module's own connection. A module never queries through it.
 	// Only routes get it.
 	ModuleDBs func(name string) *gorm.DB
-}
-
-// Users is core's user accounts, for a module that adds or looks up users.
-type Users interface {
-	// Get returns the user with id. When there is none, the error matches
-	// gorm.ErrRecordNotFound.
-	Get(ctx context.Context, id uint) (User, error)
-	// Create adds a user, recording the caller in ctx as its creator. The user
-	// can't log in until CreateLogin.
-	Create(ctx context.Context, u NewUser) (User, error)
-	// CreateLogin gives a user a Kratos login with a new temporary password,
-	// which they must change when they first log in. It returns the password.
-	CreateLogin(ctx context.Context, userID uint) (string, error)
-	// Delete removes a user and their links to provider platform accounts,
-	// such as to undo a Create. It doesn't remove their Kratos login.
-	Delete(ctx context.Context, id uint) error
 }
 
 // HTTPClient sends a request with core's HTTP client. *http.Client is one.
@@ -177,48 +153,6 @@ type Report struct {
 type ReportFilter struct {
 	Label string
 	Value string
-}
-
-// LiveProviders is what Provider Platforms needs from Programs' Canvas and
-// Essential Education code.
-type LiveProviders interface {
-	// Users is every user a provider's own API lists. ok is false for a
-	// provider that can't list them; its users come from Provider Platforms'
-	// worker.
-	Users(ctx context.Context, providerID uint) (users []ProviderUser, ok bool, err error)
-	// MappingsChanged tells Programs that a user's account at a provider was
-	// linked or unlinked, so it can clear its cached Canvas programs.
-	MappingsChanged(providerID, userID uint)
-}
-
-// ProviderUser is a user's account at a provider platform.
-type ProviderUser struct {
-	Username         string
-	NameFirst        string
-	NameLast         string
-	Email            string
-	ExternalUserID   string
-	ExternalUsername string
-}
-
-// User is what a module sees of a user.
-type User struct {
-	ID         uint
-	Username   string
-	NameFirst  string
-	NameLast   string
-	Email      string
-	FacilityID uint
-}
-
-// NewUser is a user for Users.Create to add.
-type NewUser struct {
-	Username   string
-	NameFirst  string
-	NameLast   string
-	Email      string
-	FacilityID uint
-	Role       users.Role
 }
 
 // Schema is a module whose tables live in its own Postgres schema. Core

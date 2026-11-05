@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
-	ppapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api"
-
 	log "github.com/sirupsen/logrus"
+
+	"github.com/UnlockedLabs/unlocked-contracts/coreapi"
+	"github.com/UnlockedLabs/unlocked-contracts/providerplatforms"
 )
 
 // Essential Education's API differs from Canvas in every mechanical respect:
@@ -47,7 +47,7 @@ type essentialEdTransport struct {
 	srv *server
 }
 
-func (t essentialEdTransport) authorize(req *http.Request, provider *ppapi.Provider) {
+func (t essentialEdTransport) authorize(req *http.Request, provider *providerplatforms.Provider) {
 	req.Header.Set("X-API-Token", provider.AccessKey)
 	req.Header.Set("Accept", "application/json")
 	// Required. Without it the API returns an HTML error page, which then fails
@@ -56,7 +56,7 @@ func (t essentialEdTransport) authorize(req *http.Request, provider *ppapi.Provi
 }
 
 // fetchAll walks the start/limit pages until the API reports at_end.
-func (t essentialEdTransport) fetchAll(ctx context.Context, provider *ppapi.Provider, startURL string, max int) ([]map[string]interface{}, error) {
+func (t essentialEdTransport) fetchAll(ctx context.Context, provider *providerplatforms.Provider, startURL string, max int) ([]map[string]interface{}, error) {
 	parsed, err := url.Parse(startURL)
 	if err != nil {
 		return nil, err
@@ -93,7 +93,7 @@ type essentialEdPage struct {
 	AtEnd   bool                     `json:"at_end"`
 }
 
-func (t essentialEdTransport) fetchPage(ctx context.Context, provider *ppapi.Provider, pageURL string) (essentialEdPage, error) {
+func (t essentialEdTransport) fetchPage(ctx context.Context, provider *providerplatforms.Provider, pageURL string) (essentialEdPage, error) {
 	var envelope essentialEdPage
 	if err := requireHTTPS(pageURL); err != nil {
 		return envelope, err
@@ -117,7 +117,7 @@ func (t essentialEdTransport) fetchPage(ctx context.Context, provider *ppapi.Pro
 	return envelope, nil
 }
 
-func (t essentialEdTransport) fetchOne(ctx context.Context, provider *ppapi.Provider, recordURL string) (map[string]interface{}, error) {
+func (t essentialEdTransport) fetchOne(ctx context.Context, provider *providerplatforms.Provider, recordURL string) (map[string]interface{}, error) {
 	if err := requireHTTPS(recordURL); err != nil {
 		return nil, err
 	}
@@ -143,14 +143,14 @@ func (t essentialEdTransport) fetchOne(ctx context.Context, provider *ppapi.Prov
 
 // essentialEdClassesURL is the district-wide class listing. The token's scope
 // determines which schools are included, so no school filter is applied.
-func essentialEdClassesURL(provider *ppapi.Provider) string {
+func essentialEdClassesURL(provider *providerplatforms.Provider) string {
 	return strings.TrimSuffix(provider.BaseURL, "/") + "/classes"
 }
 
 // essentialEdProvider is the Essential Education implementation of LiveProgramProvider.
 type essentialEdProvider struct {
 	srv       *server
-	provider  *ppapi.Provider
+	provider  *providerplatforms.Provider
 	transport providerTransport
 }
 
@@ -471,7 +471,7 @@ func essentialEdTimePtr(value any) *time.Time {
 // essentialEdUsersURL is the district-wide user listing, narrowed to students.
 // roles must be sent as an array parameter -- a bare roles=STUDENT is rejected
 // with "The roles parameter must be an array."
-func essentialEdUsersURL(provider *ppapi.Provider) string {
+func essentialEdUsersURL(provider *providerplatforms.Provider) string {
 	query := url.Values{"roles[]": {"STUDENT"}}
 	return strings.TrimSuffix(provider.BaseURL, "/") + "/users?" + query.Encode()
 }
@@ -479,12 +479,12 @@ func essentialEdUsersURL(provider *ppapi.Provider) string {
 // ListUsers returns the district's student accounts. Implementing this lets the
 // user-matching screen read Essential Ed directly instead of going through
 // Provider Platforms' worker, which has no Essential Ed service.
-func (p essentialEdProvider) ListUsers(ctx context.Context) ([]module.ProviderUser, error) {
+func (p essentialEdProvider) ListUsers(ctx context.Context) ([]coreapi.ProviderUser, error) {
 	raw, err := p.transport.fetchAll(ctx, p.provider, essentialEdUsersURL(p.provider), 0)
 	if err != nil {
 		return nil, fmt.Errorf("essential ed users error for provider %d: %w", p.provider.ID, err)
 	}
-	users := make([]module.ProviderUser, 0, len(raw))
+	users := make([]coreapi.ProviderUser, 0, len(raw))
 	for _, record := range raw {
 		user, ok := parseEssentialEdUser(record)
 		if !ok {
@@ -497,10 +497,10 @@ func (p essentialEdProvider) ListUsers(ctx context.Context) ([]module.ProviderUs
 
 // parseEssentialEdUser maps a user record onto ImportUser. Note the response
 // field is email_address, not the "email" the published docs name.
-func parseEssentialEdUser(record map[string]interface{}) (module.ProviderUser, bool) {
+func parseEssentialEdUser(record map[string]interface{}) (coreapi.ProviderUser, bool) {
 	id, ok := essentialEdUint(record["id"])
 	if !ok {
-		return module.ProviderUser{}, false
+		return coreapi.ProviderUser{}, false
 	}
 	nameFirst, _ := record["first_name"].(string)
 	nameLast, _ := record["last_name"].(string)
@@ -516,7 +516,7 @@ func parseEssentialEdUser(record map[string]interface{}) (module.ProviderUser, b
 		username = strconv.FormatUint(uint64(id), 10)
 	}
 
-	return module.ProviderUser{
+	return coreapi.ProviderUser{
 		ExternalUserID:   strconv.FormatUint(uint64(id), 10),
 		ExternalUsername: username,
 		Username:         username,

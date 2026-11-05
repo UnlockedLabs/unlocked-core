@@ -12,7 +12,9 @@ import (
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
 
+	"github.com/UnlockedLabs/unlocked-contracts/coreapi"
 	"github.com/UnlockedLabs/unlocked-contracts/identity"
+	"github.com/UnlockedLabs/unlocked-contracts/users"
 	ory "github.com/ory/kratos-client-go"
 	"github.com/sirupsen/logrus"
 	logtest "github.com/sirupsen/logrus/hooks/test"
@@ -276,10 +278,6 @@ func TestModuleRouterLogFields(t *testing.T) {
 
 func TestModuleDeps(t *testing.T) {
 	deps := newTestingServer().moduleDeps()
-	assert.NotNil(t, deps.Users)
-	require.NotNil(t, deps.LiveProviders)
-	// The testing server has no Canvas cache, so there is nothing to clear.
-	assert.NotPanics(t, func() { deps.LiveProviders.MappingsChanged(1, 1) })
 	assert.NotNil(t, deps.HTTP)
 	assert.NotNil(t, deps.Features)
 	assert.NotNil(t, deps.Reports)
@@ -338,18 +336,18 @@ func TestFacilityFeatures(t *testing.T) {
 	}
 }
 
-func TestModuleUsers(t *testing.T) {
+func TestCoreUsers(t *testing.T) {
 	srv := newTestingServer()
-	users := moduleUsers{srv}
+	users := coreUsers{srv}
 	north := createTestFacility(t, srv, "North")
 	admin := createTestUser(t, srv, "facadmin", models.FacilityAdmin, north)
 	ctx := identity.NewContext(context.Background(), &identity.Claims{UserID: admin.ID})
 
-	created, err := users.Create(ctx, module.NewUser{
+	created, err := users.Create(ctx, coreapi.NewUser{
 		Username: "jdoe", NameFirst: "John", NameLast: "Doe", Email: "jdoe@example.com", FacilityID: north, Role: models.Student,
 	})
 	require.NoError(t, err)
-	want := module.User{ID: created.ID, Username: "jdoe", NameFirst: "John", NameLast: "Doe", Email: "jdoe@example.com", FacilityID: north}
+	want := coreapi.User{ID: created.ID, Username: "jdoe", NameFirst: "John", NameLast: "Doe", Email: "jdoe@example.com", FacilityID: north}
 	assert.Equal(t, want, created)
 
 	t.Run("create records the caller as the creator", func(t *testing.T) {
@@ -361,7 +359,7 @@ func TestModuleUsers(t *testing.T) {
 	})
 
 	t.Run("create rejects an invalid user", func(t *testing.T) {
-		_, err := users.Create(ctx, module.NewUser{Username: "no role", FacilityID: north})
+		_, err := users.Create(ctx, coreapi.NewUser{Username: "no role", FacilityID: north})
 		assert.Error(t, err)
 	})
 
@@ -373,7 +371,7 @@ func TestModuleUsers(t *testing.T) {
 
 	t.Run("get a missing user", func(t *testing.T) {
 		_, err := users.Get(ctx, 9999)
-		assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+		assert.ErrorIs(t, err, coreapi.ErrUserNotFound)
 	})
 
 	t.Run("create login", func(t *testing.T) {
@@ -396,7 +394,7 @@ func TestModuleUsers(t *testing.T) {
 	t.Run("delete", func(t *testing.T) {
 		require.NoError(t, users.Delete(ctx, created.ID))
 		_, err := users.Get(ctx, created.ID)
-		assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+		assert.ErrorIs(t, err, coreapi.ErrUserNotFound)
 		assert.Error(t, users.Delete(ctx, created.ID), "already deleted")
 	})
 }
@@ -472,4 +470,41 @@ func createTestUser(t *testing.T, srv *Server, username string, role models.User
 	u := &models.User{Username: username, NameFirst: "Test", NameLast: "User", Email: username + "@example.com", Role: role, FacilityID: facilityID}
 	require.NoError(t, srv.Db.CreateUser(u))
 	return u
+}
+
+// The Provider Platforms service reaches core's users and live providers over
+// /internal/v1/core with the service token, and nothing else gets in.
+func TestInternalCoreAPI(t *testing.T) {
+	t.Setenv("PROVIDER_PLATFORMS_TOKEN", "s3cret")
+	srv := newTestingServer()
+	srv.registerInternalRoutes()
+	core := httptest.NewServer(srv.Mux)
+	t.Cleanup(core.Close)
+	north := createTestFacility(t, srv, "North")
+	admin := createTestUser(t, srv, "facadmin", models.FacilityAdmin, north)
+
+	t.Run("a user comes back", func(t *testing.T) {
+		got, err := coreapi.NewUsersClient(core.URL, "s3cret", nil).Get(context.Background(), admin.ID)
+		require.NoError(t, err)
+		assert.Equal(t, admin.Username, got.Username)
+	})
+	t.Run("a missing user is ErrUserNotFound", func(t *testing.T) {
+		_, err := coreapi.NewUsersClient(core.URL, "s3cret", nil).Get(context.Background(), 9999)
+		assert.ErrorIs(t, err, coreapi.ErrUserNotFound)
+	})
+	t.Run("only a student can be created", func(t *testing.T) {
+		_, err := coreapi.NewUsersClient(core.URL, "s3cret", nil).Create(context.Background(), coreapi.NewUser{
+			Username: "sneaky", FacilityID: north, Role: users.SystemAdmin,
+		})
+		assert.Error(t, err)
+		_, err = srv.Db.GetUserByUsername("sneaky")
+		assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	})
+	t.Run("the wrong token is rejected", func(t *testing.T) {
+		_, err := coreapi.NewUsersClient(core.URL, "wrong", nil).Get(context.Background(), admin.ID)
+		assert.Error(t, err)
+	})
+	t.Run("clearing the Canvas cache without a cache is harmless", func(t *testing.T) {
+		assert.NotPanics(t, func() { coreapi.NewLiveProvidersClient(core.URL, "s3cret", nil).MappingsChanged(1, 1) })
+	})
 }

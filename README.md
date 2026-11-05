@@ -63,6 +63,13 @@ a checkout of it. To work on it, clone it and set `OPEN_CONTENT_DIR` in `.env` t
 (such as `../unlocked-open-content`); `make dev` then builds your changes. To try another branch
 without a checkout, such as one in review, set `OPEN_CONTENT_REF` to the branch name.
 
+**Provider Platforms** ([unlocked-provider-platforms](https://github.com/UnlockedLabs/unlocked-provider-platforms))
+runs as its own service the same way: `make dev` builds its `main` branch from GitHub, or your
+checkout when `PROVIDER_PLATFORMS_DIR` is set (such as `../unlocked-provider-platforms`), or another
+branch with `PROVIDER_PLATFORMS_REF`. Core forwards its `/api` routes to it and both call each other
+with `PROVIDER_PLATFORMS_TOKEN`; if you run the server outside compose, `.env.example` points
+`PROVIDER_PLATFORMS_URL` at its port, 8083.
+
 
 **NOTE:** you _must_ be sure to use `127.0.0.1` in place of `localhost` in your browser, as the cookies required for authentication are not shared between the two,
 and this can cause bad states in the browser that will prevent successful login/auth flow.
@@ -116,22 +123,16 @@ If this does not work because your directory is named something different, you c
   - `make canvas-init` and `make canvas-seed` are still available for doing either step by hand --
     re-seeding, or re-creating the database after `docker compose ... down --volumes`.
 
-  To connect UnlockEd to it, first run `make seed` if you have not already. `make canvas` seeds
-  only the Canvas LMS database, so on a fresh UnlockEd database the `Canvas` provider platform the
-  next step asks you to edit does not exist yet.
-
-  Then log in to Canvas at `localhost:3001` as that admin, go to Account -> Settings ->
+  To connect UnlockEd to it, log in to Canvas at `localhost:3001` as that admin, go to Account -> Settings ->
   New Access Token, and copy the token. Back in UnlockEd, enable the `provider_platforms` feature
-  flag for your facility (every Canvas call is gated on it) and edit the seeded `Canvas` provider
-  platform, pasting the token you just copied into `access_key`.
-
-  That is the only field you need to fill in. `make seed` points the platform at the local
-  Canvas (`base_url` `http://canvas`, `account_id` `1`) and leaves it enabled; the access key is
-  the one value that can't be seeded, since you mint it per machine.
+  flag for your facility (every Canvas call is gated on it) and edit the Canvas provider platform
+  `make seed` added (Provider Platforms' `seed-dev`): `base_url` `http://canvas`, `account_id` `1`,
+  and paste the token you just copied as its `access_key`.
 
   **Note** the base url is `http://canvas`, not `localhost:3001`. UnlockEd calls the Canvas API
-  from inside the `server` and `providerplatforms-worker` containers, so it needs the compose service
-  name. `localhost:3001` only works from your browser.
+  from inside the `providerplatforms` and `providerplatforms-worker` containers, so it needs the
+  compose service name. `localhost:3001` only works from your browser.
+
 
  - **Videos**:
    Videos can be hosted locally for development, in which case they are simply downloaded and moved into the `frontend/public/videos` directory,

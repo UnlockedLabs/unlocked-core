@@ -13,20 +13,21 @@ import (
 	"time"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
-	ppapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api"
 
 	"github.com/nats-io/nats.go"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/UnlockedLabs/unlocked-contracts/coreapi"
+	"github.com/UnlockedLabs/unlocked-contracts/providerplatforms"
 )
 
 //go:embed migrations
 var migrations embed.FS
 
-// Module is the Programs module. The registry gives it Provider Platforms'
-// api, on Provider Platforms' own connection, which it asks about providers
-// and the users linked to them.
+// Module is the Programs module. The registry gives it the Provider Platforms
+// service's client, which it asks about providers and the users linked to them.
 type Module struct {
-	ProviderPlatforms func(deps module.Deps) ppapi.ProviderPlatforms
+	ProviderPlatforms providerplatforms.ProviderPlatforms
 }
 
 var (
@@ -44,7 +45,7 @@ func (Module) Schema() string { return "programs" }
 type server struct {
 	store             *Store
 	Client            module.HTTPClient
-	providerPlatforms ppapi.ProviderPlatforms
+	providerPlatforms providerplatforms.ProviderPlatforms
 	facilityFeatures  module.Features
 	reports           module.Reports
 	// buckets cache the Canvas programs, classes and events. They are nil
@@ -61,7 +62,7 @@ func (m Module) newServer(deps module.Deps) *server {
 	srv := &server{
 		store:             &Store{deps.DB},
 		Client:            deps.HTTP,
-		providerPlatforms: m.ProviderPlatforms(deps),
+		providerPlatforms: m.ProviderPlatforms,
 		facilityFeatures:  deps.Features,
 		reports:           deps.Reports,
 	}
@@ -91,9 +92,9 @@ func (Module) RegisterJobs(s module.Scheduler, deps module.Deps) {
 func (Module) Migrations() fs.FS { return migrations }
 
 // LiveProviders is the Canvas and Essential Education code Provider Platforms
-// needs (module.Deps.LiveProviders), until Provider Platforms fetches and
+// needs, until Provider Platforms fetches and
 // caches the providers' classes itself.
-func (m Module) LiveProviders(deps module.Deps) module.LiveProviders {
+func (m Module) LiveProviders(deps module.Deps) coreapi.LiveProviders {
 	return liveProviders{m.newServer(deps)}
 }
 
@@ -151,7 +152,7 @@ func (Module) TestModels() []any {
 // Education's users and Canvas's cached programs.
 type liveProviders struct{ srv *server }
 
-func (l liveProviders) Users(ctx context.Context, providerID uint) ([]module.ProviderUser, bool, error) {
+func (l liveProviders) Users(ctx context.Context, providerID uint) ([]coreapi.ProviderUser, bool, error) {
 	provider, err := l.srv.providerByID(ctx, providerID)
 	if err != nil {
 		return nil, false, err

@@ -11,9 +11,10 @@ import (
 	"github.com/UnlockedLabs/unlocked-core/backend/src/jasper"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 
+	"github.com/UnlockedLabs/unlocked-contracts/coreapi"
 	"github.com/UnlockedLabs/unlocked-contracts/identity"
+	"gorm.io/gorm"
 )
 
 // moduleRouter registers feature-module routes behind the same auth, admin and
@@ -99,19 +100,23 @@ func (c *Claims) identityClaims() *identity.Claims {
 	}
 }
 
-// moduleUsers gives modules core's user accounts. It reads srv's fields on each
-// call, since the testing server sets some after startup.
-type moduleUsers struct{ srv *Server }
+// coreUsers gives the Provider Platforms service core's user accounts
+// (coreapi.Users). It reads srv's fields on each call, since the testing
+// server sets some after startup.
+type coreUsers struct{ srv *Server }
 
-func (u moduleUsers) Get(ctx context.Context, id uint) (module.User, error) {
+func (u coreUsers) Get(ctx context.Context, id uint) (coreapi.User, error) {
 	user, err := database.NewDB(u.srv.Db.WithContext(ctx)).GetUserByID(id)
 	if err != nil {
-		return module.User{}, fmt.Errorf("get user %d: %w", id, dbCause(err))
+		if errors.Is(dbCause(err), gorm.ErrRecordNotFound) {
+			return coreapi.User{}, fmt.Errorf("get user %d: %w", id, coreapi.ErrUserNotFound)
+		}
+		return coreapi.User{}, fmt.Errorf("get user %d: %w", id, dbCause(err))
 	}
-	return toModuleUser(user), nil
+	return toCoreUser(user), nil
 }
 
-func (u moduleUsers) Create(ctx context.Context, nu module.NewUser) (module.User, error) {
+func (u coreUsers) Create(ctx context.Context, nu coreapi.NewUser) (coreapi.User, error) {
 	user := models.User{
 		Username:   nu.Username,
 		NameFirst:  nu.NameFirst,
@@ -126,12 +131,12 @@ func (u moduleUsers) Create(ctx context.Context, nu module.NewUser) (module.User
 		ctx = context.WithValue(ctx, models.UserIDKey, c.UserID)
 	}
 	if err := database.NewDB(u.srv.Db.WithContext(ctx)).CreateUser(&user); err != nil {
-		return module.User{}, fmt.Errorf("create user %s: %w", nu.Username, dbCause(err))
+		return coreapi.User{}, fmt.Errorf("create user %s: %w", nu.Username, dbCause(err))
 	}
-	return toModuleUser(&user), nil
+	return toCoreUser(&user), nil
 }
 
-func (u moduleUsers) CreateLogin(ctx context.Context, userID uint) (string, error) {
+func (u coreUsers) CreateLogin(ctx context.Context, userID uint) (string, error) {
 	user, err := database.NewDB(u.srv.Db.WithContext(ctx)).GetUserByID(userID)
 	if err != nil {
 		return "", fmt.Errorf("get user %d: %w", userID, dbCause(err))
@@ -146,7 +151,7 @@ func (u moduleUsers) CreateLogin(ctx context.Context, userID uint) (string, erro
 	return password, nil
 }
 
-func (u moduleUsers) Delete(ctx context.Context, id uint) error {
+func (u coreUsers) Delete(ctx context.Context, id uint) error {
 	if err := database.NewDB(u.srv.Db.WithContext(ctx)).DeleteUser(int(id)); err != nil {
 		return fmt.Errorf("delete user %d: %w", id, dbCause(err))
 	}
@@ -179,8 +184,8 @@ func (pdfReports) PDF(template string, report module.Report) ([]byte, error) {
 	return jasper.GenerateReportPDF(template, report)
 }
 
-func toModuleUser(u *models.User) module.User {
-	return module.User{
+func toCoreUser(u *models.User) coreapi.User {
+	return coreapi.User{
 		ID:         u.ID,
 		Username:   u.Username,
 		NameFirst:  u.NameFirst,
@@ -201,17 +206,14 @@ func dbCause(err error) error {
 }
 
 func (srv *Server) moduleDeps() module.Deps {
-	deps := module.Deps{
+	return module.Deps{
 		DB:        srv.Db.DB,
 		NATS:      srv.nats,
-		Users:     moduleUsers{srv},
 		HTTP:      httpClient{srv},
 		Features:  facilityFeatures{srv},
 		Reports:   pdfReports{},
 		ModuleDBs: srv.moduleDBs.For,
 	}
-	deps.LiveProviders = registry.LiveProviders(deps)
-	return deps
 }
 
 func (srv *Server) registerModuleRoutes() {

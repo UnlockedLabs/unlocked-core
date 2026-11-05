@@ -161,7 +161,7 @@ func seedPrograms(t *testing.T, env *TestEnv, lms *httptest.Server) programsWorl
 		require.NoError(t, err)
 		return d
 	}
-	const providerKey = "MDEyMzQ1Njc4OWFiY2RlZsFxCXqsaoGNjd91872zRlhh9w==" // "admin:kolibri-pass" under APP_KEY test-app-key
+	const providerKey = "test-access-key"
 	north, south := w.north.ID, w.south.ID
 	for _, stmt := range []struct {
 		sql  string

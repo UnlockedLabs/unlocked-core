@@ -5,40 +5,46 @@
 package registry
 
 import (
+	"net/http"
+	"os"
+
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/learningrecord"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms"
-	ppapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/providerplatforms/api"
 
+	"github.com/UnlockedLabs/unlocked-contracts/coreapi"
+	"github.com/UnlockedLabs/unlocked-contracts/providerplatforms"
 	"gorm.io/gorm"
 )
 
 // All returns every feature module, in the order their routes and jobs are
-// registered and their migrations run. Provider Platforms comes before
-// Programs, because Programs uses its classes (EN-186).
+// registered and their migrations run. Provider Platforms is its own service
+// since EN-206, so it isn't here.
 func All() []module.Module {
 	return []module.Module{
-		providerplatforms.Module{},
 		programsModule(),
 		learningrecord.Module{},
 	}
 }
 
-// ProviderPlatforms is Provider Platforms' answers to core, on the connection
-// db gives the Provider Platforms module (database.ModuleDBs.For).
-func ProviderPlatforms(db func(name string) *gorm.DB) ppapi.ProviderPlatforms {
-	return providerplatforms.NewAPI(db(providerplatforms.Module{}.Name()))
+// ProviderPlatformsURL is where the Provider Platforms service is:
+// PROVIDER_PLATFORMS_URL, else the service's name in the cluster.
+func ProviderPlatformsURL() string {
+	if url := os.Getenv("PROVIDER_PLATFORMS_URL"); url != "" {
+		return url
+	}
+	return "http://provider-platforms:8080"
 }
 
-// ProviderPlatformsInTx runs fn with Provider Platforms' answers inside core's
-// transaction tx, as Provider Platforms' own connection runs (module.RunAs), so
-// its writes commit or roll back with core's.
-func ProviderPlatformsInTx(tx *gorm.DB, fn func(ppapi.ProviderPlatforms) error) error {
-	return module.RunAs(tx, providerplatforms.Module{}, func(tx *gorm.DB) error {
-		return fn(providerplatforms.NewAPI(tx))
-	})
+// ProviderPlatformsToken is the site's secret core and the Provider Platforms
+// service call each other with.
+func ProviderPlatformsToken() string { return os.Getenv("PROVIDER_PLATFORMS_TOKEN") }
+
+// ProviderPlatforms is the Provider Platforms service's answers to core, asked
+// over HTTP.
+func ProviderPlatforms() providerplatforms.ProviderPlatforms {
+	return providerplatforms.NewClient(ProviderPlatformsURL(), ProviderPlatformsToken(), http.DefaultClient)
 }
 
 // Programs is Programs' answers to core, on the connection db gives the
@@ -57,17 +63,15 @@ func ProgramsInTx(tx *gorm.DB, fn func(programsapi.Programs) error) error {
 }
 
 // LiveProviders is Programs' Canvas and Essential Education code, on Programs'
-// own connection, for Provider Platforms' Deps.LiveProviders.
-func LiveProviders(deps module.Deps) module.LiveProviders {
+// own connection, for the Provider Platforms service to call.
+func LiveProviders(deps module.Deps) coreapi.LiveProviders {
 	m := programsModule()
 	deps.DB = deps.ModuleDBs(m.Name())
 	return m.LiveProviders(deps)
 }
 
-// programsModule is the Programs module, which asks Provider Platforms' api
-// about providers, on Provider Platforms' own connection.
+// programsModule is the Programs module, which asks the Provider Platforms
+// service about providers.
 func programsModule() programs.Module {
-	return programs.Module{ProviderPlatforms: func(deps module.Deps) ppapi.ProviderPlatforms {
-		return providerplatforms.NewAPI(deps.ModuleDBs(providerplatforms.Module{}.Name()))
-	}}
+	return programs.Module{ProviderPlatforms: ProviderPlatforms()}
 }

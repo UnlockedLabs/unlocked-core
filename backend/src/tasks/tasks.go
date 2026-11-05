@@ -1,6 +1,9 @@
 package tasks
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -13,8 +16,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Scheduler runs the feature modules' background jobs (module.Scheduler).
-// Core has none of its own since EN-197.
+// Scheduler runs the feature modules' background jobs (module.Scheduler) and
+// core's one job, unlinking deleted users from Provider Platforms.
 type Scheduler struct {
 	gocron.Scheduler
 }
@@ -22,7 +25,7 @@ type Scheduler struct {
 // Start schedules every feature module's background jobs, each module's on
 // its own connection (moduleDBs). The scheduler process (`backend scheduler`)
 // calls it, and so does the API server while ServerRunsJobs is true.
-func Start(nats *nats.Conn, mods []module.Module, moduleDBs database.ModuleDBs) *Scheduler {
+func Start(nats *nats.Conn, mods []module.Module, moduleDBs database.ModuleDBs, core *database.DB, unlinker MappingUnlinker) *Scheduler {
 	gs, err := gocron.NewScheduler()
 	if err != nil {
 		log.Fatalf("Failed to create scheduler: %v", err)
@@ -33,7 +36,44 @@ func Start(nats *nats.Conn, mods []module.Module, moduleDBs database.ModuleDBs) 
 	for _, m := range mods {
 		m.RegisterJobs(s, module.Deps{DB: moduleDBs.For(m.Name()), NATS: nats})
 	}
+	unlink := func() {
+		if err := unlinkDeletedUsers(context.Background(), core, unlinker); err != nil {
+			log.Errorf("Unlinking deleted users from Provider Platforms: %v", err)
+		}
+	}
+	if err := s.Cron(unlinkSchedule, unlink); err != nil {
+		log.Fatalf("Failed to schedule unlinking deleted users: %v", err)
+	}
 	return s
+}
+
+// MappingUnlinker is Provider Platforms' removal of a user's provider account
+// links.
+type MappingUnlinker interface {
+	DeleteUserMappings(ctx context.Context, userID uint) error
+}
+
+const unlinkSchedule = "* * * * *"
+
+// unlinkDeletedUsers asks Provider Platforms to unlink every user DeleteUser
+// queued, and dequeues the ones it unlinks. One that fails stays queued for
+// the next run, and the rest still go.
+func unlinkDeletedUsers(ctx context.Context, core *database.DB, unlinker MappingUnlinker) error {
+	queued, err := core.QueuedMappingDeletions(ctx)
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, userID := range queued {
+		if err := unlinker.DeleteUserMappings(ctx, userID); err != nil {
+			errs = append(errs, fmt.Errorf("unlink user %d: %w", userID, err))
+			continue
+		}
+		if err := core.DequeueMappingDeletion(ctx, userID); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // ServerRunsJobs reports whether the API server runs the background jobs
