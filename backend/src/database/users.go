@@ -291,13 +291,13 @@ func (db *DB) UserIdentityExists(username string, doc string) (bool, bool) {
 }
 
 // ResidentIDExists reports whether any user already has docID as their
-// resident ID. IDs that differ only in case or surrounding spaces are the
-// same ID.
+// resident ID, compared as models.NormalizeResidentID compares them.
 func (db *DB) ResidentIDExists(docID string) (bool, error) {
 	var exists bool
 	if err := db.Model(&models.User{}).
 		Select("1").
-		Where("LOWER(TRIM(doc_id)) = ?", strings.ToLower(strings.TrimSpace(docID))).
+		// The stored side of models.NormalizeResidentID; change both together.
+		Where("LOWER(TRIM(doc_id)) = ?", models.NormalizeResidentID(docID)).
 		Limit(1).
 		Find(&exists).Error; err != nil {
 		return false, newGetRecordsDBError(err, "users")

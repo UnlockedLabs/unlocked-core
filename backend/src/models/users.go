@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"math/big"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/UnlockedLabs/unlocked-contracts/users"
@@ -75,6 +76,12 @@ type User struct {
 
 func (User) TableName() string {
 	return "users"
+}
+
+// NormalizeResidentID is the form two resident IDs are compared in: IDs that
+// differ only in case or surrounding spaces are the same ID.
+func NormalizeResidentID(id string) string {
+	return strings.ToLower(strings.TrimSpace(id))
 }
 
 func (usr *User) BeforeCreate(tx *gorm.DB) error {

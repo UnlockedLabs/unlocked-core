@@ -180,13 +180,12 @@ func ValidateUserRow(row []string, rowNum int, headerMap *HeaderMapping, existin
 	}
 
 	if residentID != "" {
-		// Resident IDs are unique case-insensitively (see ResidentIDExists), so
-		// the intra-batch check folds case too.
-		lowerResidentID := strings.ToLower(residentID)
-		if existingRowNum, exists := existingResidentIDs[lowerResidentID]; exists {
+		// The intra-batch check compares IDs the way the database check does.
+		residentKey := models.NormalizeResidentID(residentID)
+		if existingRowNum, exists := existingResidentIDs[residentKey]; exists {
 			errors = append(errors, fmt.Sprintf("Duplicate Resident ID - also found in row %d", existingRowNum))
 		} else {
-			existingResidentIDs[lowerResidentID] = rowNum
+			existingResidentIDs[residentKey] = rowNum
 		}
 	}
 

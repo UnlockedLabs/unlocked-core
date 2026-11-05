@@ -367,8 +367,8 @@ func (srv *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request, log 
 	}
 	// Only a changed ID is checked, so saving a resident with their own ID
 	// always works, even one another resident already shares.
-	newDocID := strings.TrimSpace(models.FormatNullableString(user.DocID))
-	if newDocID != "" && !strings.EqualFold(newDocID, strings.TrimSpace(models.FormatNullableString(toUpdate.DocID))) {
+	newDocID := models.NormalizeResidentID(models.FormatNullableString(user.DocID))
+	if newDocID != "" && newDocID != models.NormalizeResidentID(models.FormatNullableString(toUpdate.DocID)) {
 		exists, err := srv.Db.ResidentIDExists(newDocID)
 		if err != nil {
 			return newDatabaseServiceError(err)
