@@ -2,6 +2,8 @@ package tasks
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -34,7 +36,12 @@ func Start(nats *nats.Conn, mods []module.Module, moduleDBs database.ModuleDBs, 
 	for _, m := range mods {
 		m.RegisterJobs(s, module.Deps{DB: moduleDBs.For(m.Name()), NATS: nats})
 	}
-	if err := s.Cron(unlinkSchedule, func() { unlinkDeletedUsers(core, unlinker) }); err != nil {
+	unlink := func() {
+		if err := unlinkDeletedUsers(context.Background(), core, unlinker); err != nil {
+			log.Errorf("Unlinking deleted users from Provider Platforms: %v", err)
+		}
+	}
+	if err := s.Cron(unlinkSchedule, unlink); err != nil {
 		log.Fatalf("Failed to schedule unlinking deleted users: %v", err)
 	}
 	return s
@@ -48,12 +55,25 @@ type MappingUnlinker interface {
 
 const unlinkSchedule = "* * * * *"
 
-// unlinkDeletedUsers unlinks every user DeleteUser queued. One that fails
-// stays queued for the next run.
-func unlinkDeletedUsers(core *database.DB, unlinker MappingUnlinker) {
-	if err := core.DrainMappingDeletions(context.Background(), unlinker.DeleteUserMappings); err != nil {
-		log.Errorf("Unlinking deleted users from Provider Platforms: %v", err)
+// unlinkDeletedUsers asks Provider Platforms to unlink every user DeleteUser
+// queued, and dequeues the ones it unlinks. One that fails stays queued for
+// the next run, and the rest still go.
+func unlinkDeletedUsers(ctx context.Context, core *database.DB, unlinker MappingUnlinker) error {
+	queued, err := core.QueuedMappingDeletions(ctx)
+	if err != nil {
+		return err
 	}
+	var errs []error
+	for _, userID := range queued {
+		if err := unlinker.DeleteUserMappings(ctx, userID); err != nil {
+			errs = append(errs, fmt.Errorf("unlink user %d: %w", userID, err))
+			continue
+		}
+		if err := core.DequeueMappingDeletion(ctx, userID); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // ServerRunsJobs reports whether the API server runs the background jobs

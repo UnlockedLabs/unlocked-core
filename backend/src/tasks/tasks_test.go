@@ -2,15 +2,19 @@ package tasks
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"testing"
 	"testing/fstest"
 	"time"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
+	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
 
 	"github.com/go-co-op/gocron/v2"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestServerRunsJobs(t *testing.T) {
@@ -107,4 +111,31 @@ func TestAtStart(t *testing.T) {
 		t.Error("the task ran right away, want it delayed")
 	default:
 	}
+}
+
+// unlinkFunc is a MappingUnlinker.
+type unlinkFunc func(ctx context.Context, userID uint) error
+
+func (f unlinkFunc) DeleteUserMappings(ctx context.Context, userID uint) error { return f(ctx, userID) }
+
+// A user Provider Platforms can't unlink stays queued for the next run, and
+// the rest still go.
+func TestUnlinkDeletedUsers(t *testing.T) {
+	db := database.InitDB(context.Background(), true)
+	require.NoError(t, db.Create(&[]models.ProviderMappingDeletion{{UserID: 1}, {UserID: 2}, {UserID: 3}}).Error)
+
+	var asked []uint
+	err := unlinkDeletedUsers(context.Background(), db, unlinkFunc(func(_ context.Context, id uint) error {
+		asked = append(asked, id)
+		if id == 2 {
+			return errors.New("service down")
+		}
+		return nil
+	}))
+
+	assert.ErrorContains(t, err, "service down")
+	assert.ElementsMatch(t, []uint{1, 2, 3}, asked, "one failure doesn't stop the rest")
+	left, err := db.QueuedMappingDeletions(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, []uint{2}, left, "only the failed one stays queued")
 }

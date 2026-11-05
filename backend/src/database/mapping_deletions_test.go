@@ -2,7 +2,6 @@ package database
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
@@ -40,20 +39,15 @@ func TestDeleteUserMissingQueuesNothing(t *testing.T) {
 	assert.Empty(t, pendingUserIDs(t, db))
 }
 
-func TestDrainMappingDeletions(t *testing.T) {
+func TestMappingDeletionQueue(t *testing.T) {
 	db := InitDB(context.Background(), true)
-	require.NoError(t, db.Create(&[]models.ProviderMappingDeletion{{UserID: 1}, {UserID: 2}, {UserID: 3}}).Error)
+	ctx := context.Background()
+	require.NoError(t, db.Create(&[]models.ProviderMappingDeletion{{UserID: 3}, {UserID: 1}}).Error)
 
-	var asked []uint
-	err := db.DrainMappingDeletions(context.Background(), func(_ context.Context, id uint) error {
-		asked = append(asked, id)
-		if id == 2 {
-			return errors.New("service down")
-		}
-		return nil
-	})
+	queued, err := db.QueuedMappingDeletions(ctx)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []uint{1, 3}, queued)
 
-	assert.ErrorContains(t, err, "service down")
-	assert.Equal(t, []uint{1, 2, 3}, asked, "one failure doesn't stop the rest")
-	assert.Equal(t, []uint{2}, pendingUserIDs(t, db), "only the failed one stays queued")
+	require.NoError(t, db.DequeueMappingDeletion(ctx, 3))
+	assert.Equal(t, []uint{1}, pendingUserIDs(t, db))
 }
