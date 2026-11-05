@@ -106,6 +106,10 @@ func TestProviderPlatformsProxyEnforcesAccessBeforeForwarding(t *testing.T) {
 		{"user reads another user's courses", fmt.Sprintf("/api/users/%d/courses", neighbor.ID), as(resident), http.StatusUnauthorized},
 		{"facility admin reads another facility's user", fmt.Sprintf("/api/users/%d/catalog", southResident.ID), facAdmin, http.StatusUnauthorized},
 		{"facility admin reads their facility's user", fmt.Sprintf("/api/users/%d/catalog", resident.ID), facAdmin, http.StatusOK},
+		{"user reads their own outcomes", fmt.Sprintf("/api/users/%d/outcomes", resident.ID), as(resident), http.StatusOK},
+		{"user reads another user's outcomes", fmt.Sprintf("/api/users/%d/outcomes", neighbor.ID), as(resident), http.StatusUnauthorized},
+		{"facility admin reads another facility's logins", fmt.Sprintf("/api/users/%d/logins", southResident.ID), facAdmin, http.StatusUnauthorized},
+		{"facility admin reads their facility's logins", fmt.Sprintf("/api/users/%d/logins", resident.ID), facAdmin, http.StatusOK},
 		{"user on an admin route", "/api/provider-platforms", as(resident), http.StatusUnauthorized},
 		{"feature off", fmt.Sprintf("/api/users/%d/courses", resident.ID), noFeature, http.StatusUnauthorized},
 	}
