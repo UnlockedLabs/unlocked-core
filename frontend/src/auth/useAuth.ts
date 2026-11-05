@@ -62,16 +62,53 @@ export const isStudent = (user: User): boolean => {
 export const SESSION_URL = '/sessions/whoami';
 export const KRATOS_CHECK_FLOW_URL = '/self-service/login/flows?id=';
 export const AUTHCALLBACK = '/authcallback';
+const KRATOS_LOGOUT_URL = '/self-service/logout/browser';
+const RETURN_TO_KEY = 'return_to';
+
+/**
+ * Who core says is signed in: the user, 'signed-out' when it rejects the
+ * session, or 'unavailable' when it couldn't answer (server down, network).
+ */
+export async function checkSession(): Promise<
+    User | 'signed-out' | 'unavailable'
+> {
+    const response = await API.get<User>('auth');
+    if (response.success) {
+        return response.data as User;
+    }
+    return response.status === 401 || response.status === 403
+        ? 'signed-out'
+        : 'unavailable';
+}
 
 export async function fetchUser(): Promise<User | undefined> {
-    const response = await API.get<User>('auth');
-    const user = response.data as User;
-    return user;
+    const session = await checkSession();
+    return typeof session === 'string' ? undefined : session;
+}
+
+/**
+ * Remembers the page a signed-out visitor asked for, so signing in takes them
+ * back to it. It's per tab, and the next sign-in in that tab uses it up.
+ */
+export function rememberReturnTo(): void {
+    const { pathname, search, hash } = window.location;
+    if (pathname !== AUTHCALLBACK) {
+        setSessionItem(RETURN_TO_KEY, pathname + search + hash);
+    }
+}
+
+function takeReturnTo(): string | null {
+    const path = getSessionItem(RETURN_TO_KEY);
+    removeSessionItem(RETURN_TO_KEY);
+    // Only a path on this site: browsers read "//host" and "/\host" as another
+    // site.
+    return path?.startsWith('/') && !/^\/[/\\]/.test(path) ? path : null;
 }
 
 export const checkRole: LoaderFunction = async () => {
     const user = await fetchUser();
-    return redirect(getDashboardLink(user));
+    const returnTo = user ? takeReturnTo() : null;
+    return redirect(returnTo ?? getDashboardLink(user));
 };
 
 export function useAuth(): AuthContextType {
@@ -219,27 +256,35 @@ export const checkExistingFlow: LoaderFunction = async ({ request }) => {
     return json<AuthFlow>(attributes);
 };
 
+/**
+ * Ends the Kratos session and lands on login, whatever fails along the way.
+ * It asks Kratos directly rather than core, because it also runs after core
+ * has rejected the session. Ending the Kratos session matters then too: a
+ * session Kratos still accepts (a deactivated user's) would send the login
+ * flow straight back into the app, and the app back to login.
+ */
 export async function handleLogout(): Promise<void> {
+    resetAnalytics();
+    tabSessionManager.onLogout();
+    window.dispatchEvent(new Event('logoutEvent'));
     try {
-        resetAnalytics();
-        tabSessionManager.onLogout();
-        const resp = await API.post<AuthResponse, object>('logout', {});
-        if (resp.success) {
-            const logout = await fetch(
-                (resp.data as AuthResponse).redirect_to,
-                { credentials: 'include' }
-            );
-            if (logout.status === 200) {
-                window.dispatchEvent(new Event('logoutEvent'));
-                const logoutResp = (await logout.json()) as AuthResponse;
-                window.location.replace(
-                    logoutResp.logout_url ?? INIT_KRATOS_LOGIN_FLOW
-                );
+        // Without the Accept header, Kratos answers "no session" by redirecting
+        // to its error page instead of a 401.
+        const resp = await fetch(KRATOS_LOGOUT_URL, {
+            credentials: 'include',
+            headers: { Accept: 'application/json' }
+        });
+        if (resp.ok) {
+            const { logout_url } = (await resp.json()) as AuthResponse;
+            if (logout_url) {
+                window.location.replace(logout_url);
+                return;
             }
         }
     } catch {
-        window.location.href = INIT_KRATOS_LOGIN_FLOW;
+        // Falls through to the login flow.
     }
+    window.location.replace(INIT_KRATOS_LOGIN_FLOW);
 }
 
 export const getDashboardLink = (user?: User) => {

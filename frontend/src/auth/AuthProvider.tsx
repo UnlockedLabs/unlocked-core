@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { INIT_KRATOS_LOGIN_FLOW, User } from '@/types';
-import { AuthContext, fetchUser, handleLogout } from '@/auth/useAuth';
+import { User } from '@/types';
+import {
+    AuthContext,
+    checkSession,
+    handleLogout,
+    rememberReturnTo
+} from '@/auth/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { tabSessionManager } from '@/session/tabSession';
 import { analyticsDistinctId, identifyUser } from '@/lib/events';
@@ -11,34 +16,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
     const passReset = '/reset-password';
     const [user, setUser] = useState<User | undefined>();
-    const [loading, setLoading] = useState(true);
+    const [unavailable, setUnavailable] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
         let cancelled = false;
         const checkAuth = async () => {
-            const authUser = await fetchUser();
+            const session = await checkSession();
             if (cancelled) return;
-            if (authUser) {
-                const hasValidTabSession =
-                    await tabSessionManager.validateSession();
-                if (cancelled) return;
-                if (!hasValidTabSession) {
-                    await handleLogout();
-                    return;
-                }
-                // Before anything reads Learning Record storage: discard it if
-                // it belongs to a different resident. Facility workstations are
-                // shared, the keys are per-origin, and logging out clears none of
-                // them — so without this the next person to sign in inherits the
-                // previous one's unfinished achievement and their sitting.
-                await setDigitalTranscriptStorageOwner(
-                    analyticsDistinctId(authUser.id)
-                );
-                identifyUser(authUser);
-                setUser(authUser);
+            if (session === 'unavailable') {
+                setUnavailable(true);
+                return;
             }
-            setLoading(false);
+            if (
+                session === 'signed-out' ||
+                !(await tabSessionManager.validateSession())
+            ) {
+                if (cancelled) return;
+                rememberReturnTo();
+                await handleLogout();
+                return;
+            }
+            if (cancelled) return;
+            const authUser = session;
+            // Before anything reads Learning Record storage: discard it if
+            // it belongs to a different resident. Facility workstations are
+            // shared, the keys are per-origin, and logging out clears none of
+            // them — so without this the next person to sign in inherits the
+            // previous one's unfinished achievement and their sitting.
+            await setDigitalTranscriptStorageOwner(
+                analyticsDistinctId(authUser.id)
+            );
+            identifyUser(authUser);
+            setUser(authUser);
         };
         void checkAuth();
         return () => {
@@ -47,17 +57,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }, []);
 
     useEffect(() => {
-        if (loading) return;
-        if (!user) {
-            window.location.href = INIT_KRATOS_LOGIN_FLOW;
-            return;
-        }
-        if (user.password_reset && window.location.pathname !== passReset) {
+        if (user?.password_reset && window.location.pathname !== passReset) {
             navigate(passReset);
         }
-    }, [loading, user, navigate]);
+    }, [user, navigate]);
 
-    if (loading || !user) {
+    if (unavailable) {
+        // Hands it to the route's error page, so a resident sees "Something
+        // went wrong" and a way back instead of a blank screen.
+        throw new Error("Couldn't check the session: the server didn't answer");
+    }
+    if (!user) {
         return null;
     }
 
