@@ -65,11 +65,10 @@ without a checkout, such as one in review, set `OPEN_CONTENT_REF` to the branch 
 
 **Provider Platforms** ([unlocked-provider-platforms](https://github.com/UnlockedLabs/unlocked-provider-platforms))
 runs as its own service the same way: `make dev` builds its `main` branch from GitHub, or your
-checkout when `PROVIDER_PLATFORMS_DIR` is set, or another branch with `PROVIDER_PLATFORMS_REF`.
-The repo is private for now, so building from GitHub fails without access: clone it and set
-`PROVIDER_PLATFORMS_DIR` (such as `../unlocked-provider-platforms`). Core forwards its `/api`
-routes to it and both call each other with `PROVIDER_PLATFORMS_TOKEN`; if you run the server outside
-compose, `.env.example` points `PROVIDER_PLATFORMS_URL` at its port, 8083.
+checkout when `PROVIDER_PLATFORMS_DIR` is set (such as `../unlocked-provider-platforms`), or another
+branch with `PROVIDER_PLATFORMS_REF`. Core forwards its `/api` routes to it and both call each other
+with `PROVIDER_PLATFORMS_TOKEN`; if you run the server outside compose, `.env.example` points
+`PROVIDER_PLATFORMS_URL` at its port, 8083.
 
 
 **NOTE:** you _must_ be sure to use `127.0.0.1` in place of `localhost` in your browser, as the cookies required for authentication are not shared between the two,
