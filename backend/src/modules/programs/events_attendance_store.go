@@ -30,7 +30,7 @@ func (db *Store) GetAttendees(queryParams *QueryContext, params url.Values, clas
 	if err := tx.Count(&queryParams.Total).Error; err != nil {
 		return nil, newGetRecordsDBError(err, "class_event_attendance")
 	}
-	err := tx.Order(queryParams.OrderClause("program_class_event_attendance.created_at DESC")).Limit(queryParams.PerPage).Offset(queryParams.CalcOffset()).Find(&attendance).Error
+	err := tx.Order(queryParams.OrderClause("program_class_event_attendance.created_at DESC", attendanceOrderBy...)).Limit(queryParams.PerPage).Offset(queryParams.CalcOffset()).Find(&attendance).Error
 	if err != nil {
 		return nil, newGetRecordsDBError(err, "class_event_attendance")
 	}
@@ -201,11 +201,7 @@ func (db *Store) GetEnrollmentsWithAttendanceForEvent(qryCtx *QueryContext, clas
 			a.minutes_attended AS minutes_attended,
 			a.scheduled_minutes AS scheduled_minutes`
 	finalQuery := selectClause + baseQuery
-	if slices.Contains([]string{"name_first", "name_last"}, qryCtx.OrderBy) {
-		finalQuery += " ORDER BY " + adjustUserOrderBy(qryCtx.OrderClause("e.created_at DESC"))
-	} else {
-		finalQuery += " ORDER BY e.id ASC"
-	}
+	finalQuery += " ORDER BY " + rosterOrder(qryCtx)
 
 	finalQuery += " LIMIT ? OFFSET ?"
 	args = append(args, qryCtx.PerPage, qryCtx.CalcOffset())
@@ -687,4 +683,13 @@ func (db *Store) GetCumulativeAttendanceRatesForClasses(ctx context.Context, cla
 		out[r.ClassID] = r.AttendanceRate
 	}
 	return out, nil
+}
+
+// rosterOrder is the roster's ORDER BY. The query is raw SQL, so this is what
+// keeps request text out of it: name sorts only, else the stable id order.
+func rosterOrder(qryCtx *QueryContext) string {
+	if !slices.Contains(attendanceRosterOrderBy, qryCtx.OrderBy) {
+		return "e.id ASC"
+	}
+	return adjustUserOrderBy(qryCtx.OrderClause("e.created_at DESC", attendanceRosterOrderBy...))
 }

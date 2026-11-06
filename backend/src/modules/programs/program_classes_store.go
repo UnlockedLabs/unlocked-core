@@ -411,7 +411,7 @@ func (db *Store) GetProgramClassDetailsByID(id int, args *QueryContext) ([]Progr
 	if err := query.Count(&args.Total).Error; err != nil {
 		return nil, newGetRecordsDBError(err, "programs")
 	}
-	if err := query.Limit(args.PerPage).Offset(args.CalcOffset()).Order(args.OrderClause("ps.created_at desc")).Find(&classDetails).Error; err != nil {
+	if err := query.Limit(args.PerPage).Offset(args.CalcOffset()).Order(args.OrderClause("ps.created_at desc", classDetailsOrderBy...)).Find(&classDetails).Error; err != nil {
 		return nil, newGetRecordsDBError(err, "programs")
 	}
 
@@ -483,7 +483,7 @@ func (db *Store) GetProgramClassOutcomes(id int, args *QueryContext) ([]ProgramC
 			ON TO_CHAR(DATE_TRUNC('month', pce.updated_at), 'YYYY-MM') = months.month
 		`, enrollmentsSubquery), id, facilityID).
 		Group("months.month").
-		Order(args.OrderBy)
+		Order(args.OrderClause("months.month asc", classOutcomesOrderBy...))
 	if err := query.Find(&outcomes).Error; err != nil {
 		return nil, newGetRecordsDBError(err, "program_class_enrollments")
 	}
@@ -492,7 +492,7 @@ func (db *Store) GetProgramClassOutcomes(id int, args *QueryContext) ([]ProgramC
 
 func (db *Store) GetProgramClassesHistory(id int, tableName string, args *QueryContext) ([]ProgramClassesHistory, error) {
 	history := []ProgramClassesHistory{}
-	if err := db.WithContext(args.Ctx).Order(args.OrderClause("created_at desc")).
+	if err := db.WithContext(args.Ctx).Order(args.OrderClause("created_at desc", classHistoryOrderBy...)).
 		Find(&history, "parent_ref_id = ? and table_name = ?", id, tableName).
 		Error; err != nil {
 		return nil, newGetRecordsDBError(err, "program_classes_history")

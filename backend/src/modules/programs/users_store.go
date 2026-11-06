@@ -168,7 +168,7 @@ func (db *Store) GetUserProgramInfo(args *QueryContext, userId int) ([]ResidentP
             pce.id, pce.enrollment_status,
             p.name, p.id,
             cl.name, pc.status, pc.start_dt, pc.end_dt, pc.id, pce.updated_at,
-			pce.created_at, pce.change_reason`).Order(args.OrderClause("pce.created_at desc"))
+			pce.created_at, pce.change_reason`).Order(args.OrderClause("pce.created_at desc", userProgramOrderBy...))
 
 	if !args.All {
 		if err := base.Count(&args.Total).Error; err != nil {

@@ -336,13 +336,20 @@ func (q QueryContext) CalcOffset() int {
 	return int(math.Abs(float64((q.Page - 1) * q.PerPage)))
 }
 
-// OrderClause is the request's order, or fallback when it has none.
-func (q QueryContext) OrderClause(fallback string) string {
-	val := q.OrderBy + " " + q.Order
-	if val == " " || q.OrderBy == "" {
+// OrderClause is the request's order when order_by is one of allowed and the
+// direction is asc or desc (asc when absent), otherwise fallback. allowed is
+// the exact set of order_by values the query can sort by.
+func (q QueryContext) OrderClause(fallback string, allowed ...string) string {
+	if !slices.Contains(allowed, q.OrderBy) {
 		return fallback
 	}
-	return val
+	switch dir := strings.ToLower(q.Order); dir {
+	case "":
+		return q.OrderBy + " asc"
+	case "asc", "desc":
+		return q.OrderBy + " " + dir
+	}
+	return fallback
 }
 
 func (q QueryContext) SearchQuery() string {
