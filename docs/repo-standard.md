@@ -1,6 +1,6 @@
 # Repository standard
 
-Every UnlockEd repo meets this standard. The reference is `unlocked-hiset-ai` (set up in EN-182). The suite today: `unlocked-core`, `unlocked-platform`, `unlocked-contracts`, `golang-jasper`, `unlocked-hiset-ai`. New product repos (EN-202) start with it; use the checklist at the end.
+Every UnlockEd repo meets this standard. The reference is `unlocked-hiset-ai` (set up in EN-182). The suite today: `unlocked-core`, `unlocked-platform`, `unlocked-contracts`, `golang-jasper`, `unlocked-hiset-ai`, and the template `unlocked-product-template`. New product repos (EN-202) are created from that template; see the checklist at the end.
 
 ## The standard
 
@@ -39,6 +39,7 @@ CodeRabbit reviews every PR. It is a GitHub app installed per repo by an org adm
 | unlocked-contracts | 25024361 | `vet and test`, `golangci-lint`, `conventional commits`, `pr title` | `~DEFAULT_BRANCH` |
 | golang-jasper | none yet | `conventional commits`, `pr title` (it has no tests or lint) | `~DEFAULT_BRANCH` |
 | unlocked-hiset-ai | 25090572 | `test`, `conventional commits`, `pr title` | `~DEFAULT_BRANCH` |
+| unlocked-product-template | 26150292 | `vet and test`, `golangci-lint`, `govulncheck`, `conventional commits`, `pr title` | `~DEFAULT_BRANCH` |
 
 Core's golangci-lint check name contains the runner path; it changes if the repo or its backend directory is renamed.
 
@@ -70,10 +71,11 @@ Run `stage`, read the diff (it should show only check names), then `put`. Integr
 stage unlocked-core 25118710 '["tests","golangci-lint (/home/runner/work/unlocked-core/unlocked-core/backend)","Lint and build JS","conventional commits","pr title"]'
 stage unlocked-platform 25506255 '["lint and render every site","conventional commits","pr title"]'
 stage unlocked-contracts 25024361 '["vet and test","golangci-lint","conventional commits","pr title"]'
+stage unlocked-product-template 26150292 '["vet and test","golangci-lint","govulncheck","conventional commits","pr title"]'
 # after reading each diff:  put <repo> <id>
 ```
 
-Apply each after that repo's PR merges, so the new checks exist. unlocked-core is the exception, see below. Check names must match the job `name:` exactly.
+Apply each after that repo's PR merges, so the new checks exist. unlocked-core and unlocked-product-template are the exception: both still require the old name `conventional`, see below. Check names must match the job `name:` exactly.
 
 ### Named bypass exceptions
 No human can bypass `protect-main`. A GitHub App may be listed when a pipeline needs it, and every exception is recorded here. The `stage` flow above keeps them because it never rewrites the bypass list.
@@ -129,8 +131,8 @@ gh api -X POST repos/UnlockedLabs/golang-jasper/rulesets --input jasper.json
 
 The template keeps only the documented `pull_request` parameters. It has not been tried against the live API from this checkout; if GitHub rejects it, copy the working parameters from the `unlocked-hiset-ai` ruleset.
 
-### unlocked-core: swapping `conventional` for `conventional commits`
-Core's job used to be called `conventional`, and the live ruleset still requires that name. Switching the ruleset early blocks every other open PR, which still reports the old name. Delete this section once the swap is done.
+### unlocked-core and unlocked-product-template: swapping `conventional` for `conventional commits`
+Both repos' job used to be called `conventional`, and their live rulesets still require that name. The template's ruleset is also what new repos copy, so swap it before creating the next repo. The template has no release branches; skip the first check there. Switching the ruleset early blocks every other open PR, which still reports the old name. Delete this section once the swap is done.
 
 Before starting, check both of these. Either can still require the old name:
 ```sh
@@ -142,6 +144,8 @@ The ruleset also covers `release/**`. Any live release branch still reports `con
 1. Once the EN-214 core PR's checks have finished and it is otherwise ready to merge, run `stage unlocked-core 25118710 ...` and `put unlocked-core 25118710` from above.
 2. Merge the PR straight away.
 3. Tell authors of open core PRs to rebase onto main so they report the new name.
+
+The template the same way: once its EN-214 PR is green and approved, `stage`/`put unlocked-product-template 26150292`, then merge it.
 
 ### Removing classic protection
 Do this only after the ruleset is live and verified, so the branch is never unprotected. Use the repo's real default branch, not an assumed `main`:
@@ -165,6 +169,8 @@ gh api repos/UnlockedLabs/<repo>/rulesets/<id> --jq '{bypass: (.bypass_actors | 
 3. Open a PR in each repo and confirm CodeRabbit comments on it.
 
 ## New repo checklist (EN-202)
+A Go product repo: create it from `unlocked-product-template` and follow the "New product checklist" in its README, which covers everything below and copies the template's ruleset. Any other repo:
+
 - [ ] `.github/PULL_REQUEST_TEMPLATE.md` with a JIRA link, checklist and Release section.
 - [ ] `.github/CODEOWNERS` with `* @UnlockedLabs/reviewers`.
 - [ ] Workflows for tests, lint, `conventional commits` and `pr title`; every third-party action pinned by SHA.
