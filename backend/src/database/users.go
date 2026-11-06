@@ -22,6 +22,12 @@ func calcOffset(page, perPage int) int {
 	return (page - 1) * perPage
 }
 
+var (
+	validUserOrderByFields = []string{"name_last", "created_at", "last_login", "doc_id", "username", "role", "facility_name"}
+	// residentOrderByFields has no joins, so last_login and facility_name are not sortable here.
+	residentOrderByFields = []string{"name_last", "created_at", "doc_id", "username"}
+)
+
 func (db *DB) GetCurrentUsers(args *models.QueryContext, role string) ([]models.User, error) {
 	tx := db.WithContext(args.Ctx).Model(models.User{}).
 		Preload("LoginMetrics").
@@ -61,11 +67,10 @@ func (db *DB) GetCurrentUsers(args *models.QueryContext, role string) ([]models.
 		return nil, newGetRecordsDBError(err, "users")
 	}
 	users := make([]models.User, 0, args.PerPage)
-	validUserOrderByFields := []string{"name_last", "created_at", "last_login", "doc_id", "username", "role", "facility_name"}
 	if !slices.Contains(validUserOrderByFields, args.OrderBy) {
 		args.OrderBy = "name_last"
 	}
-	orderClause := adjustUserOrderBy(args.OrderClause("users.name_last desc"))
+	orderClause := adjustUserOrderBy(args.OrderClause("users.name_last desc", validUserOrderByFields...))
 	if args.OrderBy == "last_login" {
 		tx = tx.Joins("LEFT JOIN login_metrics ON login_metrics.user_id = users.id")
 		orderClause = adjustLastLoginOrderBy(orderClause)
@@ -171,7 +176,7 @@ func (db *DB) GetResidentsByIDs(args *models.QueryContext, ids []uint, defaultOr
 		return nil, newGetRecordsDBError(err, "users")
 	}
 	users := make([]models.User, 0, args.PerPage)
-	if err := tx.Order(adjustUserOrderBy(args.OrderClause(defaultOrder))).
+	if err := tx.Order(adjustUserOrderBy(args.OrderClause(defaultOrder, residentOrderByFields...))).
 		Offset(args.CalcOffset()).
 		Limit(args.PerPage).
 		Find(&users).
