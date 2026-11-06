@@ -614,6 +614,9 @@ func (srv *Server) handleResidentTransfer(w http.ResponseWriter, r *http.Request
 	if user.DeactivatedAt != nil {
 		return newBadRequestServiceError(errors.New("cannot transfer deactivated user"), "User is deactivated")
 	}
+	if _, err := srv.Db.GetFacilityByID(transRequest.TransFacilityID); err != nil {
+		return newDatabaseServiceError(err)
+	}
 	// Programs goes first, and ending the enrollments again changes nothing,
 	// so a transfer that fails after this is finished by trying again.
 	if err := srv.programs.EndEnrollmentsForTransfer(r.Context(), uint(transRequest.UserID), uint(transRequest.CurrFacilityID)); err != nil {

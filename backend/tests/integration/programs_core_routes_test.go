@@ -248,6 +248,26 @@ func TestProgramsChangesFirst(t *testing.T) {
 	require.Empty(t, withdrawn)
 }
 
+// A transfer to a facility that doesn't exist fails before Programs ends any
+// enrollments, so the resident's classes stay as they were. Programs fails its
+// changes here, so a transfer that asked it would answer 500, not 400.
+func TestTransferToUnknownFacility(t *testing.T) {
+	env := SetupTestEnv(t)
+	defer env.CleanupTestEnv()
+	w := seedProgramsRoutes(t, env)
+	env.Programs.set(func(f *fakePrograms) { f.failChanges = true })
+
+	NewRequest[any](env.Client, t, http.MethodPatch, "/api/users/resident-transfer", map[string]any{
+		"user_id": w.resident.ID, "curr_facility_id": w.north.ID, "trans_facility_id": 999,
+	}).WithTestClaims(w.claims(w.deptAdmin)).Do().
+		ExpectStatus(http.StatusBadRequest).ExpectMessage("facilities not found")
+	resident, err := env.DB.GetUserByID(w.resident.ID)
+	require.NoError(t, err)
+	require.Equal(t, w.north.ID, resident.FacilityID)
+	ended, _ := env.Programs.changes()
+	require.Empty(t, ended)
+}
+
 // sortArrays orders every JSON array by its elements' JSON, so a route whose
 // row order isn't fixed compares the same on every run.
 func sortArrays(t *testing.T, body string) string {
