@@ -6,6 +6,7 @@ name: conventional commits
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read
@@ -25,6 +26,8 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
+          # the loop reads git log through process substitution, so a bad range would pass silently
+          git rev-list "$BASE..$HEAD" > /dev/null
           pattern='^(feat|fix|chore|docs|refactor|test|ci|build|perf|revert|style)(\([a-z0-9._/-]+\))?!?: .+'
           bad=0
           while IFS= read -r subject; do
