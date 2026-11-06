@@ -1,6 +1,6 @@
 # Repository standard
 
-Every UnlockEd repo meets this standard. The reference is `unlocked-hiset-ai` (set up in EN-182). The suite today: `unlocked-core`, `unlocked-platform`, `unlocked-contracts`, `golang-jasper`, `unlocked-hiset-ai`, and the template `unlocked-product-template`. New product repos (EN-202) are created from that template; see the checklist at the end.
+Every UnlockEd repo meets this standard. The reference is `unlocked-hiset-ai` (set up in EN-182). The suite today: `unlocked-core`, `unlocked-platform`, `unlocked-contracts`, `golang-jasper`, `unlocked-hiset-ai`, the product repos made from the template (`unlocked-provider-platforms`, `unlocked-programs`, `unlocked-learning-record`, `unlocked-open-content`), and the template `unlocked-product-template`. New product repos (EN-202) are created from that template; see the checklist at the end.
 
 ## The standard
 
@@ -40,6 +40,10 @@ CodeRabbit reviews every PR. It is a GitHub app installed per repo by an org adm
 | golang-jasper | none yet | `conventional commits`, `pr title` (it has no tests or lint) | `~DEFAULT_BRANCH` |
 | unlocked-hiset-ai | 25090572 | `test`, `conventional commits`, `pr title` | `~DEFAULT_BRANCH` |
 | unlocked-product-template | 26150292 | `vet and test`, `golangci-lint`, `govulncheck`, `conventional commits`, `pr title` | `~DEFAULT_BRANCH` |
+| unlocked-provider-platforms | 26559590 | `vet and test`, `golangci-lint`, `govulncheck`, `conventional commits`, `pr title` | `~DEFAULT_BRANCH` |
+| unlocked-programs | 26622764 | `vet and test`, `golangci-lint`, `govulncheck`, `conventional commits`, `pr title` | `~DEFAULT_BRANCH` |
+| unlocked-learning-record | 26559589 | `vet and test`, `golangci-lint`, `govulncheck`, `conventional commits`, `pr title` | `~DEFAULT_BRANCH` |
+| unlocked-open-content | 26392199 | `vet and test`, `golangci-lint`, `govulncheck`, `conventional commits`, `pr title` | `~DEFAULT_BRANCH` |
 
 Core's golangci-lint check name contains the runner path; it changes if the repo or its backend directory is renamed.
 
@@ -72,10 +76,14 @@ stage unlocked-core 25118710 '["tests","golangci-lint (/home/runner/work/unlocke
 stage unlocked-platform 25506255 '["lint and render every site","conventional commits","pr title"]'
 stage unlocked-contracts 25024361 '["vet and test","golangci-lint","conventional commits","pr title"]'
 stage unlocked-product-template 26150292 '["vet and test","golangci-lint","govulncheck","conventional commits","pr title"]'
+stage unlocked-provider-platforms 26559590 '["vet and test","golangci-lint","govulncheck","conventional commits","pr title"]'
+stage unlocked-programs 26622764 '["vet and test","golangci-lint","govulncheck","conventional commits","pr title"]'
+stage unlocked-learning-record 26559589 '["vet and test","golangci-lint","govulncheck","conventional commits","pr title"]'
+stage unlocked-open-content 26392199 '["vet and test","golangci-lint","govulncheck","conventional commits","pr title"]'
 # after reading each diff:  put <repo> <id>
 ```
 
-Apply each after that repo's PR merges, so the new checks exist. unlocked-core and unlocked-product-template are the exception: both still require the old name `conventional`, see below. Check names must match the job `name:` exactly.
+Apply each after that repo's PR merges, so the new checks exist. unlocked-core, unlocked-product-template and the four product repos made from it are the exception: they still require the old name `conventional`, see below. Check names must match the job `name:` exactly.
 
 ### Named bypass exceptions
 No human can bypass `protect-main`. A GitHub App may be listed when a pipeline needs it, and every exception is recorded here. The `stage` flow above keeps them because it never rewrites the bypass list.
@@ -131,8 +139,8 @@ gh api -X POST repos/UnlockedLabs/golang-jasper/rulesets --input jasper.json
 
 The template keeps only the documented `pull_request` parameters. It has not been tried against the live API from this checkout; if GitHub rejects it, copy the working parameters from the `unlocked-hiset-ai` ruleset.
 
-### unlocked-core and unlocked-product-template: swapping `conventional` for `conventional commits`
-Both repos' job used to be called `conventional`, and their live rulesets still require that name. The template's ruleset is also what new repos copy, so swap it before creating the next repo. The template has no release branches; skip the first check there. Switching the ruleset early blocks every other open PR, which still reports the old name. Delete this section once the swap is done.
+### Repos still on `conventional`: swapping it for `conventional commits`
+unlocked-core, unlocked-product-template and the four product repos made from it called the job `conventional`, and their live rulesets still require that name. The template's ruleset is also what new repos copy, so swap it before creating the next repo. The template has no release branches; skip the first check there. Switching the ruleset early blocks every other open PR, which still reports the old name. Delete this section once the swap is done.
 
 Before starting, check both of these. Either can still require the old name:
 ```sh
@@ -145,7 +153,7 @@ The ruleset also covers `release/**`. Any live release branch still reports `con
 2. Merge the PR straight away.
 3. Tell authors of open core PRs to rebase onto main so they report the new name.
 
-The template the same way: once its EN-214 PR is green and approved, `stage`/`put unlocked-product-template 26150292`, then merge it.
+The template and the four product repos the same way: once each repo's EN-214 PR is green and approved, `stage`/`put` its ruleset, merge, and ask authors of its open PRs to rebase. None of them has release branches. A release-please PR picks up the new name the next time release-please updates it after a push to main.
 
 ### Removing classic protection
 Do this only after the ruleset is live and verified, so the branch is never unprotected. Use the repo's real default branch, not an assumed `main`:
@@ -165,7 +173,7 @@ gh api repos/UnlockedLabs/<repo>/rulesets/<id> --jq '{bypass: (.bypass_actors | 
 
 ## CodeRabbit install
 1. Upgrade the CodeRabbit plan if it does not cover private repos.
-2. GitHub org settings > Installed GitHub Apps > CodeRabbit > Configure, then add `unlocked-platform`, `unlocked-contracts` and `golang-jasper` (hiset-ai has it; confirm core on the same page).
+2. GitHub org settings > Installed GitHub Apps > CodeRabbit > Configure, then add `unlocked-platform`, `unlocked-contracts`, `golang-jasper` and any of `unlocked-provider-platforms`, `unlocked-programs`, `unlocked-learning-record`, `unlocked-open-content` not already listed (hiset-ai has it; confirm core on the same page).
 3. Open a PR in each repo and confirm CodeRabbit comments on it.
 
 ## New repo checklist (EN-202)
