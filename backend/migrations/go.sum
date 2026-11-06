@@ -1,5 +1,5 @@
-github.com/UnlockedLabs/unlocked-contracts v0.4.1-0.20261105200604-ce44538defe6 h1:iozETpI7eV199CO9s5y4g6jswUPuM6mK4Xq/crXr9DY=
-github.com/UnlockedLabs/unlocked-contracts v0.4.1-0.20261105200604-ce44538defe6/go.mod h1:RAEqqBigq/Gu5ARxWKsSjN34B2N3GlEyGX8DjHjKxK0=
+github.com/UnlockedLabs/unlocked-contracts v0.5.0 h1:Jwr3CGeD4xtr9AXV2FXqwehuUmFi9n3+5Py9HnEzPak=
+github.com/UnlockedLabs/unlocked-contracts v0.5.0/go.mod h1:RAEqqBigq/Gu5ARxWKsSjN34B2N3GlEyGX8DjHjKxK0=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

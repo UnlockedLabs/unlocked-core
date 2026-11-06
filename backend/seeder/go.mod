@@ -11,7 +11,7 @@ require (
 )
 
 require (
-	github.com/UnlockedLabs/unlocked-contracts v0.4.1-0.20261105200604-ce44538defe6 // indirect
+	github.com/UnlockedLabs/unlocked-contracts v0.5.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/coder/websocket v1.8.14 // indirect

@@ -21,7 +21,7 @@ require (
 	gorm.io/gorm v1.31.1
 )
 
-require github.com/UnlockedLabs/unlocked-contracts v0.4.1-0.20261105200604-ce44538defe6
+require github.com/UnlockedLabs/unlocked-contracts v0.5.0
 
 require go.yaml.in/yaml/v2 v2.4.3 // indirect
 
