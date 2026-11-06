@@ -1,7 +1,8 @@
 # Every commit on a branch must be a conventional commit: release-please builds
-# versions and the changelog from commit subjects. Same check as the other
-# UnlockEd repos (see docs/repo-standard.md). Merge commits are skipped.
-name: commits
+# versions and the changelog from commit subjects. Merge commits are skipped.
+# Same check as the other UnlockEd repos (see docs/repo-standard.md in
+# unlocked-core).
+name: conventional commits
 
 on:
   pull_request:
@@ -29,6 +30,10 @@ jobs:
           while IFS= read -r subject; do
             if ! printf '%s' "$subject" | grep -Eq "$pattern"; then
               echo "::error::not a conventional commit: $subject"
+              if [[ $subject == 'Revert "'* ]]; then
+                inner=${subject#Revert \"}
+                echo "::error::reword it to: revert: ${inner%\"}"
+              fi
               bad=1
             fi
           done < <(git log --no-merges --format=%s "$BASE..$HEAD")

@@ -6,6 +6,7 @@
 - [ ] Functions according to **ticket specifications**
 - [ ] Tested manually where applicable
 - [ ] Branch rebased with latest main
+- [ ] PR title and every commit are conventional commits (`feat:`, `fix:`, `docs:`...); a squash merge lands under the PR title
 - [ ] No business logic exists within the database layer
 - [ ] DB migrations (if any) are backward-compatible and online-safe — see [Database Migrations](https://github.com/UnlockedLabs/unlocked-core/blob/main/CONTRIBUTING.md#database-migrations) in CONTRIBUTING.md
 
