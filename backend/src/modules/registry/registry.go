@@ -16,7 +16,7 @@ import (
 
 // All returns every feature module, in the order their routes and jobs are
 // registered and their migrations run. Provider Platforms and Programs are
-// their own services since EN-206 and EN-207, so they aren't here.
+// their own services, so they aren't here.
 func All() []module.Module {
 	return []module.Module{
 		learningrecord.Module{},

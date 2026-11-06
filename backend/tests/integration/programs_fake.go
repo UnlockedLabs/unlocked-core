@@ -12,7 +12,7 @@ import (
 	programsapi "github.com/UnlockedLabs/unlocked-contracts/programs"
 )
 
-// fakePrograms stands in for the Programs service (EN-207). Core asks it over
+// fakePrograms stands in for the Programs service. Core asks it over
 // HTTP, through the same client and handler as in production, and it answers
 // with what the test sets. Unset answers are empty, as a site with no Programs
 // data answers.

@@ -25,8 +25,7 @@ func TestAllModules(t *testing.T) {
 			t.Errorf("module %q has no migrations folder: %v", name, err)
 		}
 	}
-	// Open Content (EN-205), Provider Platforms (EN-206) and Programs (EN-207)
-	// run as their own services.
+	// Open Content, Provider Platforms and Programs run as their own services.
 	if len(seen) != 1 {
 		t.Errorf("got %d modules, want 1: Learning Record", len(seen))
 	}

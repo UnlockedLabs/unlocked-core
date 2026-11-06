@@ -25,8 +25,8 @@ OPEN_CONTENT_RUN=docker compose run --rm --no-deps open-content-migrate
 # PROVIDER_PLATFORMS_REF from GitHub, or your checkout in PROVIDER_PLATFORMS_DIR.
 PROVIDER_PLATFORMS_REPO=https://github.com/UnlockedLabs/unlocked-provider-platforms.git
 PROVIDER_PLATFORMS_RUN=docker compose run --rm --no-deps providerplatforms-migrate
-# Programs runs as its own service (EN-207), built the same way: PROGRAMS_REF
-# from GitHub, or your checkout in PROGRAMS_DIR.
+# Programs runs as its own service, built the same way: PROGRAMS_REF from
+# GitHub, or your checkout in PROGRAMS_DIR.
 PROGRAMS_REPO=https://github.com/UnlockedLabs/unlocked-programs.git
 PROGRAMS_RUN=docker compose run --rm --no-deps programs-migrate
 # Canvas admin created on first `make canvas`. Override in the environment if

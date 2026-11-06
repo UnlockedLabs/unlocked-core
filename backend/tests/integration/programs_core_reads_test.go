@@ -16,9 +16,8 @@ import (
 // These tests pin the core routes that use Programs' numbers (EN-200): the
 // facility list's counts and can_delete, the facility delete check and
 // delete, a resident's transfer, and the account history's class change
-// times. Since EN-207 core asks the Programs service, here a stand-in that
-// answers with what the original seed's rows gave, and the golden files are
-// unchanged.
+// times. Core asks the Programs service for them; here a stand-in answers
+// with what the original seed's rows gave, so the golden files are unchanged.
 //
 // Regenerate the golden files after an intended change with:
 //

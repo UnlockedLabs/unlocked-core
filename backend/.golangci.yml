@@ -2,8 +2,7 @@ version: "2"
 
 # golangci-lint's standard linters (what CI ran before this file existed) plus
 # depguard for the feature-module boundaries (EN-190). Open Content, Provider
-# Platforms and Programs aren't here: they are their own services (EN-205,
-# EN-206, EN-207).
+# Platforms and Programs aren't here: they are their own services.
 linters:
   default: standard
   enable:

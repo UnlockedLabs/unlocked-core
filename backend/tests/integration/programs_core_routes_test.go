@@ -15,9 +15,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// These tests pin the rest of core's routes that ask Programs (EN-194): the
-// dashboard and department metrics, the users list's class filters,
-// deactivating a resident, and the account history's attendance rows. The
+// These tests pin the rest of core's routes that ask Programs: the dashboard
+// and department metrics, the users list's class filters, deactivating a
+// resident, and the account history's attendance rows. The
 // stand-in Programs answers with what the original seed's rows gave, so the
 // golden files are the ones the routes answered before Programs moved out.
 //

@@ -50,7 +50,7 @@ x-provider-platforms: &provider-platforms
     NATS_USER: unlocked
     NATS_PASSWORD: dev
 
-# Programs' three services (EN-207) share one image and environment.
+# Programs' three services share one image and environment.
 x-programs: &programs
   image: unlocked-programs:dev
   build:
@@ -163,7 +163,7 @@ services:
       # The Provider Platforms service (EN-206) and the secret they share.
       - PROVIDER_PLATFORMS_URL=http://providerplatforms:8080
       - &provider-platforms-token PROVIDER_PLATFORMS_TOKEN=dev-provider-platforms-token
-      # The Programs service (EN-207) and the secret they share.
+      # The Programs service and the secret they share.
       - PROGRAMS_URL=http://programs:8080
       - PROGRAMS_TOKEN=dev-programs-token
       - HYDRA_ADMIN_URL=http://hydra:4445
@@ -317,10 +317,10 @@ services:
       providerplatforms-migrate:
         condition: service_completed_successfully
 
-  # Programs (EN-207) runs as its own service, built from GitHub, or from your
-  # checkout when PROGRAMS_DIR is set (see x-programs). No hot reload:
-  # `make dev` rebuilds it. Its migrations run after core's, because the first
-  # one moves the tables core created into the programs schema.
+  # Programs runs as its own service, built from GitHub, or from your checkout
+  # when PROGRAMS_DIR is set (see x-programs). No hot reload: `make dev`
+  # rebuilds it. Its migrations run after core's, because the first one moves
+  # the tables core created into the programs schema.
   programs-migrate:
     <<: *programs
     command: ["migrate"]
