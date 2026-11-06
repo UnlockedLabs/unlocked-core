@@ -67,7 +67,7 @@ export function ChangeInstructorModal({
     useEffect(() => {
         async function fetchInstructors() {
             const resp = await API.get<Instructor>(
-                `facilities/${facilityId}/instructors`
+                `program-facilities/${facilityId}/instructors`
             );
             if (resp.success && resp.type === 'many') {
                 setInstructors(resp.data.filter((i) => i.id !== 0));

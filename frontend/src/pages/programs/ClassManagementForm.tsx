@@ -203,7 +203,7 @@ export function ClassManagementFormInner({
         if (!resolvedFacilityId) return;
         async function fetchInstructors() {
             const resp = await API.get<Instructor>(
-                `facilities/${resolvedFacilityId}/instructors`
+                `program-facilities/${resolvedFacilityId}/instructors`
             );
             if (resp.success && resp.data) {
                 setInstructors(

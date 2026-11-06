@@ -94,7 +94,7 @@ export function DetailedAttendanceDialog({
     const handleExport = async () => {
         try {
             const { blob, headers } = await API.downloadFile(
-                `users/${residentId}/attendance-export?cohort_id=${enrollment.cohort_id}`
+                `program-users/${residentId}/attendance-export?cohort_id=${enrollment.cohort_id}`
             );
             const disposition = headers.get('Content-Disposition');
             const filename =
