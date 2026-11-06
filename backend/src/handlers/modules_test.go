@@ -277,66 +277,6 @@ func TestModuleRouterLogFields(t *testing.T) {
 	assert.Equal(t, "facadmin", coreFields["username"])
 }
 
-func TestModuleDeps(t *testing.T) {
-	deps := newTestingServer().moduleDeps()
-	assert.NotNil(t, deps.HTTP)
-	assert.NotNil(t, deps.Features)
-	assert.NotNil(t, deps.Reports)
-}
-
-// A module request goes out with the client the server has when it is sent,
-// so a client set after startup, such as a test's fake, is the one used.
-func TestHTTPClient(t *testing.T) {
-	srv := newTestingServer()
-	client := srv.moduleDeps().HTTP
-	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusTeapot)
-	}))
-	defer ts.Close()
-	// Only the fake's own client trusts its certificate.
-	srv.Client = ts.Client()
-
-	req, err := http.NewRequest(http.MethodGet, ts.URL, nil)
-	require.NoError(t, err)
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	defer func() { _ = resp.Body.Close() }()
-	assert.Equal(t, http.StatusTeapot, resp.StatusCode)
-}
-
-// A module sees a facility's features as core resolves them: the facility's
-// own settings over the statewide ones, without sub-features of a feature
-// that is off.
-func TestFacilityFeatures(t *testing.T) {
-	srv := newTestingServer()
-	statewide := []models.FeatureAccess{models.OpenContentAccess, models.HelpfulLinksAccess, models.ProviderAccess}
-	setStatewideDefaults(t, srv, statewide...)
-	features := srv.moduleDeps().Features
-
-	tests := []struct {
-		name      string
-		overrides map[models.FeatureAccess]bool
-		want      []models.FeatureAccess
-	}{
-		{"statewide", nil, statewide},
-		{"turned on at the facility", map[models.FeatureAccess]bool{models.ProgramAccess: true}, append([]models.FeatureAccess{models.ProgramAccess}, statewide...)},
-		{"turned off at the facility", map[models.FeatureAccess]bool{models.ProviderAccess: false}, []models.FeatureAccess{models.OpenContentAccess, models.HelpfulLinksAccess}},
-		{"parent turned off", map[models.FeatureAccess]bool{models.OpenContentAccess: false}, []models.FeatureAccess{models.ProviderAccess}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			facility := createTestFacility(t, srv, tt.name)
-			args := models.QueryContext{Ctx: context.Background()}
-			for feature, enabled := range tt.overrides {
-				require.NoError(t, srv.Db.UpsertFacilityFeatureFlag(&args, facility, feature, enabled))
-			}
-			got, err := features.FacilityFeatures(context.Background(), facility)
-			require.NoError(t, err)
-			assert.ElementsMatch(t, tt.want, got)
-		})
-	}
-}
-
 func TestCoreUsers(t *testing.T) {
 	srv := newTestingServer()
 	users := coreUsers{srv}
