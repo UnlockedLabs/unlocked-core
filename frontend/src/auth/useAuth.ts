@@ -64,6 +64,10 @@ export const KRATOS_CHECK_FLOW_URL = '/self-service/login/flows?id=';
 export const AUTHCALLBACK = '/authcallback';
 const KRATOS_LOGOUT_URL = '/self-service/logout/browser';
 const RETURN_TO_KEY = 'return_to';
+// Kratos's login flow lifespan. A saved page older than this was left by
+// someone who walked away from login, so the next person to sign in in that
+// tab doesn't inherit it.
+const RETURN_TO_MAX_AGE_MS = 10 * 60 * 1000;
 
 /**
  * Who core says is signed in: the user, 'signed-out' when it rejects the
@@ -86,23 +90,48 @@ export async function fetchUser(): Promise<User | undefined> {
     return typeof session === 'string' ? undefined : session;
 }
 
+type Page = Pick<URL, 'pathname' | 'search' | 'hash'>;
+
 /**
- * Remembers the page a signed-out visitor asked for, so signing in takes them
- * back to it. It's per tab, and the next sign-in in that tab uses it up.
+ * Sends a signed-out visitor to login, and once they sign in, back to page.
+ * The page is remembered per tab, for RETURN_TO_MAX_AGE_MS, and the next
+ * sign-in in that tab uses it up.
  */
-export function rememberReturnTo(): void {
-    const { pathname, search, hash } = window.location;
+export async function signInAgain({
+    pathname,
+    search,
+    hash
+}: Page): Promise<void> {
     if (pathname !== AUTHCALLBACK) {
-        setSessionItem(RETURN_TO_KEY, pathname + search + hash);
+        setSessionItem(
+            RETURN_TO_KEY,
+            JSON.stringify({ path: pathname + search + hash, at: Date.now() })
+        );
     }
+    await handleLogout();
 }
 
 function takeReturnTo(): string | null {
-    const path = getSessionItem(RETURN_TO_KEY);
+    const saved = getSessionItem(RETURN_TO_KEY);
     removeSessionItem(RETURN_TO_KEY);
-    // Only a path on this site: browsers read "//host" and "/\host" as another
-    // site.
-    return path?.startsWith('/') && !/^\/[/\\]/.test(path) ? path : null;
+    try {
+        const { path, at } = JSON.parse(saved ?? '') as {
+            path?: unknown;
+            at?: unknown;
+        };
+        const fresh =
+            typeof at === 'number' && Date.now() - at < RETURN_TO_MAX_AGE_MS;
+        // Only a path on this site: browsers read "//host" and "/\host" as
+        // another site.
+        return fresh &&
+            typeof path === 'string' &&
+            path.startsWith('/') &&
+            !/^\/[/\\]/.test(path)
+            ? path
+            : null;
+    } catch {
+        return null;
+    }
 }
 
 export const checkRole: LoaderFunction = async () => {

@@ -18,7 +18,12 @@ import {
     BreadcrumbItem
 } from '@/types';
 import API from '@/api/api';
-import { fetchUser, hasFeature } from '@/auth/useAuth';
+import {
+    checkSession,
+    fetchUser,
+    hasFeature,
+    signInAgain
+} from '@/auth/useAuth';
 import { FeatureAccess } from '@/types';
 import { decodeHtmlEntities } from '@/lib/decodeHtmlEntities';
 
@@ -144,7 +149,7 @@ const getLibraryOptionsHelper = async ({ request }: { request: Request }) => {
     return libraryOptions;
 };
 
-export const getProgramData: LoaderFunction = async ({ params }) => {
+export const getProgramData: LoaderFunction = async ({ params, request }) => {
     const { program_id } = params;
     const [tagsResp] = await Promise.all([API.get(`tags`)]);
     const categories = tagsResp.data as Option[];
@@ -162,7 +167,7 @@ export const getProgramData: LoaderFunction = async ({ params }) => {
                 { label: program.name }
             ];
         } else {
-            return redirectOnError(resp);
+            return redirectOnError(resp, request);
         }
     }
     return json({
@@ -197,7 +202,7 @@ export const getProgramTitle: LoaderFunction = async ({
         if (resp.success) {
             programName = 'Program: ' + (resp.data as Program).name;
         } else {
-            return redirectOnError(resp);
+            return redirectOnError(resp, request);
         }
     }
     if (class_id && class_id != 'new') {
@@ -207,7 +212,7 @@ export const getProgramTitle: LoaderFunction = async ({
         if (classResp.success) {
             cls = classResp.data;
         } else {
-            return redirectOnError(classResp);
+            return redirectOnError(classResp, request);
         }
     }
 
@@ -293,16 +298,16 @@ export const getClassTitle: LoaderFunction = async ({
             breadcrumbs
         };
     } else {
-        return redirectOnError(classResp);
+        return redirectOnError(classResp, request);
     }
 };
 
-export const getProgram: LoaderFunction = async ({ params }) => {
+export const getProgram: LoaderFunction = async ({ params, request }) => {
     const resp = (await API.get(`programs/${params.id}`)) as ServerResponseOne<
         ProgramOverview | Response
     >;
     if (!resp.success) {
-        return redirectOnError(resp);
+        return redirectOnError(resp, request);
     }
     return json(resp.data);
 };
@@ -317,7 +322,15 @@ export function resolveTitle<T>(
         : handle.title;
 }
 
-function redirectOnError<T>(resp: ServerResponse<T>) {
+async function redirectOnError<T>(resp: ServerResponse<T>, request: Request) {
+    // Core also answers 401 to a signed-in user who may not open the page, so
+    // only a 401 for a session core rejects means signed out.
+    if (resp.status === 401 && (await checkSession()) === 'signed-out') {
+        await signInAgain(new URL(request.url));
+        // The browser is already on its way to login. Never settling keeps the
+        // router from showing anything before it leaves.
+        return new Promise<never>(() => undefined);
+    }
     if (resp.status === 401 || resp.status === 403) {
         return redirect('/unauthorized');
     }

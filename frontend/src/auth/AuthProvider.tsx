@@ -1,11 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '@/types';
-import {
-    AuthContext,
-    checkSession,
-    handleLogout,
-    rememberReturnTo
-} from '@/auth/useAuth';
+import { AuthContext, checkSession, signInAgain } from '@/auth/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { tabSessionManager } from '@/session/tabSession';
 import { analyticsDistinctId, identifyUser } from '@/lib/events';
@@ -33,8 +28,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
                 !(await tabSessionManager.validateSession())
             ) {
                 if (cancelled) return;
-                rememberReturnTo();
-                await handleLogout();
+                await signInAgain(window.location);
                 return;
             }
             if (cancelled) return;
