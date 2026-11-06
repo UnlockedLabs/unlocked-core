@@ -14,6 +14,7 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-contracts/coreapi"
 	"github.com/UnlockedLabs/unlocked-contracts/identity"
+	programsapi "github.com/UnlockedLabs/unlocked-contracts/programs"
 	"github.com/UnlockedLabs/unlocked-contracts/users"
 	ory "github.com/ory/kratos-client-go"
 	"github.com/sirupsen/logrus"
@@ -504,7 +505,41 @@ func TestInternalCoreAPI(t *testing.T) {
 		_, err := coreapi.NewUsersClient(core.URL, "wrong", nil).Get(context.Background(), admin.ID)
 		assert.Error(t, err)
 	})
-	t.Run("clearing the Canvas cache without a cache is harmless", func(t *testing.T) {
-		assert.NotPanics(t, func() { coreapi.NewLiveProvidersClient(core.URL, "s3cret", nil).MappingsChanged(1, 1) })
+	t.Run("live provider questions go to Programs", func(t *testing.T) {
+		progs := &livePrograms{users: []coreapi.ProviderUser{{Username: "ee.jdoe", ExternalUserID: "8001"}}}
+		srv.programs = progs
+		live := coreapi.NewLiveProvidersClient(core.URL, "s3cret", nil)
+		got, ok, err := live.Users(context.Background(), 11)
+		require.NoError(t, err)
+		assert.True(t, ok)
+		assert.Equal(t, progs.users, got)
+		live.MappingsChanged(10, admin.ID)
+		progs.mu.Lock()
+		defer progs.mu.Unlock()
+		assert.Equal(t, []uint{11}, progs.asked)
+		assert.Equal(t, [][2]uint{{10, admin.ID}}, progs.changed)
 	})
+}
+
+// livePrograms is Programs' answers about live providers. It records what it
+// was asked; any other question panics.
+type livePrograms struct {
+	programsapi.Programs
+	users   []coreapi.ProviderUser
+	mu      sync.Mutex
+	asked   []uint
+	changed [][2]uint
+}
+
+func (p *livePrograms) LiveUsers(_ context.Context, providerID uint) ([]coreapi.ProviderUser, bool, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.asked = append(p.asked, providerID)
+	return p.users, true, nil
+}
+
+func (p *livePrograms) MappingsChanged(providerID, userID uint) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.changed = append(p.changed, [2]uint{providerID, userID})
 }

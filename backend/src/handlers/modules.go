@@ -158,6 +158,19 @@ func (u coreUsers) Delete(ctx context.Context, id uint) error {
 	return nil
 }
 
+// liveProviders passes the Provider Platforms service's questions about
+// Canvas and Essential Education (coreapi.LiveProviders) on to Programs, which
+// reads those providers.
+type liveProviders struct{ srv *Server }
+
+func (l liveProviders) Users(ctx context.Context, providerID uint) ([]coreapi.ProviderUser, bool, error) {
+	return l.srv.programs.LiveUsers(ctx, providerID)
+}
+
+func (l liveProviders) MappingsChanged(providerID, userID uint) {
+	l.srv.programs.MappingsChanged(providerID, userID)
+}
+
 // httpClient sends module requests with srv.Client. It reads srv.Client on
 // each call, so a client set after startup is the one used.
 type httpClient struct{ srv *Server }

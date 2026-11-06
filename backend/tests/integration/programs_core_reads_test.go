@@ -8,38 +8,42 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/handlers"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs"
 
+	programsapi "github.com/UnlockedLabs/unlocked-contracts/programs"
 	"github.com/stretchr/testify/require"
 )
 
-// These tests pin the core routes that read or write Programs' tables
-// (EN-200): the facility list's counts and can_delete, the facility delete
-// check and delete, a resident's transfer, and the account history's class
-// change times. They passed unchanged when core started asking Programs for
-// those numbers and the tables moved into the programs schema.
+// These tests pin the core routes that use Programs' numbers (EN-200): the
+// facility list's counts and can_delete, the facility delete check and
+// delete, a resident's transfer, and the account history's class change
+// times. Since EN-207 core asks the Programs service, here a stand-in that
+// answers with what the original seed's rows gave, and the golden files are
+// unchanged.
 //
 // Regenerate the golden files after an intended change with:
 //
 //	go test ./tests/integration -run 'TestProgramsCoreReads' -update
 
-// The seeded account history row is an hour newer than the
-// program_classes_history row it points at.
+// The seeded account history row is an hour newer than the class change it
+// points at.
 var (
 	classHistoryAt   = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	accountHistoryAt = classHistoryAt.Add(time.Hour)
 )
 
+// classHistoryID is the Programs class change the account history row points
+// at.
+const classHistoryID = 41
+
 type programsCoreWorld struct {
 	north, south, classHall, programWing, roomAnnex, empty *models.Facility
 	resident, deptAdmin                                    *models.User
-	northClass, weldingClass                               *programs.ProgramClassCohort
 }
 
 // seedProgramsCore adds facilities that each hold one kind of Programs data,
 // so each golden shows which kinds block deleting a facility:
-//   - North has the resident, an active program and class, and a room;
-//   - South offers the same program, and is where the resident transfers;
+//   - North has the resident, two active programs and classes, and a room;
+//   - South offers one of the programs, and is where the resident transfers;
 //   - Class Hall has only a class;
 //   - Program Wing only offers a program;
 //   - Room Annex has only a room;
@@ -64,41 +68,25 @@ func seedProgramsCore(t *testing.T, env *TestEnv) programsCoreWorld {
 	w.deptAdmin, err = env.CreateTestUser("deptadmin", models.DepartmentAdmin, w.north.ID, "")
 	require.NoError(t, err)
 
-	reading, err := env.CreateTestProgram("Reading", programs.Other, nil, nil, true, nil)
-	require.NoError(t, err)
-	require.NoError(t, env.SetFacilitiesToProgram(reading.ID, []uint{w.north.ID, w.south.ID, w.programWing.ID}))
-	w.northClass, err = env.CreateTestClass(reading, w.north, programs.Active, nil)
-	require.NoError(t, err)
-	_, err = env.CreateTestClass(reading, w.classHall, programs.Active, nil)
-	require.NoError(t, err)
-	_, err = env.CreateTestEnrollment(w.northClass.ID, w.resident.ID, programs.Enrolled)
-	require.NoError(t, err)
-	// Welding is offered only at North, so it shows as a transfer conflict.
-	welding, err := env.CreateTestProgram("Welding", programs.Other, nil, nil, true, nil)
-	require.NoError(t, err)
-	require.NoError(t, env.SetFacilitiesToProgram(welding.ID, []uint{w.north.ID}))
-	w.weldingClass, err = env.CreateTestClass(welding, w.north, programs.Active, nil)
-	require.NoError(t, err)
-	_, err = env.CreateTestEnrollment(w.weldingClass.ID, w.resident.ID, programs.Enrolled)
-	require.NoError(t, err)
-	for _, f := range []*models.Facility{w.north, w.roomAnnex} {
-		require.NoError(t, env.DB.Create(&programs.Room{FacilityID: f.ID, Name: f.Name + " Room"}).Error)
-	}
-	// Test classes start now; a fixed start keeps the goldens stable.
-	start := time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC)
-	require.NoError(t, env.DB.Model(&programs.ProgramClassCohort{}).
-		Where("id IN ?", []uint{w.northClass.ID, w.weldingClass.ID}).Update("start_dt", start).Error)
+	// What Programs counts at each facility, and the class the resident would
+	// leave behind: Welding is offered only at North.
+	env.Programs.set(func(f *fakePrograms) {
+		f.facilityPrograms = map[uint]programsapi.FacilityPrograms{
+			w.north.ID:       {ActivePrograms: 2, ActiveClasses: 2, Classes: 2, Programs: 2, Rooms: 1},
+			w.south.ID:       {ActivePrograms: 1, Programs: 1},
+			w.classHall.ID:   {ActiveClasses: 1, Classes: 1},
+			w.programWing.ID: {ActivePrograms: 1, Programs: 1},
+			w.roomAnnex.ID:   {Rooms: 1},
+		}
+		f.transferConflicts = []programsapi.ResidentTransferProgramConflicts{{ProgramName: "Welding", ClassName: "Welding"}}
+		f.classHistoryAt = map[uint]time.Time{classHistoryID: classHistoryAt}
+	})
 
-	// An enrollment change logged the way the program_classes_history trigger
-	// logs one, with an account history row pointing at it.
-	historyID := env.InsertReturningID(t,
-		`INSERT INTO program_classes_history (parent_ref_id, table_name, before_update, after_update, created_at)
-			VALUES (?, 'program_class_cohorts', '{"status":"Scheduled"}', '{"status":"Active"}', ?)`,
-		w.northClass.ID, classHistoryAt)
+	// An account history row pointing at a class change in Programs.
 	require.NoError(t, env.DB.Exec(
 		`INSERT INTO user_account_history (user_id, admin_id, action, program_classes_history_id, facility_id, created_at)
 			VALUES (?, ?, 'progclass_history', ?, ?, ?)`,
-		w.resident.ID, w.deptAdmin.ID, historyID, w.north.ID, accountHistoryAt).Error)
+		w.resident.ID, w.deptAdmin.ID, classHistoryID, w.north.ID, accountHistoryAt).Error)
 	return w
 }
 
@@ -161,17 +149,16 @@ func TestProgramsCoreReads(t *testing.T) {
 
 	// The transfer route reads the user on a second connection while its
 	// transaction is open, which SQLite's single connection can't serve, so
-	// the transfer itself runs at the database layer.
+	// the transfer itself runs at the database layer. The route asks Programs
+	// first; TestProgramsChangesFirst covers a failure there.
 	t.Run("transfer", func(t *testing.T) {
 		args := &models.QueryContext{Ctx: t.Context(), UserID: w.deptAdmin.ID}
-		tx, err := env.DB.TransferResident(args, int(w.resident.ID), int(w.north.ID), int(w.south.ID))
+		tx, err := env.DB.TransferResident(args, int(w.resident.ID), int(w.south.ID))
 		require.NoError(t, err)
 		require.NoError(t, tx.Commit().Error)
 	})
 
 	run(t, []routeCase{
-		{"enrollments_after_transfer", http.MethodGet, fmt.Sprintf("/api/program-classes/%d/enrollments?status=all", w.northClass.ID), http.StatusOK},
-		{"welding_enrollments_after_transfer", http.MethodGet, fmt.Sprintf("/api/program-classes/%d/enrollments?status=all", w.weldingClass.ID), http.StatusOK},
 		{"facilities_after", http.MethodGet, "/api/facilities", http.StatusOK},
 	})
 }
