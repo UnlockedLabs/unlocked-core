@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.11.0](https://github.com/UnlockedLabs/unlocked-core/compare/v1.10.0...v1.11.0) (2026-11-07)
+
+
+### Features
+
+* En 206 move provider platforms ([#1284](https://github.com/UnlockedLabs/unlocked-core/issues/1284)) ([c6bf2b1](https://github.com/UnlockedLabs/unlocked-core/commit/c6bf2b155056a5c3f839ecda07200a72974a603b))
+* move Programs to its own service (EN-207) ([fa45ccf](https://github.com/UnlockedLabs/unlocked-core/commit/fa45ccf8184412bf65a3555c16753e2889fbfbe5))
+
+
+### Bug Fixes
+
+* block duplicate resident IDs on edit (EN-116) ([d6eaf87](https://github.com/UnlockedLabs/unlocked-core/commit/d6eaf878c1997092c726d278200d6d460688746c))
+
 ## [1.10.0](https://github.com/UnlockedLabs/unlocked-core/compare/v1.9.0...v1.10.0) (2026-11-04)
 
 
