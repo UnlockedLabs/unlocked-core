@@ -8,19 +8,16 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/learningrecord"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
 
 	"github.com/UnlockedLabs/unlocked-contracts/providerplatforms"
 )
 
 // All returns every feature module, in the order their routes and jobs are
-// registered and their migrations run. Provider Platforms and Programs are
-// their own services, so they aren't here.
+// registered and their migrations run. Open Content, Provider Platforms,
+// Programs and Learning Record run as their own services, so none is here yet.
 func All() []module.Module {
-	return []module.Module{
-		learningrecord.Module{},
-	}
+	return []module.Module{}
 }
 
 // ProviderPlatformsURL is where the Provider Platforms service is:

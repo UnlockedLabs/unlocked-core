@@ -69,6 +69,29 @@ x-programs: &programs
     APP_ENV: dev
     LOG_LEVEL: debug
 
+# Learning Record's two services (EN-208) share one image and environment.
+x-learning-record: &learning-record
+  image: unlocked-learning-record:dev
+  build:
+    # Built straight from GitHub (LEARNING_RECORD_REF, default main), so no
+    # checkout is needed. Set LEARNING_RECORD_DIR to your checkout to build
+    # your own changes instead.
+    context: ${LEARNING_RECORD_DIR:-https://github.com/UnlockedLabs/unlocked-learning-record.git#${LEARNING_RECORD_REF:-main}}
+    args:
+      APP_VERSION: dev
+      GIT_COMMIT: ${LEARNING_RECORD_GIT_COMMIT:-unknown}
+      GIT_BRANCH: ${LEARNING_RECORD_GIT_BRANCH:-unknown}
+  networks:
+    - intranet
+  environment:
+    APP_DSN: postgres://unlocked:dev@postgres:5432/unlocked
+    APP_ENV: dev
+    # Core, which says who a user is and whether learning_record is on at
+    # their facility.
+    APP_URL: http://server:8080
+    KRATOS_PUBLIC_URL: http://kratos:4433
+    LOG_LEVEL: debug
+
 services:
   postgres:
     image: postgres:16
@@ -328,6 +351,17 @@ services:
       server-migrate:
         condition: service_completed_successfully
 
+  # Learning Record (EN-208) runs as its own service, built from GitHub, or
+  # from your checkout when LEARNING_RECORD_DIR is set (see x-learning-record).
+  # No hot reload: `make dev` rebuilds it. Its migration runs after core's,
+  # because it moves the table core created into the learning_record schema.
+  learning-record-migrate:
+    <<: *learning-record
+    command: ["migrate"]
+    depends_on:
+      server-migrate:
+        condition: service_completed_successfully
+
   # Programs' API. The rev_proxy sends its paths here, and the server asks it
   # questions (.env.example points a server run outside compose at port 8084).
   programs:
@@ -357,6 +391,17 @@ services:
     restart: unless-stopped
     depends_on:
       programs-migrate:
+        condition: service_completed_successfully
+
+  # Learning Record's API. The rev_proxy sends /api/learning-record here.
+  learning-record:
+    <<: *learning-record
+    command: ["serve"]
+    ports:
+      - 8085:8080
+    restart: unless-stopped
+    depends_on:
+      learning-record-migrate:
         condition: service_completed_successfully
 
   # AI tutor sidecar (served under basePath /tutor; see tutor-integration.md)
