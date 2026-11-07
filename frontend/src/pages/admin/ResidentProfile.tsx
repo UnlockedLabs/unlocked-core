@@ -46,7 +46,7 @@ export default function ResidentProfile() {
 
     const { data: programsResp, mutate: mutatePrograms } = useSWR<
         ServerResponseMany<ResidentProgramOverview>
-    >(residentId ? `/api/users/${residentId}/programs` : null);
+    >(residentId ? `/api/program-users/${residentId}/programs` : null);
 
     const profileData = profileResp?.data;
     const programs = useMemo(() => programsResp?.data ?? [], [programsResp]);
@@ -102,7 +102,11 @@ export default function ResidentProfile() {
 
     const { data: trendResp } = useSWR<
         ServerResponseOne<{ week: string; rate: number }[]>
-    >(residentId ? `/api/users/${residentId}/attendance-trend?weeks=8` : null);
+    >(
+        residentId
+            ? `/api/program-users/${residentId}/attendance-trend?weeks=8`
+            : null
+    );
     const chartData = useMemo(() => trendResp?.data ?? [], [trendResp]);
 
     const { data: notesResp, mutate: mutateNotes } = useSWR<

@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS public.daily_program_facility_history (
 
 CREATE INDEX IF NOT EXISTS idx_daily_program_facility_history_history_date_program_id_facility_id ON public.daily_program_facility_history USING btree (date DESC, program_id, facility_id);
 
-INSERT INTO public.cron_jobs (name, schedule, category, created_at, updated_at) VALUES 
-('daily_prog_history', '0 22 * * *', 3, NOW(), NOW());
+-- cron_jobs.id is text with no default; the app makes it a UUID.
+INSERT INTO public.cron_jobs (id, name, schedule, category, created_at, updated_at) VALUES
+(gen_random_uuid()::text, 'daily_prog_history', '0 22 * * *', 3, NOW(), NOW());
 -- +goose StatementEnd

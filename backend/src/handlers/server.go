@@ -14,11 +14,11 @@ import (
 	database "github.com/UnlockedLabs/unlocked-core/backend/src/database"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
-	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/tasks"
 
 	ocapi "github.com/UnlockedLabs/unlocked-contracts/opencontent"
+	programsapi "github.com/UnlockedLabs/unlocked-contracts/programs"
 	"github.com/nats-io/nats.go"
 	ory "github.com/ory/kratos-client-go"
 	"github.com/prometheus/client_golang/prometheus"
@@ -192,7 +192,7 @@ func newServer(ctx context.Context) *Server {
 		moduleDBs:         moduleDBs,
 		openContent:       ocapi.NewClient(openContentURL(), os.Getenv("OPEN_CONTENT_TOKEN"), nil),
 		providerPlatforms: registry.ProviderPlatforms(),
-		programs:          registry.Programs(moduleDBs.For),
+		programs:          programsapi.NewClient(programsURL(), os.Getenv("PROGRAMS_TOKEN"), nil),
 	}
 	if err := server.setupNatsKvBuckets(); err != nil {
 		log.Fatalf("Failed to setup JetStream KV store: %v", err)
@@ -227,7 +227,7 @@ func newTestingServer() *Server {
 		moduleDBs:         moduleDBs,
 		openContent:       ocapi.NewClient(openContentURL(), os.Getenv("OPEN_CONTENT_TOKEN"), nil),
 		providerPlatforms: registry.ProviderPlatforms(),
-		programs:          registry.Programs(moduleDBs.For),
+		programs:          programsapi.NewClient(programsURL(), os.Getenv("PROGRAMS_TOKEN"), nil),
 	}
 }
 
@@ -238,6 +238,15 @@ func openContentURL() string {
 		return url
 	}
 	return "http://open-content:8080"
+}
+
+// programsURL is where core asks the Programs service its questions:
+// PROGRAMS_URL, else the service's name in the cluster.
+func programsURL() string {
+	if url := os.Getenv("PROGRAMS_URL"); url != "" {
+		return url
+	}
+	return "http://programs:8080"
 }
 
 // ConnectNATS connects to NATS with NATS_URL, NATS_USER and NATS_PASSWORD. The

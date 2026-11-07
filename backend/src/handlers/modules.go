@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/jasper"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/module"
 
@@ -158,30 +157,17 @@ func (u coreUsers) Delete(ctx context.Context, id uint) error {
 	return nil
 }
 
-// httpClient sends module requests with srv.Client. It reads srv.Client on
-// each call, so a client set after startup is the one used.
-type httpClient struct{ srv *Server }
+// liveProviders passes the Provider Platforms service's questions about
+// Canvas and Essential Education (coreapi.LiveProviders) on to Programs, which
+// reads those providers.
+type liveProviders struct{ srv *Server }
 
-func (c httpClient) Do(req *http.Request) (*http.Response, error) {
-	return c.srv.Client.Do(req)
+func (l liveProviders) Users(ctx context.Context, providerID uint) ([]coreapi.ProviderUser, bool, error) {
+	return l.srv.programs.LiveUsers(ctx, providerID)
 }
 
-// facilityFeatures gives modules core's feature flags for each facility.
-type facilityFeatures struct{ srv *Server }
-
-func (f facilityFeatures) FacilityFeatures(ctx context.Context, facilityID uint) ([]models.FeatureAccess, error) {
-	access, err := database.NewDB(f.srv.Db.WithContext(ctx)).GetFacilityFeatureAccess(facilityID)
-	if err != nil {
-		return nil, fmt.Errorf("get features for facility %d: %w", facilityID, dbCause(err))
-	}
-	return access, nil
-}
-
-// pdfReports renders module reports with core's Jasper report templates.
-type pdfReports struct{}
-
-func (pdfReports) PDF(template string, report module.Report) ([]byte, error) {
-	return jasper.GenerateReportPDF(template, report)
+func (l liveProviders) MappingsChanged(providerID, userID uint) {
+	l.srv.programs.MappingsChanged(providerID, userID)
 }
 
 func toCoreUser(u *models.User) coreapi.User {
@@ -205,22 +191,8 @@ func dbCause(err error) error {
 	return err
 }
 
-func (srv *Server) moduleDeps() module.Deps {
-	return module.Deps{
-		DB:        srv.Db.DB,
-		NATS:      srv.nats,
-		HTTP:      httpClient{srv},
-		Features:  facilityFeatures{srv},
-		Reports:   pdfReports{},
-		ModuleDBs: srv.moduleDBs.For,
-	}
-}
-
 func (srv *Server) registerModuleRoutes() {
-	deps := srv.moduleDeps()
 	for _, m := range srv.modules {
-		moduleDeps := deps
-		moduleDeps.DB = srv.moduleDBs.For(m.Name())
-		m.Register(moduleRouter{srv}, moduleDeps)
+		m.Register(moduleRouter{srv}, module.Deps{DB: srv.moduleDBs.For(m.Name()), NATS: srv.nats})
 	}
 }

@@ -109,7 +109,9 @@ export function BulkCancelClassesModal({
     const [preview, setPreview] = useState<PreviewData | null>(null);
 
     const { data: instructorsResp } = useSWR<ServerResponseMany<Instructor>>(
-        open && facilityId ? `/api/facilities/${facilityId}/instructors` : null
+        open && facilityId
+            ? `/api/program-facilities/${facilityId}/instructors`
+            : null
     );
     const instructors = useMemo(() => {
         const list = instructorsResp?.data ?? [];

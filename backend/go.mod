@@ -17,25 +17,13 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	github.com/sirupsen/logrus v1.9.4
 	github.com/stretchr/testify v1.11.1
-	github.com/teambition/rrule-go v1.8.2
-	golang.org/x/net v0.60.0 // indirect
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1
 )
 
-require (
-	github.com/UnlockedLabs/unlocked-contracts v0.4.0
-	github.com/xuri/excelize/v2 v2.11.1-0.20260915055537-22f76f9acb94
-)
+require github.com/UnlockedLabs/unlocked-contracts v0.5.0
 
-require (
-	github.com/richardlehane/mscfb v1.0.8 // indirect
-	github.com/richardlehane/msoleps v1.0.6 // indirect
-	github.com/tiendc/go-deepcopy v1.7.2 // indirect
-	github.com/xuri/efp v0.0.1 // indirect
-	github.com/xuri/nfp v0.0.2-0.20250530014748-2ddeb826f9a9 // indirect
-	go.yaml.in/yaml/v2 v2.4.3 // indirect
-)
+require go.yaml.in/yaml/v2 v2.4.3 // indirect
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
