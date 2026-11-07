@@ -165,7 +165,7 @@ export class WebsocketSession {
         } catch {
             // malformed message, ignore
         }
-        return {} as Partial<WsMsg>;
+        return {};
     }
 }
 

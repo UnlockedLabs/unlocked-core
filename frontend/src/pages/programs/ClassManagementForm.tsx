@@ -444,10 +444,7 @@ export function ClassManagementFormInner({
         if (resp.success) {
             const newUser = (resp.data as { user: User; temp_password: string })
                 .user;
-            setInstructors((prev) => [
-                ...prev,
-                newUser as unknown as Instructor
-            ]);
+            setInstructors((prev) => [...prev, newUser]);
             toast.success('Instructor created');
         } else {
             toast.error(resp.message || 'Failed to create instructor');
@@ -582,7 +579,7 @@ export function ClassManagementFormInner({
 
         if (!resp.success) {
             if (resp.status === 409 && Array.isArray(resp.data)) {
-                setConflicts(resp.data as unknown as RoomConflict[]);
+                setConflicts(resp.data);
                 setShowConflicts(true);
                 return;
             }
