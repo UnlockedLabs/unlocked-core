@@ -149,11 +149,11 @@ gh api repos/UnlockedLabs/unlocked-core/branches/main/protection --jq '.required
 ```
 The ruleset also covers `release/**`. Any live release branch still reports `conventional`, so backport the rename to it first, or its PRs block.
 
-1. Once the EN-214 core PR's checks have finished and it is otherwise ready to merge, run `stage unlocked-core 25118710 ...` and `put unlocked-core 25118710` from above.
+1. Once every check on the EN-214 core PR has passed except `conventional` (pending until the swap) and it is approved, run `stage unlocked-core 25118710 ...` and `put unlocked-core 25118710` from above.
 2. Merge the PR straight away.
 3. Tell authors of open core PRs to rebase onto main so they report the new name.
 
-The template and the four product repos the same way: once each repo's EN-214 PR is green and approved, `stage`/`put` its ruleset, merge, and ask authors of its open PRs to rebase. None of them has release branches. A release-please PR picks up the new name the next time release-please updates it after a push to main.
+The template and the four product repos the same way: once each repo's EN-214 PR has passed every check except `conventional` and is approved, `stage`/`put` its ruleset, merge, and ask authors of its open PRs to rebase. None of them has release branches. A release-please PR picks up the new name the next time release-please updates it after a push to main.
 
 ### Removing classic protection
 Do this only after the ruleset is live and verified, so the branch is never unprotected. Use the repo's real default branch, not an assumed `main`:
