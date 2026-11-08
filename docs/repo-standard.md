@@ -35,7 +35,7 @@ CodeRabbit reviews every PR. It is a GitHub app installed per repo by an org adm
 | Repo | Ruleset id | Required checks | Branches |
 |------|-----------|-----------------|----------|
 | unlocked-core | 25118710 | `tests`, `golangci-lint (/home/runner/work/unlocked-core/unlocked-core/backend)`, `Lint and build JS`, `conventional commits`, `pr title` | `~DEFAULT_BRANCH`, `refs/heads/release/**` |
-| unlocked-platform | 25506255 | `lint and render every site`, `conventional commits`, `pr title` | `~DEFAULT_BRANCH` |
+| unlocked-platform | 25506255 | `lint and render every site`, `plan`, `conventional commits`, `pr title` | `~DEFAULT_BRANCH` |
 | unlocked-contracts | 25024361 | `vet and test`, `golangci-lint`, `conventional commits`, `pr title` | `~DEFAULT_BRANCH` |
 | golang-jasper | none yet | `conventional commits`, `pr title` (it has no tests or lint) | `~DEFAULT_BRANCH` |
 | unlocked-hiset-ai | 25090572 | `test`, `conventional commits`, `pr title` | `~DEFAULT_BRANCH` |
@@ -73,7 +73,7 @@ Run `stage`, read the diff (it should show only check names), then `put`. Integr
 
 ```sh
 stage unlocked-core 25118710 '["tests","golangci-lint (/home/runner/work/unlocked-core/unlocked-core/backend)","Lint and build JS","conventional commits","pr title"]'
-stage unlocked-platform 25506255 '["lint and render every site","conventional commits","pr title"]'
+stage unlocked-platform 25506255 '["lint and render every site","plan","conventional commits","pr title"]'
 stage unlocked-contracts 25024361 '["vet and test","golangci-lint","conventional commits","pr title"]'
 stage unlocked-product-template 26150292 '["vet and test","golangci-lint","govulncheck","conventional commits","pr title"]'
 stage unlocked-provider-platforms 26559590 '["vet and test","golangci-lint","govulncheck","conventional commits","pr title"]'
