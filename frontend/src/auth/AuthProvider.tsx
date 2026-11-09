@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '@/types';
 import { AuthContext, checkSession, signInAgain } from '@/auth/useAuth';
+import { onSessionExpired } from '@/auth/sessionExpiry';
 import { useNavigate } from 'react-router-dom';
 import { tabSessionManager } from '@/session/tabSession';
 import { analyticsDistinctId, identifyUser } from '@/lib/events';
 import { setDigitalTranscriptStorageOwner } from '@/types/digital-transcript';
+
+const RECHECK_ON_VISIBLE_MS = 60 * 1000;
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     children
@@ -49,6 +52,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
             cancelled = true;
         };
     }, []);
+
+    // A session can end mid-use (expired, revoked, signed out in another tab).
+    // Recheck on any 401 and when the tab comes back into view. Core also sends
+    // 401 for "not an admin" and "feature not enabled", so only a check that
+    // says signed-out sends the resident to login.
+    const signedIn = user !== undefined;
+    useEffect(() => {
+        if (!signedIn) return;
+        let checking = false;
+        let lastCheck = Date.now();
+        const recheck = () => {
+            if (checking) return;
+            checking = true;
+            lastCheck = Date.now();
+            void checkSession().then(async (session) => {
+                if (session === 'signed-out') {
+                    // Leaves the page, so checking stays set and later 401s
+                    // don't start a second logout.
+                    await signInAgain(window.location);
+                    return;
+                }
+                checking = false;
+            });
+        };
+        const onVisible = () => {
+            if (
+                document.visibilityState === 'visible' &&
+                Date.now() - lastCheck >= RECHECK_ON_VISIBLE_MS
+            ) {
+                recheck();
+            }
+        };
+        const unsubscribe = onSessionExpired(recheck);
+        document.addEventListener('visibilitychange', onVisible);
+        return () => {
+            unsubscribe();
+            document.removeEventListener('visibilitychange', onVisible);
+        };
+    }, [signedIn]);
 
     useEffect(() => {
         if (user?.password_reset && window.location.pathname !== passReset) {

@@ -4,6 +4,7 @@ import {
     ServerResponseMany
 } from '@/types/server';
 import { ANALYTICS_EVENTS, analyticsUrl, captureEvent } from '@/lib/events';
+import { reportUnauthorized } from '@/auth/sessionExpiry';
 
 class API {
     private static getCSRFToken(): string {
@@ -90,6 +91,7 @@ class API {
                 };
             }
             if (!resp.ok) {
+                if (resp.status === 401) reportUnauthorized();
                 let message = 'An error occurred';
                 if (resp.status === 401 || resp.status === 403) {
                     message = 'Unauthorized';
@@ -206,6 +208,7 @@ class API {
         });
 
         if (!resp.ok) {
+            if (resp.status === 401) reportUnauthorized();
             throw new Error(`Failed to download file: ${resp.statusText}`);
         }
 

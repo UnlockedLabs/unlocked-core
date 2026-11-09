@@ -1,4 +1,5 @@
 import { ANALYTICS_EVENTS, analyticsUrl, captureEvent } from '@/lib/events';
+import { reportUnauthorized } from '@/auth/sessionExpiry';
 
 /**
  * Global SWR fetcher.
@@ -35,6 +36,7 @@ export const swrFetcher = async (url: string): Promise<unknown> => {
         throw err;
     }
     if (!res.ok) {
+        if (res.status === 401) reportUnauthorized();
         captureEvent(ANALYTICS_EVENTS.ApiError, {
             status: res.status,
             method: 'GET',
