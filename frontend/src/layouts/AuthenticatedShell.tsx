@@ -11,13 +11,18 @@ import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
  */
 export default function AuthenticatedShell() {
     return (
-        <AuthProvider>
-            <PageTitleProvider>
-                <BreadcrumbProvider>
-                    <AuthenticatedLayout />
-                </BreadcrumbProvider>
-            </PageTitleProvider>
+        <>
+            {/* Outside AuthProvider so it's listening before any page renders:
+                sonner drops a toast fired before the Toaster mounts, such as
+                RouteGuard's on a page load. */}
             <Toaster position="bottom-right" />
-        </AuthProvider>
+            <AuthProvider>
+                <PageTitleProvider>
+                    <BreadcrumbProvider>
+                        <AuthenticatedLayout />
+                    </BreadcrumbProvider>
+                </PageTitleProvider>
+            </AuthProvider>
+        </>
     );
 }
