@@ -77,6 +77,12 @@ pages are still in core's frontend; the rev_proxy sends their `/api` paths to it
 questions with `PROGRAMS_TOKEN`. If you run the server outside compose, `.env.example` points
 `PROGRAMS_URL` at its port, 8084.
 
+**Learning Record** ([unlocked-learning-record](https://github.com/UnlockedLabs/unlocked-learning-record))
+runs as its own service the same way: `make dev` builds its `main` branch from GitHub, or your checkout when
+`LEARNING_RECORD_DIR` is set (such as `../unlocked-learning-record`), or another branch with
+`LEARNING_RECORD_REF`. The rev_proxy sends `/api/learning-record` to it, and it asks core who the
+user is and whether `learning_record` is on. It listens on port 8085.
+
 
 **NOTE:** you _must_ be sure to use `127.0.0.1` in place of `localhost` in your browser, as the cookies required for authentication are not shared between the two,
 and this can cause bad states in the browser that will prevent successful login/auth flow.

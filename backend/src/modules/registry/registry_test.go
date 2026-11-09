@@ -25,12 +25,10 @@ func TestAllModules(t *testing.T) {
 			t.Errorf("module %q has no migrations folder: %v", name, err)
 		}
 	}
-	// Open Content, Provider Platforms and Programs run as their own services.
-	if len(seen) != 1 {
-		t.Errorf("got %d modules, want 1: Learning Record", len(seen))
-	}
-	if seen["providerplatforms"] || seen["opencontent"] || seen["programs"] {
-		t.Error("Open Content, Provider Platforms and Programs run as their own services, not as core modules")
+	// Open Content, Provider Platforms, Programs and Learning Record run as their
+	// own services.
+	if len(seen) != 0 {
+		t.Errorf("got %d modules, want none", len(seen))
 	}
 }
 
