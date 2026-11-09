@@ -25,7 +25,7 @@ func (srv *Server) registerInternalRoutes() {
 	srv.Mux.Handle("GET /internal/v1/features", srv.handleError(srv.handleInternalFeatures))
 	srv.Mux.Handle("GET /internal/v1/claims", srv.handleError(srv.handleInternalClaims))
 	srv.Mux.Handle("PUT /internal/v1/features/{name}", srv.handleError(srv.handleInternalRegisterFeature))
-	srv.Mux.Handle("/internal/v1/core/", coreapi.NewHandler(coreUsers{srv}, registry.LiveProviders(srv.moduleDeps()), registry.ProviderPlatformsToken()))
+	srv.Mux.Handle("/internal/v1/core/", coreapi.NewHandler(coreUsers{srv}, liveProviders{srv}, registry.ProviderPlatformsToken()))
 }
 
 type internalFeaturesResponse struct {

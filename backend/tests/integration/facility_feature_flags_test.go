@@ -486,8 +486,8 @@ func TestFeatureFlags_MiddlewareEnforcesClaims(t *testing.T) {
 	facility, err := env.CreateTestFacility("Enforcement Facility")
 	require.NoError(t, err)
 
-	t.Run("student without program access is rejected from a program-gated route", func(t *testing.T) {
-		NewRequest[any](env.Client, t, http.MethodGet, "/api/programs", nil).
+	t.Run("student without the learning record is rejected from a route gated on it", func(t *testing.T) {
+		NewRequest[any](env.Client, t, http.MethodGet, "/api/learning-record/entries", nil).
 			WithTestClaims(&handlers.Claims{
 				Role:          models.Student,
 				FacilityID:    facility.ID,
@@ -497,12 +497,12 @@ func TestFeatureFlags_MiddlewareEnforcesClaims(t *testing.T) {
 			ExpectStatus(http.StatusUnauthorized)
 	})
 
-	t.Run("student with program access succeeds on the same route", func(t *testing.T) {
-		NewRequest[any](env.Client, t, http.MethodGet, "/api/programs", nil).
+	t.Run("student with the learning record succeeds on the same route", func(t *testing.T) {
+		NewRequest[any](env.Client, t, http.MethodGet, "/api/learning-record/entries", nil).
 			WithTestClaims(&handlers.Claims{
 				Role:          models.Student,
 				FacilityID:    facility.ID,
-				FeatureAccess: []models.FeatureAccess{models.ProgramAccess},
+				FeatureAccess: []models.FeatureAccess{models.LearningRecordAccess},
 			}).
 			Do().
 			ExpectStatus(http.StatusOK)

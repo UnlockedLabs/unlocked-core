@@ -50,6 +50,25 @@ x-provider-platforms: &provider-platforms
     NATS_USER: unlocked
     NATS_PASSWORD: dev
 
+# Programs' three services share one image and environment.
+x-programs: &programs
+  image: unlocked-programs:dev
+  build:
+    # Built straight from GitHub (PROGRAMS_REF, default main), so no checkout
+    # is needed. Set PROGRAMS_DIR to your checkout to build your own changes
+    # instead.
+    context: ${PROGRAMS_DIR:-https://github.com/UnlockedLabs/unlocked-programs.git#${PROGRAMS_REF:-main}}
+    args:
+      APP_VERSION: dev
+      GIT_COMMIT: ${PROGRAMS_GIT_COMMIT:-unknown}
+      GIT_BRANCH: ${PROGRAMS_GIT_BRANCH:-unknown}
+  networks:
+    - intranet
+  environment: &programs-env
+    APP_DSN: postgres://unlocked:dev@postgres:5432/unlocked
+    APP_ENV: dev
+    LOG_LEVEL: debug
+
 services:
   postgres:
     image: postgres:16
@@ -144,6 +163,9 @@ services:
       # The Provider Platforms service (EN-206) and the secret they share.
       - PROVIDER_PLATFORMS_URL=http://providerplatforms:8080
       - &provider-platforms-token PROVIDER_PLATFORMS_TOKEN=dev-provider-platforms-token
+      # The Programs service and the secret they share.
+      - PROGRAMS_URL=http://programs:8080
+      - PROGRAMS_TOKEN=dev-programs-token
       - HYDRA_ADMIN_URL=http://hydra:4445
       - HYDRA_PUBLIC_URL=http://hydra:4444
       - KRATOS_ADMIN_URL=http://kratos:4434
@@ -293,6 +315,48 @@ services:
     restart: unless-stopped
     depends_on:
       providerplatforms-migrate:
+        condition: service_completed_successfully
+
+  # Programs runs as its own service, built from GitHub, or from your checkout
+  # when PROGRAMS_DIR is set (see x-programs). No hot reload: `make dev`
+  # rebuilds it. Its migrations run after core's, because the first one moves
+  # the tables core created into the programs schema.
+  programs-migrate:
+    <<: *programs
+    command: ["migrate"]
+    depends_on:
+      server-migrate:
+        condition: service_completed_successfully
+
+  # Programs' API. The rev_proxy sends its paths here, and the server asks it
+  # questions (.env.example points a server run outside compose at port 8084).
+  programs:
+    <<: *programs
+    command: ["serve"]
+    ports:
+      - 8084:8080
+    environment:
+      <<: *programs-env
+      APP_URL: http://server:8080
+      KRATOS_PUBLIC_URL: http://kratos:4433
+      NATS_URL: nats:4222
+      NATS_USER: unlocked
+      NATS_PASSWORD: dev
+      PROGRAMS_TOKEN: dev-programs-token
+      PROVIDER_PLATFORMS_URL: http://providerplatforms:8080
+      PROVIDER_PLATFORMS_TOKEN: dev-provider-platforms-token
+    restart: unless-stopped
+    depends_on:
+      programs-migrate:
+        condition: service_completed_successfully
+
+  # Programs' worker: class activation, every morning at 5.
+  programs-worker:
+    <<: *programs
+    command: ["worker"]
+    restart: unless-stopped
+    depends_on:
+      programs-migrate:
         condition: service_completed_successfully
 
   # AI tutor sidecar (served under basePath /tutor; see tutor-integration.md)

@@ -14,6 +14,7 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-contracts/coreapi"
 	"github.com/UnlockedLabs/unlocked-contracts/identity"
+	programsapi "github.com/UnlockedLabs/unlocked-contracts/programs"
 	"github.com/UnlockedLabs/unlocked-contracts/users"
 	ory "github.com/ory/kratos-client-go"
 	"github.com/sirupsen/logrus"
@@ -276,66 +277,6 @@ func TestModuleRouterLogFields(t *testing.T) {
 	assert.Equal(t, "facadmin", coreFields["username"])
 }
 
-func TestModuleDeps(t *testing.T) {
-	deps := newTestingServer().moduleDeps()
-	assert.NotNil(t, deps.HTTP)
-	assert.NotNil(t, deps.Features)
-	assert.NotNil(t, deps.Reports)
-}
-
-// A module request goes out with the client the server has when it is sent,
-// so a client set after startup, such as a test's fake, is the one used.
-func TestHTTPClient(t *testing.T) {
-	srv := newTestingServer()
-	client := srv.moduleDeps().HTTP
-	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusTeapot)
-	}))
-	defer ts.Close()
-	// Only the fake's own client trusts its certificate.
-	srv.Client = ts.Client()
-
-	req, err := http.NewRequest(http.MethodGet, ts.URL, nil)
-	require.NoError(t, err)
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	defer func() { _ = resp.Body.Close() }()
-	assert.Equal(t, http.StatusTeapot, resp.StatusCode)
-}
-
-// A module sees a facility's features as core resolves them: the facility's
-// own settings over the statewide ones, without sub-features of a feature
-// that is off.
-func TestFacilityFeatures(t *testing.T) {
-	srv := newTestingServer()
-	statewide := []models.FeatureAccess{models.OpenContentAccess, models.HelpfulLinksAccess, models.ProviderAccess}
-	setStatewideDefaults(t, srv, statewide...)
-	features := srv.moduleDeps().Features
-
-	tests := []struct {
-		name      string
-		overrides map[models.FeatureAccess]bool
-		want      []models.FeatureAccess
-	}{
-		{"statewide", nil, statewide},
-		{"turned on at the facility", map[models.FeatureAccess]bool{models.ProgramAccess: true}, append([]models.FeatureAccess{models.ProgramAccess}, statewide...)},
-		{"turned off at the facility", map[models.FeatureAccess]bool{models.ProviderAccess: false}, []models.FeatureAccess{models.OpenContentAccess, models.HelpfulLinksAccess}},
-		{"parent turned off", map[models.FeatureAccess]bool{models.OpenContentAccess: false}, []models.FeatureAccess{models.ProviderAccess}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			facility := createTestFacility(t, srv, tt.name)
-			args := models.QueryContext{Ctx: context.Background()}
-			for feature, enabled := range tt.overrides {
-				require.NoError(t, srv.Db.UpsertFacilityFeatureFlag(&args, facility, feature, enabled))
-			}
-			got, err := features.FacilityFeatures(context.Background(), facility)
-			require.NoError(t, err)
-			assert.ElementsMatch(t, tt.want, got)
-		})
-	}
-}
-
 func TestCoreUsers(t *testing.T) {
 	srv := newTestingServer()
 	users := coreUsers{srv}
@@ -504,7 +445,41 @@ func TestInternalCoreAPI(t *testing.T) {
 		_, err := coreapi.NewUsersClient(core.URL, "wrong", nil).Get(context.Background(), admin.ID)
 		assert.Error(t, err)
 	})
-	t.Run("clearing the Canvas cache without a cache is harmless", func(t *testing.T) {
-		assert.NotPanics(t, func() { coreapi.NewLiveProvidersClient(core.URL, "s3cret", nil).MappingsChanged(1, 1) })
+	t.Run("live provider questions go to Programs", func(t *testing.T) {
+		progs := &livePrograms{users: []coreapi.ProviderUser{{Username: "ee.jdoe", ExternalUserID: "8001"}}}
+		srv.programs = progs
+		live := coreapi.NewLiveProvidersClient(core.URL, "s3cret", nil)
+		got, ok, err := live.Users(context.Background(), 11)
+		require.NoError(t, err)
+		assert.True(t, ok)
+		assert.Equal(t, progs.users, got)
+		live.MappingsChanged(10, admin.ID)
+		progs.mu.Lock()
+		defer progs.mu.Unlock()
+		assert.Equal(t, []uint{11}, progs.asked)
+		assert.Equal(t, [][2]uint{{10, admin.ID}}, progs.changed)
 	})
+}
+
+// livePrograms is Programs' answers about live providers. It records what it
+// was asked; any other question panics.
+type livePrograms struct {
+	programsapi.Programs
+	users   []coreapi.ProviderUser
+	mu      sync.Mutex
+	asked   []uint
+	changed [][2]uint
+}
+
+func (p *livePrograms) LiveUsers(_ context.Context, providerID uint) ([]coreapi.ProviderUser, bool, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.asked = append(p.asked, providerID)
+	return p.users, true, nil
+}
+
+func (p *livePrograms) MappingsChanged(providerID, userID uint) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.changed = append(p.changed, [2]uint{providerID, userID})
 }

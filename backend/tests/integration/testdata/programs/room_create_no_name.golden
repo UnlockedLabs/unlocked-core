@@ -1,4 +1,0 @@
-{
-  "data": null,
-  "message": "error creating room failed: Key: 'Room.Name' Error:Field validation for 'Name' failed on the 'required' tag"
-}

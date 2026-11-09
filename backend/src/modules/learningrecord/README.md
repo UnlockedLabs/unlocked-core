@@ -12,9 +12,8 @@ EN-195.
 - **It owns no data but its own table** (`learning_record_entries`, in the
   `learning_record` schema; see Database). An
   entry's `program_name` is free text, not a foreign key into Programs, so it
-  has nothing to ask Programs' `api/` package today. The depguard rule for this
-  module already allow-lists `modules/programs/api` for whenever that changes.
-  Provider Platforms is its own service (EN-206), so it isn't a module here.
+  has nothing to ask Programs today. Provider Platforms (EN-206) and Programs
+  (EN-207) are their own services, so they aren't modules here.
 - **It reads and writes some of core's tables:** it reads `facilities` for the
   achievement-location picker (the `facility` type in `models.go`), and adds a
   `user_account_history` row when a resident deletes an entry, in the same

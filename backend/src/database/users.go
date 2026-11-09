@@ -10,8 +10,6 @@ import (
 	"time"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
-	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -142,16 +140,10 @@ func (db *DB) GetUsersByIDs(ctx context.Context, userIDs []uint, facID uint, rol
 	return users, nil
 }
 
-func (db *DB) TransferResident(ctx *models.QueryContext, userID int, currFacilityID int, transFacilityID int) (*gorm.DB, error) {
+func (db *DB) TransferResident(ctx *models.QueryContext, userID int, transFacilityID int) (*gorm.DB, error) {
 	trans := db.Begin()
 	if trans.Error != nil {
 		return nil, NewDBError(trans.Error, "unable to start DB transaction")
-	}
-	if err := registry.ProgramsInTx(trans, func(p programsapi.Programs) error {
-		return p.EndEnrollmentsForTransfer(trans.Statement.Context, uint(userID), uint(currFacilityID))
-	}); err != nil {
-		trans.Rollback()
-		return nil, newUpdateDBError(err, "program_class_enrollments")
 	}
 	if err := trans.Model(&models.User{}).
 		Where("id = ?", userID).
@@ -876,11 +868,6 @@ func (db *DB) DeactivateUser(ctx context.Context, userID uint, adminID *uint) er
 	now := time.Now()
 	if err := tx.Model(&models.User{}).Where("id = ?", userID).Update("deactivated_at", now).Error; err != nil {
 		return newUpdateDBError(err, "users")
-	}
-	if err := registry.ProgramsInTx(tx, func(p programsapi.Programs) error {
-		return p.WithdrawEnrollments(ctx, userID)
-	}); err != nil {
-		return newUpdateDBError(err, "program_class_enrollments")
 	}
 	history := models.NewUserAccountHistory(userID, models.UserDeactivated, adminID, nil, nil)
 	if err := tx.Create(&history).Error; err != nil {
