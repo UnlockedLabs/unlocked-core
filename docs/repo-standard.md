@@ -147,7 +147,7 @@ Before starting, check both of these. Either can still require the old name:
 gh api repos/UnlockedLabs/unlocked-core/branches --paginate --jq '.[].name' | grep '^release/'
 gh api repos/UnlockedLabs/unlocked-core/branches/main/protection --jq '.required_status_checks.contexts'
 ```
-The ruleset also covers `release/**`. Any live release branch still reports `conventional`, so backport the rename to it right after the swap; the backport PR reports the new name, and the branch's other PRs wait until it merges.
+The ruleset also covers `release/**`. Any live release branch still reports `conventional`, so backport the rename to it right after the swap; the backport PR reports the new name. Once it merges, the branch's other open PRs must rebase onto that release branch (not `main`) to report the new name.
 
 1. Once every check on the EN-214 core PR has passed except `conventional` (pending until the swap) and it is approved, run `stage unlocked-core 25118710 ...` and `put unlocked-core 25118710` from above.
 2. Merge the PR straight away.
