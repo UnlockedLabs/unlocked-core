@@ -1,4 +1,5 @@
 import { ReportGenerateRequest } from '@/types/reports';
+import { reportUnauthorized } from '@/auth/sessionExpiry';
 
 export async function generateReport(
     params: ReportGenerateRequest
@@ -18,6 +19,7 @@ export async function generateReport(
     });
 
     if (!resp.ok) {
+        if (resp.status === 401) reportUnauthorized();
         const errorText = await resp.text();
         let errorMessage = 'Failed to generate report';
         try {
