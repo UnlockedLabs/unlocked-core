@@ -615,7 +615,7 @@ const ENROLLMENT_STATUS_OPTIONS = [
     { value: 'Dropped', label: 'Dropped' },
     { value: 'Segregated', label: 'Segregated' },
     { value: 'Failed to Complete', label: 'Failed to Complete' },
-    { value: 'Transfered', label: 'Transfered' }
+    { value: 'Transferred', label: 'Transferred' }
 ];
 // Statuses stored with an "Incomplete:" prefix (they carry a reason). Cancelled
 // is a terminal status without a reason, so it is intentionally excluded here.
@@ -624,7 +624,7 @@ const NON_COMPLETING = new Set([
     'Dropped',
     'Segregated',
     'Failed to Complete',
-    'Transfered'
+    'Transferred'
 ]);
 
 function useClasses() {

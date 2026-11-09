@@ -43,7 +43,7 @@ export enum EnrollmentStatus {
     Dropped = 'Incomplete: Dropped',
     Segregated = 'Incomplete: Segregated',
     'Failed To Complete' = 'Incomplete: Failed to Complete',
-    Transfered = 'Incomplete: Transfered'
+    Transferred = 'Incomplete: Transferred'
 }
 
 export interface EnrollmentAttendance {

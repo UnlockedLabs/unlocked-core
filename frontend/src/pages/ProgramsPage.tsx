@@ -1846,7 +1846,7 @@ function ProgramsTable({
                                                     Past enrollments including
                                                     completed, withdrawn,
                                                     dropped, failed to complete,
-                                                    and transfered
+                                                    and transferred
                                                 </TooltipContent>
                                             </Tooltip>
                                         </div>
