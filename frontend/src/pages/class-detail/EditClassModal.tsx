@@ -27,11 +27,11 @@ import {
 } from '@/components/ui/select';
 import { editClassSchema, EditClassInput } from '@/lib/validation';
 import { SelectedClassStatus } from '@/types/attendance';
+import { Instructor } from '@/types/events';
 import {
     Cohort,
     Room,
     RoomConflict,
-    User,
     ServerResponseMany,
     ServerResponseOne,
     NewUserResponse
@@ -248,9 +248,13 @@ export function EditClassModal({
     });
 
     const { data: instructorsResp, mutate: mutateInstructors } = useSWR<
-        ServerResponseMany<User>
-    >(user ? `/api/users?role=${user.role}&per_page=100` : null);
-    const instructors = instructorsResp?.data ?? [];
+        ServerResponseMany<Instructor>
+    >(
+        cls.facility_id
+            ? `/api/program-facilities/${cls.facility_id}/instructors`
+            : null
+    );
+    const instructors = (instructorsResp?.data ?? []).filter((i) => i.id !== 0);
 
     const { data: roomsResp, mutate: mutateRooms } = useSWR<
         ServerResponseMany<Room>
