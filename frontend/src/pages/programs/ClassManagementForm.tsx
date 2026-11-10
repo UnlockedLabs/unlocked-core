@@ -437,7 +437,10 @@ export function ClassManagementFormInner({
                 name_first: name_first.trim(),
                 name_last: name_last.trim(),
                 username: username.trim(),
-                role: 'facility_admin'
+                role: 'facility_admin',
+                // An admin who can switch facilities must name one, or the
+                // server answers "facility selection is required".
+                facility_id: resolvedFacilityId
             },
             provider_platforms: []
         });
