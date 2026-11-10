@@ -117,6 +117,9 @@ export interface ProgramsOverviewTable {
     description: string;
     archived_at: string;
     total_active_facilities: number;
+    /** The facilities total_active_facilities counts, sorted. Only sent to
+     *  admins who see that count. */
+    facility_names?: string[];
     total_enrollments: number;
     total_active_enrollments: number;
     total_classes: number;
