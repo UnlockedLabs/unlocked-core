@@ -10,8 +10,13 @@ import {
     SelectValue
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useAuth, canSwitchFacility } from '@/auth/useAuth';
-import { Facility, InsightsRangeKey, ServerResponseMany } from '@/types';
+import { useAuth, canSwitchFacility, hasFeature } from '@/auth/useAuth';
+import {
+    Facility,
+    FeatureAccess,
+    InsightsRangeKey,
+    ServerResponseMany
+} from '@/types';
 import OverviewTab from './OverviewTab';
 import KnowledgeCenterTab from './KnowledgeCenterTab';
 import ProgramsTab from './ProgramsTab';
@@ -23,6 +28,8 @@ const TAB_TRIGGER_CLASS =
 export default function OperationalInsightsPage() {
     const { user } = useAuth();
     const canSwitch = user ? canSwitchFacility(user) : false;
+    const programsEnabled =
+        !!user && hasFeature(user, FeatureAccess.ProgramAccess);
 
     const [activeRange, setActiveRange] = useState<InsightsRangeKey>('30D');
     const [customFrom, setCustomFrom] = useState('');
@@ -156,12 +163,14 @@ export default function OperationalInsightsPage() {
                             >
                                 Knowledge Center
                             </TabsTrigger>
-                            <TabsTrigger
-                                value="programs"
-                                className={TAB_TRIGGER_CLASS}
-                            >
-                                Programs
-                            </TabsTrigger>
+                            {programsEnabled && (
+                                <TabsTrigger
+                                    value="programs"
+                                    className={TAB_TRIGGER_CLASS}
+                                >
+                                    Programs
+                                </TabsTrigger>
+                            )}
                         </TabsList>
                         <TabsContent value="overview" className="mt-0">
                             <OverviewTab
@@ -178,14 +187,16 @@ export default function OperationalInsightsPage() {
                                 rangeLabel={rangeLabel}
                             />
                         </TabsContent>
-                        <TabsContent value="programs" className="mt-0">
-                            <ProgramsTab
-                                dateParams={dateParams}
-                                selectedFacility={selectedFacility}
-                                rangeLabel={rangeLabel}
-                                scopeLabel={scopeLabel}
-                            />
-                        </TabsContent>
+                        {programsEnabled && (
+                            <TabsContent value="programs" className="mt-0">
+                                <ProgramsTab
+                                    dateParams={dateParams}
+                                    selectedFacility={selectedFacility}
+                                    rangeLabel={rangeLabel}
+                                    scopeLabel={scopeLabel}
+                                />
+                            </TabsContent>
+                        )}
                     </Tabs>
                 </SWRConfig>
             </div>

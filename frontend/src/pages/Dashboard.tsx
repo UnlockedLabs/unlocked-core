@@ -1,9 +1,10 @@
 import { useState, useMemo, ComponentProps } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
-import { useAuth, canSwitchFacility } from '@/auth/useAuth';
+import { useAuth, canSwitchFacility, hasFeature } from '@/auth/useAuth';
 import {
     ClassMetrics,
+    FeatureAccess,
     FacilityHealthSummary,
     MissingAttendanceItem,
     TodaysScheduleItem,
@@ -51,10 +52,14 @@ function SurfaceCard({ className, ...props }: ComponentProps<'div'>) {
 export default function Dashboard() {
     const { user } = useAuth();
     const deptAdmin = user ? canSwitchFacility(user) : false;
+    const programsEnabled =
+        !!user && hasFeature(user, FeatureAccess.ProgramAccess);
     const { data: classMetricsResp } = useSWR<ServerResponseOne<ClassMetrics>>(
-        deptAdmin
-            ? '/api/dashboard/class-metrics?facility=all'
-            : '/api/dashboard/class-metrics'
+        !programsEnabled
+            ? null
+            : deptAdmin
+              ? '/api/dashboard/class-metrics?facility=all'
+              : '/api/dashboard/class-metrics'
     );
     const { data: missingAttendanceResp, isLoading: missingAttendanceLoading } =
         useSWR<ServerResponseMany<MissingAttendanceItem>>(
@@ -65,9 +70,11 @@ export default function Dashboard() {
     const { data: facilityHealthResp } = useSWR<
         ServerResponseOne<FacilityHealthSummary[]>
     >(
-        deptAdmin
-            ? '/api/dashboard/facility-health?facility=all&days=3'
-            : '/api/dashboard/facility-health?days=3'
+        !programsEnabled
+            ? null
+            : deptAdmin
+              ? '/api/dashboard/facility-health?facility=all&days=3'
+              : '/api/dashboard/facility-health?days=3'
     );
     const { data: todaysScheduleResp, isLoading: todaysScheduleLoading } =
         useSWR<ServerResponseMany<TodaysScheduleItem>>(
@@ -85,6 +92,7 @@ export default function Dashboard() {
             <div className="max-w-7xl mx-auto px-6 py-8">
                 {deptAdmin ? (
                     <DeptAdminView
+                        programsEnabled={programsEnabled}
                         metrics={classMetricsResp?.data}
                         missingAttendance={missingAttendanceResp?.data ?? []}
                         missingAttendanceLoading={missingAttendanceLoading}
@@ -92,6 +100,7 @@ export default function Dashboard() {
                     />
                 ) : (
                     <FacilityAdminView
+                        programsEnabled={programsEnabled}
                         facilityName={user?.facility.name ?? 'My Facility'}
                         metrics={classMetricsResp?.data}
                         missingAttendance={missingAttendanceResp?.data ?? []}
@@ -106,6 +115,7 @@ export default function Dashboard() {
 }
 
 function FacilityAdminView({
+    programsEnabled,
     facilityName,
     metrics,
     missingAttendance,
@@ -113,6 +123,7 @@ function FacilityAdminView({
     todaysScheduleItems,
     todaysScheduleLoading
 }: {
+    programsEnabled: boolean;
     facilityName: string;
     metrics?: ClassMetrics;
     missingAttendance: MissingAttendanceItem[];
@@ -142,7 +153,9 @@ function FacilityAdminView({
                 className="mb-[15px]"
             />
 
-            <MetricCards stats={stats} onNavigate={navigate} />
+            {programsEnabled && (
+                <MetricCards stats={stats} onNavigate={navigate} />
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2">
@@ -166,11 +179,13 @@ function FacilityAdminView({
 }
 
 function DeptAdminView({
+    programsEnabled,
     metrics,
     missingAttendance,
     missingAttendanceLoading,
     facilityHealthSummaries
 }: {
+    programsEnabled: boolean;
     metrics?: ClassMetrics;
     missingAttendance: MissingAttendanceItem[];
     missingAttendanceLoading: boolean;
@@ -190,15 +205,19 @@ function DeptAdminView({
         <div>
             <PageHeader title="Department Overview" className="mb-[15px]" />
 
-            <MetricCards stats={stats} onNavigate={navigate} />
+            {programsEnabled && (
+                <MetricCards stats={stats} onNavigate={navigate} />
+            )}
 
             <div className="space-y-6">
-                <div>
-                    <h2 className="text-brand-dark dark:text-white mb-4">
-                        Facility Health Overview
-                    </h2>
-                    <FacilityHealthTable rows={facilityRows} />
-                </div>
+                {programsEnabled && (
+                    <div>
+                        <h2 className="text-brand-dark dark:text-white mb-4">
+                            Facility Health Overview
+                        </h2>
+                        <FacilityHealthTable rows={facilityRows} />
+                    </div>
+                )}
                 <div className="flex gap-6 flex-wrap lg:flex-nowrap">
                     <div className="flex-1 lg:flex-[2] min-w-75">
                         <MissingAttendanceWidget
