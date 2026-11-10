@@ -186,6 +186,18 @@ export const buildAdminEditSchema = (requireFacility: boolean) =>
 
 export type AdminEditInput = z.infer<ReturnType<typeof buildAdminEditSchema>>;
 
+/**
+ * Add Instructor, from the class forms. The same fields as Add Admin, without
+ * role and facility: an instructor is a facility admin at the class's facility.
+ */
+export const addInstructorSchema = z.object({
+    name_first: requiredString('First name'),
+    name_last: requiredString('Last name'),
+    username: requiredString('Username')
+});
+
+export type AddInstructorInput = z.infer<typeof addInstructorSchema>;
+
 /* ------------------------------------------------------------------ *
  * Facility — add / edit
  * ------------------------------------------------------------------ */

@@ -13,7 +13,7 @@ import {
     programFacilityProps
 } from '@/lib/events';
 import { useFlowTimer } from '@/lib/useFlowTimer';
-import { useAuth } from '@/auth/useAuth';
+import { canSwitchFacility, useAuth } from '@/auth/useAuth';
 import {
     ClassLoaderData,
     Instructor,
@@ -55,6 +55,7 @@ import {
     SelectValue
 } from '@/components/ui/select';
 import { FormModal } from '@/components/shared';
+import { AddInstructorDialog } from '@/components/programs/AddInstructorDialog';
 import { AlertCircle, X } from 'lucide-react';
 
 type ClassFormData = ClassManagementInput;
@@ -182,12 +183,9 @@ export function ClassManagementFormInner({
     const [showConflicts, setShowConflicts] = useState(false);
     const [showAddRoom, setShowAddRoom] = useState(false);
     const [showAddInstructor, setShowAddInstructor] = useState(false);
+    // Only department and system admins create admins.
+    const canAddInstructor = !!user && canSwitchFacility(user);
     const [newRoomName, setNewRoomName] = useState('');
-    const [newInstructor, setNewInstructor] = useState({
-        name_first: '',
-        name_last: '',
-        username: ''
-    });
     const [roomSelectValue, setRoomSelectValue] = useState('');
     const [pendingRoomId, setPendingRoomId] = useState<number | null>(null);
     const [showCustomRecurrence, setShowCustomRecurrence] = useState(false);
@@ -426,34 +424,12 @@ export function ClassManagementFormInner({
         setShowAddRoom(false);
     }
 
-    async function handleAddInstructor() {
-        const { name_first, name_last, username } = newInstructor;
-        if (!name_first.trim() || !name_last.trim() || !username.trim()) return;
-        const resp = await API.post<
-            { user: User; temp_password: string },
-            object
-        >('users', {
-            user: {
-                name_first: name_first.trim(),
-                name_last: name_last.trim(),
-                username: username.trim(),
-                role: 'facility_admin'
-            },
-            provider_platforms: []
+    function handleInstructorCreated(created: User) {
+        setInstructors((prev) => [...prev, created]);
+        setValue('instructor_id', created.id, {
+            shouldDirty: true,
+            shouldValidate: true
         });
-        if (resp.success) {
-            const newUser = (resp.data as { user: User; temp_password: string })
-                .user;
-            setInstructors((prev) => [
-                ...prev,
-                newUser as unknown as Instructor
-            ]);
-            toast.success('Instructor created');
-        } else {
-            toast.error(resp.message || 'Failed to create instructor');
-        }
-        setNewInstructor({ name_first: '', name_last: '', username: '' });
-        setShowAddInstructor(false);
     }
 
     async function onSubmit(data: ClassFormData) {
@@ -726,11 +702,20 @@ export function ClassManagementFormInner({
                                                               )
                                                             : ''
                                                     }
-                                                    onValueChange={(v) =>
+                                                    onValueChange={(v) => {
+                                                        // Radix sends '' when the value is set before its
+                                                        // option renders, as for a new instructor.
+                                                        if (!v) return;
+                                                        if (v === '__add__') {
+                                                            setShowAddInstructor(
+                                                                true
+                                                            );
+                                                            return;
+                                                        }
                                                         field.onChange(
                                                             Number(v)
-                                                        )
-                                                    }
+                                                        );
+                                                    }}
                                                 >
                                                     <FormControl>
                                                         <SelectTrigger
@@ -761,6 +746,14 @@ export function ClassManagementFormInner({
                                                                     }
                                                                 </SelectItem>
                                                             )
+                                                        )}
+                                                        {canAddInstructor && (
+                                                            <SelectItem
+                                                                value="__add__"
+                                                                className="text-brand font-medium"
+                                                            >
+                                                                + Add Instructor
+                                                            </SelectItem>
                                                         )}
                                                     </SelectContent>
                                                 </Select>
@@ -1505,6 +1498,9 @@ export function ClassManagementFormInner({
                                                             : ''
                                                     }
                                                     onValueChange={(v) => {
+                                                        // Radix sends '' when the value is set before its
+                                                        // option renders, as for a new instructor.
+                                                        if (!v) return;
                                                         if (v === '__add__') {
                                                             setShowAddInstructor(
                                                                 true
@@ -1542,12 +1538,14 @@ export function ClassManagementFormInner({
                                                                 </SelectItem>
                                                             )
                                                         )}
-                                                        <SelectItem
-                                                            value="__add__"
-                                                            className="text-brand font-medium"
-                                                        >
-                                                            + Add Instructor
-                                                        </SelectItem>
+                                                        {canAddInstructor && (
+                                                            <SelectItem
+                                                                value="__add__"
+                                                                className="text-brand font-medium"
+                                                            >
+                                                                + Add Instructor
+                                                            </SelectItem>
+                                                        )}
                                                     </SelectContent>
                                                 </Select>
                                                 <FormMessage />
@@ -1936,70 +1934,13 @@ export function ClassManagementFormInner({
                 </FormModal>
             )}
 
-            {!embedded && (
-                <FormModal
+            {canAddInstructor && !!resolvedFacilityId && (
+                <AddInstructorDialog
                     open={showAddInstructor}
                     onOpenChange={setShowAddInstructor}
-                    title="Add Instructor"
-                >
-                    <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="inst-first">First Name</Label>
-                                <Input
-                                    id="inst-first"
-                                    value={newInstructor.name_first}
-                                    onChange={(e) =>
-                                        setNewInstructor((p) => ({
-                                            ...p,
-                                            name_first: e.target.value
-                                        }))
-                                    }
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="inst-last">Last Name</Label>
-                                <Input
-                                    id="inst-last"
-                                    value={newInstructor.name_last}
-                                    onChange={(e) =>
-                                        setNewInstructor((p) => ({
-                                            ...p,
-                                            name_last: e.target.value
-                                        }))
-                                    }
-                                />
-                            </div>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="inst-username">Username</Label>
-                            <Input
-                                id="inst-username"
-                                value={newInstructor.username}
-                                onChange={(e) =>
-                                    setNewInstructor((p) => ({
-                                        ...p,
-                                        username: e.target.value
-                                    }))
-                                }
-                            />
-                        </div>
-                        <div className="flex justify-end gap-2">
-                            <Button
-                                variant="outline"
-                                onClick={() => setShowAddInstructor(false)}
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                className="btn-brand-dark"
-                                onClick={() => void handleAddInstructor()}
-                            >
-                                Create
-                            </Button>
-                        </div>
-                    </div>
-                </FormModal>
+                    facilityId={resolvedFacilityId}
+                    onCreated={handleInstructorCreated}
+                />
             )}
         </div>
     );
