@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.11.1](https://github.com/UnlockedLabs/unlocked-core/compare/v1.11.0...v1.11.1) (2026-11-11)
+
+
+### Bug Fixes
+
+* **ci:** bump Go to 1.26.11 for GO-2026-6859 ([#1300](https://github.com/UnlockedLabs/unlocked-core/issues/1300)) ([803848e](https://github.com/UnlockedLabs/unlocked-core/commit/803848e902539b23e0c8c9e0dbe84d6a9243b178))
+
 ## [1.11.0](https://github.com/UnlockedLabs/unlocked-core/compare/v1.10.0...v1.11.0) (2026-11-11)
 
 
