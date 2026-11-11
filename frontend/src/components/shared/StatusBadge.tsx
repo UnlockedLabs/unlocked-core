@@ -66,14 +66,14 @@ const STYLE_REGISTRY: {
     variant: StatusBadgeProps['variant'];
     styles: Record<string, string>;
 }[] = [
-    { variant: 'class', styles: classStatusStyles as Record<string, string> },
+    { variant: 'class', styles: classStatusStyles },
     {
         variant: 'progClass',
-        styles: progClassStatusStyles as Record<string, string>
+        styles: progClassStatusStyles
     },
     {
         variant: 'program',
-        styles: programStatusStyles as Record<string, string>
+        styles: programStatusStyles
     },
     { variant: 'enrollment', styles: enrollmentStatusStyles },
     { variant: 'resident', styles: residentStatusStyles }

@@ -213,7 +213,7 @@ export async function apiGetDraft(): Promise<TranscriptDraft | null> {
     );
     if (!resp.success || resp.type !== 'one' || !resp.data) return null;
     const b = resp.data as (BackendEntry & { updated_at: string }) | null;
-    if (!b || !b.client_id) return null;
+    if (!b?.client_id) return null;
     return toDraftFrontend(b, b.updated_at ?? new Date().toISOString());
 }
 

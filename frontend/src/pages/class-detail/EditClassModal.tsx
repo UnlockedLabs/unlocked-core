@@ -393,7 +393,7 @@ export function EditClassModal({
 
         if (!resp.success) {
             if (resp.status === 409 && Array.isArray(resp.data)) {
-                setConflicts(resp.data as unknown as RoomConflict[]);
+                setConflicts(resp.data);
                 return;
             }
             toast.error(resp.message || 'Failed to update class');

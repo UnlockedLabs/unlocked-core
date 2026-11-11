@@ -10,6 +10,8 @@ on:
       - "frontend/package.json"
       - "frontend/yarn.lock"
       - ".github/workflows/security-frontend.yml"
+      - ".github/scan-result.sh"
+      - ".github/scan-result_test.sh"
   workflow_dispatch:
 
 permissions:
@@ -24,10 +26,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Test scan classifier
+        run: bash .github/scan-result_test.sh
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: 'yarn'
@@ -46,57 +51,78 @@ jobs:
           echo "Running yarn audit on frontend dependencies..."
 
           cd frontend
+          set +e
+          yarn audit --level=high > ../frontend_audit_output.txt 2>&1
+          code=$?
+          set -e
+          cd ..
 
-          # Run audit and capture output
-          audit_output=$(yarn audit --level=high 2>&1 || true)
-          echo "Audit completed"
+          result=$(.github/scan-result.sh yarn "$code" frontend_audit_output.txt)
+          echo "yarn audit exit code $code -> $result"
 
-          # Count vulnerabilities using grep
-          critical_count=$(echo "$audit_output" | grep -o 'Critical: [0-9]*' | cut -d' ' -f2 || echo "0")
-          high_count=$(echo "$audit_output" | grep -o 'High: [0-9]*' | cut -d' ' -f2 || echo "0")
-
-          # Ensure we have numbers
+          # yarn 1 prints "Severity: 15 Low | 92 Moderate | 79 High | 2 Critical"
+          severity_line=$(grep -m1 '^Severity:' frontend_audit_output.txt || true)
+          critical_count=$(echo "$severity_line" | grep -oE '[0-9]+ Critical' | cut -d' ' -f1 || true)
+          high_count=$(echo "$severity_line" | grep -oE '[0-9]+ High' | cut -d' ' -f1 || true)
           critical_count=${critical_count:-0}
           high_count=${high_count:-0}
           total_vuln=$((critical_count + high_count))
 
           echo "Critical: $critical_count, High: $high_count, Total: $total_vuln"
 
-          # Save audit output for upload
-          echo "$audit_output" > ../frontend_audit_output.txt
-
-          # Set outputs
-          echo "critical_count=$critical_count" >> $GITHUB_OUTPUT
-          echo "high_count=$high_count" >> $GITHUB_OUTPUT
-          echo "total_vuln=$total_vuln" >> $GITHUB_OUTPUT
-
-          if (( total_vuln > 0 )); then
-            echo "vulnerabilities_found=true" >> $GITHUB_OUTPUT
-            echo "Security vulnerabilities detected - this PR cannot be merged"
-            echo "CRITICAL_COUNT=$critical_count" >> $GITHUB_ENV
-            echo "HIGH_COUNT=$high_count" >> $GITHUB_ENV
-            echo "TOTAL_VULN=$total_vuln" >> $GITHUB_ENV
-          else
-            echo "vulnerabilities_found=false" >> $GITHUB_OUTPUT
-            echo "No vulnerabilities found in frontend dependencies"
+          if [ "$result" = vulnerabilities_found ] && [ "$total_vuln" -eq 0 ]; then
+            echo "::warning::yarn reported high or critical findings but the Severity line was not parsed; see the audit output"
           fi
+
+          echo "critical_count=$critical_count" >> "$GITHUB_OUTPUT"
+          echo "high_count=$high_count" >> "$GITHUB_OUTPUT"
+          echo "total_vuln=$total_vuln" >> "$GITHUB_OUTPUT"
+
+          case "$result" in
+            vulnerabilities_found)
+              echo "vulnerabilities_found=true" >> "$GITHUB_OUTPUT"
+              echo "Security vulnerabilities detected - this PR cannot be merged"
+              echo "CRITICAL_COUNT=$critical_count" >> "$GITHUB_ENV"
+              echo "HIGH_COUNT=$high_count" >> "$GITHUB_ENV"
+              echo "TOTAL_VULN=$total_vuln" >> "$GITHUB_ENV"
+              ;;
+            clean)
+              echo "vulnerabilities_found=false" >> "$GITHUB_OUTPUT"
+              echo "No high or critical vulnerabilities found in frontend dependencies"
+              ;;
+            *)
+              echo "vulnerabilities_found=false" >> "$GITHUB_OUTPUT"
+              echo "scan_failed=true" >> "$GITHUB_OUTPUT"
+              cat frontend_audit_output.txt
+              echo "::error::Scan failed (yarn audit exit code $code), re-run"
+              exit 1
+              ;;
+          esac
 
       - name: Send Slack notification
         if: steps.vuln-scan.outputs.vulnerabilities_found == 'true'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
           SLACK_MESSAGE=$(cat <<EOF
           FRONTEND SECURITY VULNERABILITIES DETECTED
 
-          SUMMARY: ${{ env.CRITICAL_COUNT }} Critical, ${{ env.HIGH_COUNT }} High Severity Vulnerabilities Found
+          SUMMARY: $CRITICAL_COUNT Critical, $HIGH_COUNT High Severity Vulnerabilities Found
 
-          Repository: ${{ github.repository }}
-          PR: #${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}
-          Author: ${{ github.event.pull_request.user.login }}
-          Branch: ${{ github.event.pull_request.head.ref }}
+          Repository: $REPO
+          PR: #$PR_NUMBER - $PR_TITLE
+          Author: $PR_AUTHOR
+          Branch: $PR_BRANCH
 
           This PR contains frontend security vulnerabilities and has been blocked from merging until fixed.
 
-          TOTAL: Found ${{ env.TOTAL_VULN }} total vulnerabilities affecting frontend dependencies
+          TOTAL: Found $TOTAL_VULN total vulnerabilities affecting frontend dependencies
 
           Actions needed:
           1. Update each vulnerable package using: \`yarn upgrade <package>@<safe-version>\`
@@ -104,22 +130,22 @@ jobs:
           3. Run \`yarn audit\` to verify fixes
           4. Push updates to PR
 
-          PR Link: ${{ github.event.pull_request.html_url }}
+          PR Link: $PR_URL
           EOF
           )
+
+          PAYLOAD=$(jq -n --arg text "$SLACK_MESSAGE" '{channel: "#unlockedv2-alerts", username: "Security Bot", icon_emoji: ":warning:", text: $text}')
 
           if ! curl -X POST -H 'Content-type: application/json' \
                --max-time 10 \
                --silent \
                --fail \
-               --data "{\"channel\":\"#unlockedv2-alerts\",\"username\":\"Security Bot\",\"icon_emoji\":\":warning:\",\"text\":\"$SLACK_MESSAGE\"}" \
-               "${{ secrets.SLACK_WEBHOOK_URL }}"; then
+               --data "$PAYLOAD" \
+               "$SLACK_WEBHOOK_URL"; then
             echo "Warning: Failed to send Slack notification"
           else
             echo "Slack notification sent successfully to #unlockedv2-alerts"
           fi
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Block PR from merging
         if: steps.vuln-scan.outputs.vulnerabilities_found == 'true'
@@ -139,13 +165,15 @@ jobs:
             echo ""
             echo "Slack notification sent to #unlockedv2-alerts"
             echo ""
+          elif [ "${{ steps.vuln-scan.outputs.scan_failed }}" == 'true' ]; then
+            echo "SCAN FAILED - yarn audit did not complete, re-run the job"
           else
-            echo "FRONTEND SECURITY CHECK PASSED - No vulnerabilities found"
+            echo "FRONTEND SECURITY CHECK PASSED - No high or critical vulnerabilities found"
           fi
 
       - name: Upload audit report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: frontend-audit-report
           path: frontend_audit_output.txt
