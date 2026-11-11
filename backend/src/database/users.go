@@ -10,8 +10,6 @@ import (
 	"time"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
-	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
-	"github.com/UnlockedLabs/unlocked-core/backend/src/modules/registry"
 
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -21,6 +19,12 @@ import (
 func calcOffset(page, perPage int) int {
 	return (page - 1) * perPage
 }
+
+var (
+	validUserOrderByFields = []string{"name_last", "created_at", "last_login", "doc_id", "username", "role", "facility_name"}
+	// residentOrderByFields has no joins, so last_login and facility_name are not sortable here.
+	residentOrderByFields = []string{"name_last", "created_at", "doc_id", "username"}
+)
 
 func (db *DB) GetCurrentUsers(args *models.QueryContext, role string) ([]models.User, error) {
 	tx := db.WithContext(args.Ctx).Model(models.User{}).
@@ -61,11 +65,10 @@ func (db *DB) GetCurrentUsers(args *models.QueryContext, role string) ([]models.
 		return nil, newGetRecordsDBError(err, "users")
 	}
 	users := make([]models.User, 0, args.PerPage)
-	validUserOrderByFields := []string{"name_last", "created_at", "last_login", "doc_id", "username", "role", "facility_name"}
 	if !slices.Contains(validUserOrderByFields, args.OrderBy) {
 		args.OrderBy = "name_last"
 	}
-	orderClause := adjustUserOrderBy(args.OrderClause("users.name_last desc"))
+	orderClause := adjustUserOrderBy(args.OrderClause("users.name_last desc", validUserOrderByFields...))
 	if args.OrderBy == "last_login" {
 		tx = tx.Joins("LEFT JOIN login_metrics ON login_metrics.user_id = users.id")
 		orderClause = adjustLastLoginOrderBy(orderClause)
@@ -137,16 +140,10 @@ func (db *DB) GetUsersByIDs(ctx context.Context, userIDs []uint, facID uint, rol
 	return users, nil
 }
 
-func (db *DB) TransferResident(ctx *models.QueryContext, userID int, currFacilityID int, transFacilityID int) (*gorm.DB, error) {
+func (db *DB) TransferResident(ctx *models.QueryContext, userID int, transFacilityID int) (*gorm.DB, error) {
 	trans := db.Begin()
 	if trans.Error != nil {
 		return nil, NewDBError(trans.Error, "unable to start DB transaction")
-	}
-	if err := registry.ProgramsInTx(trans, func(p programsapi.Programs) error {
-		return p.EndEnrollmentsForTransfer(trans.Statement.Context, uint(userID), uint(currFacilityID))
-	}); err != nil {
-		trans.Rollback()
-		return nil, newUpdateDBError(err, "program_class_enrollments")
 	}
 	if err := trans.Model(&models.User{}).
 		Where("id = ?", userID).
@@ -171,7 +168,7 @@ func (db *DB) GetResidentsByIDs(args *models.QueryContext, ids []uint, defaultOr
 		return nil, newGetRecordsDBError(err, "users")
 	}
 	users := make([]models.User, 0, args.PerPage)
-	if err := tx.Order(adjustUserOrderBy(args.OrderClause(defaultOrder))).
+	if err := tx.Order(adjustUserOrderBy(args.OrderClause(defaultOrder, residentOrderByFields...))).
 		Offset(args.CalcOffset()).
 		Limit(args.PerPage).
 		Find(&users).
@@ -871,11 +868,6 @@ func (db *DB) DeactivateUser(ctx context.Context, userID uint, adminID *uint) er
 	now := time.Now()
 	if err := tx.Model(&models.User{}).Where("id = ?", userID).Update("deactivated_at", now).Error; err != nil {
 		return newUpdateDBError(err, "users")
-	}
-	if err := registry.ProgramsInTx(tx, func(p programsapi.Programs) error {
-		return p.WithdrawEnrollments(ctx, userID)
-	}); err != nil {
-		return newUpdateDBError(err, "program_class_enrollments")
 	}
 	history := models.NewUserAccountHistory(userID, models.UserDeactivated, adminID, nil, nil)
 	if err := tx.Create(&history).Error; err != nil {

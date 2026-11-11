@@ -474,37 +474,3 @@ func TestFacilityFeatureRoutes_EnabledRequired(t *testing.T) {
 		require.NotContains(t, effective, models.ProgramAccess)
 	})
 }
-
-// TestFeatureFlags_MiddlewareEnforcesClaims proves the core regression this
-// feature fixes: a route gated on a feature must reject a request whose claims
-// don't carry that feature, not just record the toggle in the database. Claims
-// here stand in for what auth.go's per-facility resolution would have produced.
-func TestFeatureFlags_MiddlewareEnforcesClaims(t *testing.T) {
-	env = SetupTestEnv(t)
-	defer env.CleanupTestEnv()
-
-	facility, err := env.CreateTestFacility("Enforcement Facility")
-	require.NoError(t, err)
-
-	t.Run("student without program access is rejected from a program-gated route", func(t *testing.T) {
-		NewRequest[any](env.Client, t, http.MethodGet, "/api/programs", nil).
-			WithTestClaims(&handlers.Claims{
-				Role:          models.Student,
-				FacilityID:    facility.ID,
-				FeatureAccess: []models.FeatureAccess{},
-			}).
-			Do().
-			ExpectStatus(http.StatusUnauthorized)
-	})
-
-	t.Run("student with program access succeeds on the same route", func(t *testing.T) {
-		NewRequest[any](env.Client, t, http.MethodGet, "/api/programs", nil).
-			WithTestClaims(&handlers.Claims{
-				Role:          models.Student,
-				FacilityID:    facility.ID,
-				FeatureAccess: []models.FeatureAccess{models.ProgramAccess},
-			}).
-			Do().
-			ExpectStatus(http.StatusOK)
-	})
-}

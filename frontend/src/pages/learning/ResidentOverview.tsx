@@ -39,7 +39,7 @@ export default function ResidentOverview() {
 
     const { data: programsResp, isLoading } = useSWR<
         ServerResponseMany<ResidentProgramOverview>
-    >(user ? `/api/users/${user.id}/programs` : null);
+    >(user ? `/api/program-users/${user.id}/programs` : null);
 
     const { data: eventsResp } = useSWR<ServerResponseMany<unknown>>(
         user

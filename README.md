@@ -70,6 +70,19 @@ branch with `PROVIDER_PLATFORMS_REF`. Core forwards its `/api` routes to it and 
 with `PROVIDER_PLATFORMS_TOKEN`; if you run the server outside compose, `.env.example` points
 `PROVIDER_PLATFORMS_URL` at its port, 8083.
 
+**Programs** ([unlocked-programs](https://github.com/UnlockedLabs/unlocked-programs)) runs as its
+own service the same way: `make dev` builds its `main` branch from GitHub, or your checkout when
+`PROGRAMS_DIR` is set (such as `../unlocked-programs`), or another branch with `PROGRAMS_REF`. Its
+pages are still in core's frontend; the rev_proxy sends their `/api` paths to it, and core asks it
+questions with `PROGRAMS_TOKEN`. If you run the server outside compose, `.env.example` points
+`PROGRAMS_URL` at its port, 8084.
+
+**Learning Record** ([unlocked-learning-record](https://github.com/UnlockedLabs/unlocked-learning-record))
+runs as its own service the same way: `make dev` builds its `main` branch from GitHub, or your checkout when
+`LEARNING_RECORD_DIR` is set (such as `../unlocked-learning-record`), or another branch with
+`LEARNING_RECORD_REF`. The rev_proxy sends `/api/learning-record` to it, and it asks core who the
+user is and whether `learning_record` is on. It listens on port 8085.
+
 
 **NOTE:** you _must_ be sure to use `127.0.0.1` in place of `localhost` in your browser, as the cookies required for authentication are not shared between the two,
 and this can cause bad states in the browser that will prevent successful login/auth flow.
@@ -130,8 +143,8 @@ If this does not work because your directory is named something different, you c
   and paste the token you just copied as its `access_key`.
 
   **Note** the base url is `http://canvas`, not `localhost:3001`. UnlockEd calls the Canvas API
-  from inside the `providerplatforms` and `providerplatforms-worker` containers, so it needs the
-  compose service name. `localhost:3001` only works from your browser.
+  from inside the `providerplatforms`, `providerplatforms-worker` and `programs` containers, so it
+  needs the compose service name. `localhost:3001` only works from your browser.
 
 
  - **Videos**:

@@ -18,7 +18,8 @@ import (
 	"github.com/UnlockedLabs/unlocked-core/backend/src/database"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/jasper"
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
-	programsapi "github.com/UnlockedLabs/unlocked-core/backend/src/modules/programs/api"
+
+	programsapi "github.com/UnlockedLabs/unlocked-contracts/programs"
 )
 
 // maxDocIDLen matches the users.doc_id column (VARCHAR(32), migration 00042).
@@ -613,7 +614,15 @@ func (srv *Server) handleResidentTransfer(w http.ResponseWriter, r *http.Request
 	if user.DeactivatedAt != nil {
 		return newBadRequestServiceError(errors.New("cannot transfer deactivated user"), "User is deactivated")
 	}
-	tx, err := srv.Db.TransferResident(&args, transRequest.UserID, transRequest.CurrFacilityID, transRequest.TransFacilityID)
+	if _, err := srv.Db.GetFacilityByID(transRequest.TransFacilityID); err != nil {
+		return newDatabaseServiceError(err)
+	}
+	// Programs goes first, and ending the enrollments again changes nothing,
+	// so a transfer that fails after this is finished by trying again.
+	if err := srv.programs.EndEnrollmentsForTransfer(r.Context(), uint(transRequest.UserID), uint(transRequest.CurrFacilityID)); err != nil {
+		return newInternalServerServiceError(err, "error updating program_class_enrollments")
+	}
+	tx, err := srv.Db.TransferResident(&args, transRequest.UserID, transRequest.TransFacilityID)
 	if err != nil {
 		return newDatabaseServiceError(err)
 	}
@@ -839,12 +848,24 @@ func (srv *Server) handleDeactivateUser(w http.ResponseWriter, r *http.Request, 
 	}
 
 	claims := r.Context().Value(ClaimsKey).(*Claims)
-	err = srv.Db.DeactivateUser(r.Context(), uint(id), &claims.UserID)
-	if err != nil {
-		return newDatabaseServiceError(err)
+	if err := srv.deactivateUser(r.Context(), uint(id), claims.UserID); err != nil {
+		return err
 	}
 
 	return writeJsonResponse(w, http.StatusOK, "User deactivated successfully")
+}
+
+// deactivateUser withdraws the user's program enrollments, then deactivates
+// the account. Programs goes first, and withdrawing again changes nothing, so
+// a deactivation that fails after that is finished by trying again.
+func (srv *Server) deactivateUser(ctx context.Context, userID, adminID uint) error {
+	if err := srv.programs.WithdrawEnrollments(ctx, userID); err != nil {
+		return newInternalServerServiceError(err, "error updating program_class_enrollments")
+	}
+	if err := srv.Db.DeactivateUser(ctx, userID, &adminID); err != nil {
+		return newDatabaseServiceError(err)
+	}
+	return nil
 }
 
 func (srv *Server) handleGenerateUsageReportPDF(w http.ResponseWriter, r *http.Request, log sLog) error {
@@ -1004,7 +1025,7 @@ func (srv *Server) handleBulkDeactivateUsers(w http.ResponseWriter, r *http.Requ
 	var successCount int
 	var failures []failedEntry
 	for _, user := range users {
-		if err := srv.Db.DeactivateUser(r.Context(), user.ID, &claims.UserID); err != nil {
+		if err := srv.deactivateUser(r.Context(), user.ID, claims.UserID); err != nil {
 			log.add("user_id", user.ID)
 			log.error("bulk deactivate: error deactivating user")
 			failures = append(failures, failedEntry{UserID: user.ID, Username: user.Username, Name: user.NameFirst + " " + user.NameLast, Reason: "error deactivating user"})

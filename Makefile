@@ -25,6 +25,14 @@ OPEN_CONTENT_RUN=docker compose run --rm --no-deps open-content-migrate
 # PROVIDER_PLATFORMS_REF from GitHub, or your checkout in PROVIDER_PLATFORMS_DIR.
 PROVIDER_PLATFORMS_REPO=https://github.com/UnlockedLabs/unlocked-provider-platforms.git
 PROVIDER_PLATFORMS_RUN=docker compose run --rm --no-deps providerplatforms-migrate
+# Programs runs as its own service, built the same way: PROGRAMS_REF from
+# GitHub, or your checkout in PROGRAMS_DIR.
+PROGRAMS_REPO=https://github.com/UnlockedLabs/unlocked-programs.git
+PROGRAMS_RUN=docker compose run --rm --no-deps programs-migrate
+# Learning Record runs as its own service (EN-208), built the same way:
+# LEARNING_RECORD_REF from GitHub, or your checkout in LEARNING_RECORD_DIR.
+LEARNING_RECORD_REPO=https://github.com/UnlockedLabs/unlocked-learning-record.git
+LEARNING_RECORD_RUN=docker compose run --rm --no-deps learning-record-migrate
 # Canvas admin created on first `make canvas`. Override in the environment if
 # you want different credentials. These are also what you log into Canvas with
 # at localhost:3001 to mint the API token.
@@ -79,6 +87,8 @@ define run_dev_compose
 	}; \
 	build_source OPEN_CONTENT "Open Content" $(OPEN_CONTENT_REPO) || exit 1; \
 	build_source PROVIDER_PLATFORMS "Provider Platforms" $(PROVIDER_PLATFORMS_REPO) || exit 1; \
+	build_source PROGRAMS "Programs" $(PROGRAMS_REPO) || exit 1; \
+	build_source LEARNING_RECORD "Learning Record" $(LEARNING_RECORD_REPO) || exit 1; \
 	AI_DIR=$${TUTOR_DIR:-$$(sed -n 's/^TUTOR_DIR=//p' .env | tail -1)}; \
 	AI_DIR=$${AI_DIR:-$(DEFAULT_AI_DIR)}; \
 	TUTOR_READY=0; TUTOR_WHY=; \
@@ -243,22 +253,29 @@ install-dep: ascii_art
 	fi
 	docker compose down && docker volume rm -f unlockedv2_node_modules && cd frontend && yarn add $(NAME) && cd ..
 	$(call run_dev_compose,)
-# Open Content's and Provider Platforms' migrations roll back first, since they
-# move tables that core's reset drops, and run again after it. Their services
-# restart because their connections switch to the role the reset recreates, and
-# Open Content's worker seeds the fresh database when it starts.
+# Open Content's, Provider Platforms', Programs' and Learning Record's
+# migrations roll back first, since they move tables that core's reset drops, and
+# run again after it. Their services restart because their connections switch to
+# the role the reset recreates, and Open Content's worker seeds the fresh
+# database when it starts.
 migrate-fresh: ascii_art
 	$(OPEN_CONTENT_RUN) migrate-reset
 	$(PROVIDER_PLATFORMS_RUN) migrate-reset
+	$(PROGRAMS_RUN) migrate-reset
+	$(LEARNING_RECORD_RUN) migrate-reset
 	go run -tags dev $(MIGRATE_MAIN) --fresh
 	$(OPEN_CONTENT_RUN) migrate
 	$(PROVIDER_PLATFORMS_RUN) migrate
-	docker compose restart open-content open-content-worker providerplatforms providerplatforms-worker
+	$(PROGRAMS_RUN) migrate
+	$(LEARNING_RECORD_RUN) migrate
+	docker compose restart open-content open-content-worker providerplatforms providerplatforms-worker programs programs-worker learning-record
 
 migrate: ascii_art
 	go run $(MIGRATE_MAIN)
 	$(OPEN_CONTENT_RUN) migrate
 	$(PROVIDER_PLATFORMS_RUN) migrate
+	$(PROGRAMS_RUN) migrate
+	$(LEARNING_RECORD_RUN) migrate
 
 kolibri: ascii_art
 	$(call run_dev_compose,-f $(DOCKER_COMPOSE) -f $(KOLIBRI_COMPOSE))
@@ -291,6 +308,7 @@ seed: ascii_art
 	go run $(SEED_MAIN)
 	$(OPEN_CONTENT_RUN) seed-dev
 	$(PROVIDER_PLATFORMS_RUN) seed-dev
+	$(PROGRAMS_RUN) seed-dev
 
 build: ascii_art
 	@if [ -z "$(ACCOUNT_ID)" ]; then \

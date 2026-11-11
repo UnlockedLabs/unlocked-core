@@ -13,7 +13,6 @@ import (
 	"maps"
 	"net/http"
 	"slices"
-	"strings"
 
 	"github.com/UnlockedLabs/unlocked-contracts/features"
 	"github.com/UnlockedLabs/unlocked-contracts/identity"
@@ -102,57 +101,6 @@ type Worker interface {
 type Deps struct {
 	DB   *gorm.DB
 	NATS *nats.Conn
-	// HTTP is core's HTTP client, for calls to services outside Unlocked,
-	// such as an LMS. Only routes get it.
-	HTTP HTTPClient
-	// Features is core's feature flags for each facility. Only routes get it.
-	Features Features
-	// Reports renders reports as PDFs with core's report templates. Only
-	// routes get it.
-	Reports Reports
-	// ModuleDBs is each module's connection, by module name
-	// (database.ModuleDBs.For), for the registry to build another module's api
-	// on that module's own connection. A module never queries through it.
-	// Only routes get it.
-	ModuleDBs func(name string) *gorm.DB
-}
-
-// HTTPClient sends a request with core's HTTP client. *http.Client is one.
-type HTTPClient interface {
-	Do(req *http.Request) (*http.Response, error)
-}
-
-// Features is core's feature flags.
-type Features interface {
-	// FacilityFeatures is the features turned on at a facility: its own
-	// settings, else the statewide ones, leaving out a sub-feature whose
-	// parent is off.
-	FacilityFeatures(ctx context.Context, facilityID uint) ([]features.Access, error)
-}
-
-// Reports renders reports with core's PDF report templates.
-type Reports interface {
-	// PDF is report rendered with the named template, such as
-	// "attendance_report".
-	PDF(template string, report Report) ([]byte, error)
-}
-
-// Report is the table a PDF report shows.
-type Report struct {
-	Title   string
-	Rows    [][]string
-	SubRows [][]string
-	// Params are extra template parameters, such as which columns to show.
-	// Set only those the template declares.
-	Params map[string]string
-	// Filters are the filters the report was run with, shown in its header.
-	Filters []ReportFilter
-}
-
-// ReportFilter is one filter in a report's header, such as "Facility".
-type ReportFilter struct {
-	Label string
-	Value string
 }
 
 // Schema is a module whose tables live in its own Postgres schema. Core
@@ -162,34 +110,6 @@ type ReportFilter struct {
 // and the role, and grants the role only what the module needs.
 type Schema interface {
 	Schema() string
-}
-
-// RunAs runs fn on tx, a transaction on core's connection, as module m's own
-// connection would: on Postgres, when m has its own schema, under m's role and
-// with m's schema first on the search_path. Both go back to core's when fn
-// returns, so the rest of the transaction runs as core. Core uses it to make a
-// module's writes part of one of its transactions. When fn fails, the
-// transaction is aborted and left to the caller's rollback.
-func RunAs(tx *gorm.DB, m Module, fn func(tx *gorm.DB) error) error {
-	s, ok := m.(Schema)
-	if !ok || tx.Name() != "postgres" {
-		return fn(tx)
-	}
-	role := `"` + strings.ReplaceAll(s.Schema(), `"`, `""`) + `"`
-	for _, stmt := range []string{"SET LOCAL ROLE " + role, "SET LOCAL search_path = " + role + ", public"} {
-		if err := tx.Exec(stmt).Error; err != nil {
-			return fmt.Errorf("run as module %s: %w", m.Name(), err)
-		}
-	}
-	if err := fn(tx); err != nil {
-		return err
-	}
-	for _, stmt := range []string{"RESET ROLE", "RESET search_path"} {
-		if err := tx.Exec(stmt).Error; err != nil {
-			return fmt.Errorf("run as module %s: %w", m.Name(), err)
-		}
-	}
-	return nil
 }
 
 // Seeder is a module that adds default rows to a new database. Core calls
