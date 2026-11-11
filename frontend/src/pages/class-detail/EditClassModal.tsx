@@ -5,8 +5,9 @@ import { toast } from 'sonner';
 import useSWR from 'swr';
 import { AlertCircle, X } from 'lucide-react';
 import API from '@/api/api';
-import { useAuth } from '@/auth/useAuth';
+import { canSwitchFacility, useAuth } from '@/auth/useAuth';
 import { FormModal } from '@/components/shared';
+import { AddInstructorDialog } from '@/components/programs/AddInstructorDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,15 +28,8 @@ import {
 } from '@/components/ui/select';
 import { editClassSchema, EditClassInput } from '@/lib/validation';
 import { SelectedClassStatus } from '@/types/attendance';
-import {
-    Cohort,
-    Room,
-    RoomConflict,
-    User,
-    ServerResponseMany,
-    ServerResponseOne,
-    NewUserResponse
-} from '@/types';
+import { Instructor } from '@/types/events';
+import { Cohort, Room, RoomConflict, ServerResponseMany, User } from '@/types';
 import {
     conflictSubjectLabel,
     formatRoomConflictRange,
@@ -231,14 +225,9 @@ export function EditClassModal({
     const [conflicts, setConflicts] = useState<RoomConflict[]>([]);
     const [showAddRoom, setShowAddRoom] = useState(false);
     const [showAddInstructor, setShowAddInstructor] = useState(false);
-    const [tempPassword, setTempPassword] = useState('');
-    const [showPasswordModal, setShowPasswordModal] = useState(false);
+    // Only department and system admins create admins.
+    const canAddInstructor = !!user && canSwitchFacility(user);
     const [newRoomName, setNewRoomName] = useState('');
-    const [newInstructor, setNewInstructor] = useState({
-        name_first: '',
-        name_last: '',
-        username: ''
-    });
     const [scheduleDays, setScheduleDays] = useState<string[]>(
         initialSchedule.days
     );
@@ -248,9 +237,13 @@ export function EditClassModal({
     });
 
     const { data: instructorsResp, mutate: mutateInstructors } = useSWR<
-        ServerResponseMany<User>
-    >(user ? `/api/users?role=${user.role}&per_page=100` : null);
-    const instructors = instructorsResp?.data ?? [];
+        ServerResponseMany<Instructor>
+    >(
+        cls.facility_id
+            ? `/api/program-facilities/${cls.facility_id}/instructors`
+            : null
+    );
+    const instructors = (instructorsResp?.data ?? []).filter((i) => i.id !== 0);
 
     const { data: roomsResp, mutate: mutateRooms } = useSWR<
         ServerResponseMany<Room>
@@ -335,29 +328,12 @@ export function EditClassModal({
         }
     }
 
-    async function handleAddInstructor() {
-        const { name_first, name_last, username } = newInstructor;
-        if (!name_first.trim() || !name_last.trim() || !username.trim()) return;
-        const resp = (await API.post<NewUserResponse, object>('users', {
-            user: {
-                name_first: name_first.trim(),
-                name_last: name_last.trim(),
-                username: username.trim(),
-                role: 'facility_admin'
-            },
-            provider_platforms: []
-        })) as ServerResponseOne<NewUserResponse>;
-        if (resp.success) {
-            const { user: created, temp_password } = resp.data;
-            await mutateInstructors();
-            if (created?.id) setValue('instructor_id', created.id);
-            setNewInstructor({ name_first: '', name_last: '', username: '' });
-            setShowAddInstructor(false);
-            setTempPassword(temp_password);
-            setShowPasswordModal(true);
-        } else {
-            toast.error(resp.message || 'Failed to create instructor');
-        }
+    async function handleInstructorCreated(created: User) {
+        await mutateInstructors();
+        setValue('instructor_id', created.id, {
+            shouldDirty: true,
+            shouldValidate: true
+        });
     }
 
     async function onSubmit(data: EditClassFormData) {
@@ -417,7 +393,7 @@ export function EditClassModal({
 
         if (!resp.success) {
             if (resp.status === 409 && Array.isArray(resp.data)) {
-                setConflicts(resp.data as unknown as RoomConflict[]);
+                setConflicts(resp.data);
                 return;
             }
             toast.error(resp.message || 'Failed to update class');
@@ -528,12 +504,14 @@ export function EditClassModal({
                                                             {inst.name_first}
                                                         </SelectItem>
                                                     ))}
-                                                    <SelectItem
-                                                        value="__add__"
-                                                        className="text-brand font-medium"
-                                                    >
-                                                        + Add Instructor
-                                                    </SelectItem>
+                                                    {canAddInstructor && (
+                                                        <SelectItem
+                                                            value="__add__"
+                                                            className="text-brand font-medium"
+                                                        >
+                                                            + Add Instructor
+                                                        </SelectItem>
+                                                    )}
                                                 </SelectContent>
                                             </Select>
                                             <FormMessage />
@@ -1214,115 +1192,16 @@ export function EditClassModal({
                 </div>
             </FormModal>
 
-            <FormModal
-                open={showAddInstructor}
-                onOpenChange={setShowAddInstructor}
-                title="Add Instructor"
-            >
-                <div className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="edit-inst-first">First Name</Label>
-                            <Input
-                                id="edit-inst-first"
-                                value={newInstructor.name_first}
-                                onChange={(e) =>
-                                    setNewInstructor((p) => ({
-                                        ...p,
-                                        name_first: e.target.value
-                                    }))
-                                }
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="edit-inst-last">Last Name</Label>
-                            <Input
-                                id="edit-inst-last"
-                                value={newInstructor.name_last}
-                                onChange={(e) =>
-                                    setNewInstructor((p) => ({
-                                        ...p,
-                                        name_last: e.target.value
-                                    }))
-                                }
-                            />
-                        </div>
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="edit-inst-username">Username</Label>
-                        <Input
-                            id="edit-inst-username"
-                            value={newInstructor.username}
-                            onChange={(e) =>
-                                setNewInstructor((p) => ({
-                                    ...p,
-                                    username: e.target.value
-                                }))
-                            }
-                        />
-                    </div>
-                    <div className="flex justify-end gap-2">
-                        <Button
-                            variant="outline"
-                            onClick={() => setShowAddInstructor(false)}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            className="btn-brand-dark"
-                            onClick={() => void handleAddInstructor()}
-                        >
-                            Create
-                        </Button>
-                    </div>
-                </div>
-            </FormModal>
-
-            <FormModal
-                open={showPasswordModal}
-                onOpenChange={(open) => {
-                    setShowPasswordModal(open);
-                    if (!open) setTempPassword('');
-                }}
-                title="Instructor Created"
-            >
-                <div className="space-y-4">
-                    <p className="text-sm text-gray-600">
-                        Share this temporary password with the new instructor.
-                        They will be prompted to change it on first login.
-                    </p>
-                    <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 text-center">
-                        <p className="text-sm text-gray-500 mb-1">
-                            Temporary Password
-                        </p>
-                        <p className="text-2xl font-bold text-brand-dark select-all">
-                            {tempPassword}
-                        </p>
-                    </div>
-                    <div className="flex justify-end gap-2">
-                        <Button
-                            variant="outline"
-                            onClick={() => {
-                                void navigator.clipboard.writeText(
-                                    tempPassword
-                                );
-                                toast.success('Password copied to clipboard');
-                            }}
-                        >
-                            Copy
-                        </Button>
-                        <Button
-                            className="btn-brand-dark"
-                            onClick={() => {
-                                setShowPasswordModal(false);
-                                setTempPassword('');
-                            }}
-                        >
-                            Done
-                        </Button>
-                    </div>
-                </div>
-            </FormModal>
+            {canAddInstructor && !!cls.facility_id && (
+                <AddInstructorDialog
+                    open={showAddInstructor}
+                    onOpenChange={setShowAddInstructor}
+                    facilityId={cls.facility_id}
+                    onCreated={(created) =>
+                        void handleInstructorCreated(created)
+                    }
+                />
+            )}
         </>
     );
 }

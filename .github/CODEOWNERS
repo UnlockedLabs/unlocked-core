@@ -1,3 +1,4 @@
+* @UnlockedLabs/reviewers
 backend/**/* @UnlockedLabs/reviewers 
 config/**/* @UnlockedLabs/reviewers
 frontend/**/* @UnlockedLabs/reviewers

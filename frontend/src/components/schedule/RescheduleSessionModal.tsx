@@ -125,7 +125,7 @@ export function RescheduleSessionModal({
         setSubmitting(false);
 
         if (resp.status === 409 && Array.isArray(resp.data)) {
-            setConflicts(resp.data as unknown as RoomConflict[]);
+            setConflicts(resp.data);
             setShowConflicts(true);
             return;
         }

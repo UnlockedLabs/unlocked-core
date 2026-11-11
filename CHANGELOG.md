@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.11.0](https://github.com/UnlockedLabs/unlocked-core/compare/v1.10.0...v1.11.0) (2026-11-11)
+
+
+### Features
+
+* En 206 move provider platforms ([#1284](https://github.com/UnlockedLabs/unlocked-core/issues/1284)) ([c6bf2b1](https://github.com/UnlockedLabs/unlocked-core/commit/c6bf2b155056a5c3f839ecda07200a72974a603b))
+* **frontend:** add instructors inline from Create Class and Edit Class (EN-132) ([#1298](https://github.com/UnlockedLabs/unlocked-core/issues/1298)) ([33b00eb](https://github.com/UnlockedLabs/unlocked-core/commit/33b00eb39bfe665bb2b4106d138f71fa1c475773))
+* move Learning Record out of core (EN-208) ([#1292](https://github.com/UnlockedLabs/unlocked-core/issues/1292)) ([b387158](https://github.com/UnlockedLabs/unlocked-core/commit/b387158bafd50bfed3acd9300c5daf1deb9d70b4))
+* move Programs to its own service (EN-207) ([fa45ccf](https://github.com/UnlockedLabs/unlocked-core/commit/fa45ccf8184412bf65a3555c16753e2889fbfbe5))
+
+
+### Bug Fixes
+
+* allowlist order_by and direction on list queries (EN-229) ([#1294](https://github.com/UnlockedLabs/unlocked-core/issues/1294)) ([cfa45f5](https://github.com/UnlockedLabs/unlocked-core/commit/cfa45f5795136814622027cec4ee923dbe388bf4))
+* block duplicate resident IDs on edit (EN-116) ([d6eaf87](https://github.com/UnlockedLabs/unlocked-core/commit/d6eaf878c1997092c726d278200d6d460688746c))
+* **frontend:** list only the class's facility instructors in Edit Class (EN-117) ([2d4eb1d](https://github.com/UnlockedLabs/unlocked-core/commit/2d4eb1d463fa4779c813a43bfd1c01cad2adea17))
+* send residents to login when their session ends mid-use (EN-227) ([#1293](https://github.com/UnlockedLabs/unlocked-core/issues/1293)) ([3558a39](https://github.com/UnlockedLabs/unlocked-core/commit/3558a396ea3d1b1957013eab315d830330edc4b0))
+* send signed-out visitors to login instead of a blank page (EN-157) ([87f9f75](https://github.com/UnlockedLabs/unlocked-core/commit/87f9f7581c99240326311d4df1009a91f0827ebb))
+
 ## [1.10.0](https://github.com/UnlockedLabs/unlocked-core/compare/v1.9.0...v1.10.0) (2026-11-04)
 
 

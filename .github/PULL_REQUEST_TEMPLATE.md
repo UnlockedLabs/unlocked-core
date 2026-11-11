@@ -6,6 +6,7 @@
 - [ ] Functions according to **ticket specifications**
 - [ ] Tested manually where applicable
 - [ ] Branch rebased with latest main
+- [ ] PR title and every commit are conventional commits (`feat:`, `fix:`, `docs:`...); a squash merge lands under the PR title
 - [ ] No business logic exists within the database layer
 - [ ] DB migrations (if any) are backward-compatible and online-safe — see [Database Migrations](https://github.com/UnlockedLabs/unlocked-core/blob/main/CONTRIBUTING.md#database-migrations) in CONTRIBUTING.md
 
@@ -14,6 +15,11 @@
 Please provide a brief description of the changes included in this PR.
 
 - **Related issues**: Link to related JIRA ticket that this closes.
+
+## Release
+
+- **Changelog type**: `feat` (minor bump), `fix` (patch bump), or none (`chore`, `docs`, `ci`, `test`, `refactor`).
+- **Breaking change?**: yes / no. If yes, add `!` to the title (`feat!:`). For a merge or rebase merge, also add `!` to a breaking commit subject. List what consumers must change.
 
 ## Screenshot(s)
 

@@ -138,13 +138,10 @@ const getLibraryOptionsHelper = async ({ request }: { request: Request }) => {
         `libraries?all=true&order_by=title&order=asc${visibilityParam}`
     );
     const libraryOptions = libraryResp.success
-        ? (libraryResp.data as Library[]).map(
-              (library) =>
-                  ({
-                      key: library.id,
-                      value: decodeHtmlEntities(library.title)
-                  }) as Option
-          )
+        ? (libraryResp.data as Library[]).map((library) => ({
+              key: library.id,
+              value: decodeHtmlEntities(library.title)
+          }))
         : [];
     return libraryOptions;
 };
