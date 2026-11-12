@@ -1,4 +1,4 @@
-FROM node:22-alpine3.19
+FROM node:22-alpine
 WORKDIR /app
 RUN npm install yarn
 COPY package.json yarn.lock ./
