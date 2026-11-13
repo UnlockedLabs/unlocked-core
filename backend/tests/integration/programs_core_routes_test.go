@@ -174,7 +174,7 @@ func TestProgramsCoreRoutes(t *testing.T) {
 }
 
 // TestProgramsCoreRouteAccess pins who may call core's Programs dashboard and
-// metrics routes: any admin, with or without program_management.
+// metrics routes: an admin with program_management.
 func TestProgramsCoreRouteAccess(t *testing.T) {
 	env := SetupTestEnv(t)
 	defer env.CleanupTestEnv()
@@ -195,11 +195,12 @@ func TestProgramsCoreRouteAccess(t *testing.T) {
 			NewRequest[any](client, t, http.MethodGet, path, nil).
 				WithTestClaims(resident).Do().
 				ExpectStatus(http.StatusUnauthorized).ExpectMessage("Unauthorized - not admin")
-			for _, c := range []*handlers.Claims{facAdmin, withFeatures(facAdmin, models.ProgramAccess)} {
-				resp := NewRequest[any](client, t, http.MethodGet, path, nil).
-					WithTestClaims(c).AsRaw().Do()
-				require.NotEqual(t, http.StatusUnauthorized, resp.resp.StatusCode, resp.rawBody)
-			}
+			NewRequest[any](client, t, http.MethodGet, path, nil).
+				WithTestClaims(withFeatures(facAdmin, models.ProgramAccess)).Do().
+				ExpectStatus(http.StatusUnauthorized).ExpectMessage("Feature not enabled")
+			resp := NewRequest[any](client, t, http.MethodGet, path, nil).
+				WithTestClaims(facAdmin).AsRaw().Do()
+			require.NotEqual(t, http.StatusUnauthorized, resp.resp.StatusCode, resp.rawBody)
 		})
 	}
 }

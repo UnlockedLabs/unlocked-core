@@ -147,6 +147,15 @@ func newAdminRoute(method string, handler HttpFunc) routeDef {
 	}
 }
 
+func newAdminFeatureRoute(method string, handler HttpFunc, features ...models.FeatureAccess) routeDef {
+	return routeDef{
+		routeMethod: method,
+		handler:     handler,
+		admin:       true,
+		features:    features,
+	}
+}
+
 func newDeptAdminRoute(method string, handler HttpFunc) routeDef {
 	return routeDef{
 		routeMethod: method,

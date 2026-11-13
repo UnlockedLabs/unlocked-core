@@ -1,9 +1,10 @@
 import { useState, useMemo, ComponentProps } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
-import { useAuth, canSwitchFacility } from '@/auth/useAuth';
+import { useAuth, canSwitchFacility, hasFeature } from '@/auth/useAuth';
 import {
     ClassMetrics,
+    FeatureAccess,
     FacilityHealthSummary,
     MissingAttendanceItem,
     TodaysScheduleItem,
@@ -51,29 +52,39 @@ function SurfaceCard({ className, ...props }: ComponentProps<'div'>) {
 export default function Dashboard() {
     const { user } = useAuth();
     const deptAdmin = user ? canSwitchFacility(user) : false;
+    const programsEnabled =
+        !!user && hasFeature(user, FeatureAccess.ProgramAccess);
     const { data: classMetricsResp } = useSWR<ServerResponseOne<ClassMetrics>>(
-        deptAdmin
-            ? '/api/dashboard/class-metrics?facility=all'
-            : '/api/dashboard/class-metrics'
+        !programsEnabled
+            ? null
+            : deptAdmin
+              ? '/api/dashboard/class-metrics?facility=all'
+              : '/api/dashboard/class-metrics'
     );
     const { data: missingAttendanceResp, isLoading: missingAttendanceLoading } =
         useSWR<ServerResponseMany<MissingAttendanceItem>>(
-            deptAdmin
-                ? '/api/program-classes/missing-attendance?facility=all&days=3&all=true'
-                : '/api/program-classes/missing-attendance?days=3&all=true'
+            !programsEnabled
+                ? null
+                : deptAdmin
+                  ? '/api/program-classes/missing-attendance?facility=all&days=3&all=true'
+                  : '/api/program-classes/missing-attendance?days=3&all=true'
         );
     const { data: facilityHealthResp } = useSWR<
         ServerResponseOne<FacilityHealthSummary[]>
     >(
-        deptAdmin
-            ? '/api/dashboard/facility-health?facility=all&days=3'
-            : '/api/dashboard/facility-health?days=3'
+        !programsEnabled
+            ? null
+            : deptAdmin
+              ? '/api/dashboard/facility-health?facility=all&days=3'
+              : '/api/dashboard/facility-health?days=3'
     );
     const { data: todaysScheduleResp, isLoading: todaysScheduleLoading } =
         useSWR<ServerResponseMany<TodaysScheduleItem>>(
-            deptAdmin
-                ? '/api/program-classes/todays-schedule?facility=all&all=true'
-                : '/api/program-classes/todays-schedule?all=true'
+            !programsEnabled
+                ? null
+                : deptAdmin
+                  ? '/api/program-classes/todays-schedule?facility=all&all=true'
+                  : '/api/program-classes/todays-schedule?all=true'
         );
     const todaysScheduleItems = useMemo<TodaysScheduleItem[]>(
         () => todaysScheduleResp?.data ?? ([] as TodaysScheduleItem[]),
@@ -85,6 +96,7 @@ export default function Dashboard() {
             <div className="max-w-7xl mx-auto px-6 py-8">
                 {deptAdmin ? (
                     <DeptAdminView
+                        programsEnabled={programsEnabled}
                         metrics={classMetricsResp?.data}
                         missingAttendance={missingAttendanceResp?.data ?? []}
                         missingAttendanceLoading={missingAttendanceLoading}
@@ -92,6 +104,7 @@ export default function Dashboard() {
                     />
                 ) : (
                     <FacilityAdminView
+                        programsEnabled={programsEnabled}
                         facilityName={user?.facility.name ?? 'My Facility'}
                         metrics={classMetricsResp?.data}
                         missingAttendance={missingAttendanceResp?.data ?? []}
@@ -106,6 +119,7 @@ export default function Dashboard() {
 }
 
 function FacilityAdminView({
+    programsEnabled,
     facilityName,
     metrics,
     missingAttendance,
@@ -113,6 +127,7 @@ function FacilityAdminView({
     todaysScheduleItems,
     todaysScheduleLoading
 }: {
+    programsEnabled: boolean;
     facilityName: string;
     metrics?: ClassMetrics;
     missingAttendance: MissingAttendanceItem[];
@@ -134,13 +149,26 @@ function FacilityAdminView({
         );
     };
 
+    const header = (
+        <PageHeader
+            title="Facility Dashboard"
+            subtitle={facilityName}
+            className="mb-[15px]"
+        />
+    );
+
+    if (!programsEnabled) {
+        return (
+            <div>
+                {header}
+                <ProgramsOffNotice />
+            </div>
+        );
+    }
+
     return (
         <div>
-            <PageHeader
-                title="Facility Dashboard"
-                subtitle={facilityName}
-                className="mb-[15px]"
-            />
+            {header}
 
             <MetricCards stats={stats} onNavigate={navigate} />
 
@@ -166,11 +194,13 @@ function FacilityAdminView({
 }
 
 function DeptAdminView({
+    programsEnabled,
     metrics,
     missingAttendance,
     missingAttendanceLoading,
     facilityHealthSummaries
 }: {
+    programsEnabled: boolean;
     metrics?: ClassMetrics;
     missingAttendance: MissingAttendanceItem[];
     missingAttendanceLoading: boolean;
@@ -186,9 +216,22 @@ function DeptAdminView({
         [facilityHealthSummaries]
     );
 
+    const header = (
+        <PageHeader title="Department Overview" className="mb-[15px]" />
+    );
+
+    if (!programsEnabled) {
+        return (
+            <div>
+                {header}
+                <ProgramsOffNotice />
+            </div>
+        );
+    }
+
     return (
         <div>
-            <PageHeader title="Department Overview" className="mb-[15px]" />
+            {header}
 
             <MetricCards stats={stats} onNavigate={navigate} />
 
@@ -213,6 +256,14 @@ function DeptAdminView({
                 </div>
             </div>
         </div>
+    );
+}
+
+function ProgramsOffNotice() {
+    return (
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+            Programs isn't turned on for this facility.
+        </p>
     );
 }
 
