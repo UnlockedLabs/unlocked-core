@@ -1780,7 +1780,7 @@ function ProgramsTable({
                                                             .facility_names
                                                             ?.length && (
                                                             <TooltipContent className="bg-brand-dark text-white max-w-xs">
-                                                                <ul>
+                                                                <ul className="max-h-64 overflow-y-auto">
                                                                     {program.facility_names.map(
                                                                         (
                                                                             name,
