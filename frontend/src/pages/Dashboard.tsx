@@ -63,9 +63,11 @@ export default function Dashboard() {
     );
     const { data: missingAttendanceResp, isLoading: missingAttendanceLoading } =
         useSWR<ServerResponseMany<MissingAttendanceItem>>(
-            deptAdmin
-                ? '/api/program-classes/missing-attendance?facility=all&days=3&all=true'
-                : '/api/program-classes/missing-attendance?days=3&all=true'
+            !programsEnabled
+                ? null
+                : deptAdmin
+                  ? '/api/program-classes/missing-attendance?facility=all&days=3&all=true'
+                  : '/api/program-classes/missing-attendance?days=3&all=true'
         );
     const { data: facilityHealthResp } = useSWR<
         ServerResponseOne<FacilityHealthSummary[]>
@@ -78,9 +80,11 @@ export default function Dashboard() {
     );
     const { data: todaysScheduleResp, isLoading: todaysScheduleLoading } =
         useSWR<ServerResponseMany<TodaysScheduleItem>>(
-            deptAdmin
-                ? '/api/program-classes/todays-schedule?facility=all&all=true'
-                : '/api/program-classes/todays-schedule?all=true'
+            !programsEnabled
+                ? null
+                : deptAdmin
+                  ? '/api/program-classes/todays-schedule?facility=all&all=true'
+                  : '/api/program-classes/todays-schedule?all=true'
         );
     const todaysScheduleItems = useMemo<TodaysScheduleItem[]>(
         () => todaysScheduleResp?.data ?? ([] as TodaysScheduleItem[]),
@@ -145,17 +149,28 @@ function FacilityAdminView({
         );
     };
 
+    const header = (
+        <PageHeader
+            title="Facility Dashboard"
+            subtitle={facilityName}
+            className="mb-[15px]"
+        />
+    );
+
+    if (!programsEnabled) {
+        return (
+            <div>
+                {header}
+                <ProgramsOffNotice />
+            </div>
+        );
+    }
+
     return (
         <div>
-            <PageHeader
-                title="Facility Dashboard"
-                subtitle={facilityName}
-                className="mb-[15px]"
-            />
+            {header}
 
-            {programsEnabled && (
-                <MetricCards stats={stats} onNavigate={navigate} />
-            )}
+            <MetricCards stats={stats} onNavigate={navigate} />
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2">
@@ -201,23 +216,32 @@ function DeptAdminView({
         [facilityHealthSummaries]
     );
 
+    const header = (
+        <PageHeader title="Department Overview" className="mb-[15px]" />
+    );
+
+    if (!programsEnabled) {
+        return (
+            <div>
+                {header}
+                <ProgramsOffNotice />
+            </div>
+        );
+    }
+
     return (
         <div>
-            <PageHeader title="Department Overview" className="mb-[15px]" />
+            {header}
 
-            {programsEnabled && (
-                <MetricCards stats={stats} onNavigate={navigate} />
-            )}
+            <MetricCards stats={stats} onNavigate={navigate} />
 
             <div className="space-y-6">
-                {programsEnabled && (
-                    <div>
-                        <h2 className="text-brand-dark dark:text-white mb-4">
-                            Facility Health Overview
-                        </h2>
-                        <FacilityHealthTable rows={facilityRows} />
-                    </div>
-                )}
+                <div>
+                    <h2 className="text-brand-dark dark:text-white mb-4">
+                        Facility Health Overview
+                    </h2>
+                    <FacilityHealthTable rows={facilityRows} />
+                </div>
                 <div className="flex gap-6 flex-wrap lg:flex-nowrap">
                     <div className="flex-1 lg:flex-[2] min-w-75">
                         <MissingAttendanceWidget
@@ -232,6 +256,14 @@ function DeptAdminView({
                 </div>
             </div>
         </div>
+    );
+}
+
+function ProgramsOffNotice() {
+    return (
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+            Programs isn't turned on for this facility.
+        </p>
     );
 }
 
