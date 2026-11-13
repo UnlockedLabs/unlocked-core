@@ -1754,23 +1754,58 @@ function ProgramsTable({
                                                     <span className="text-gray-300">
                                                         •
                                                     </span>
-                                                    <button
-                                                        className="text-xs text-gray-500 hover:text-gray-500 no-underline"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            navigate(
-                                                                `/facilities?program=${program.program_id}`
-                                                            );
-                                                        }}
-                                                    >
-                                                        {
-                                                            program.total_active_facilities
-                                                        }{' '}
-                                                        {program.total_active_facilities ===
-                                                        1
-                                                            ? 'facility'
-                                                            : 'facilities'}
-                                                    </button>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <button
+                                                                className="text-xs text-gray-500 hover:text-gray-500 no-underline"
+                                                                onClick={(
+                                                                    e
+                                                                ) => {
+                                                                    e.stopPropagation();
+                                                                    navigate(
+                                                                        `/facilities?program=${program.program_id}`
+                                                                    );
+                                                                }}
+                                                            >
+                                                                {
+                                                                    program.total_active_facilities
+                                                                }{' '}
+                                                                {program.total_active_facilities ===
+                                                                1
+                                                                    ? 'facility'
+                                                                    : 'facilities'}
+                                                            </button>
+                                                        </TooltipTrigger>
+                                                        {!!program
+                                                            .facility_names
+                                                            ?.length && (
+                                                            <TooltipContent
+                                                                className="bg-brand-dark text-white max-w-xs"
+                                                                onClick={(e) =>
+                                                                    e.stopPropagation()
+                                                                }
+                                                            >
+                                                                <ul className="max-h-64 overflow-y-auto">
+                                                                    {program.facility_names.map(
+                                                                        (
+                                                                            name,
+                                                                            index
+                                                                        ) => (
+                                                                            <li
+                                                                                key={
+                                                                                    index
+                                                                                }
+                                                                            >
+                                                                                {
+                                                                                    name
+                                                                                }
+                                                                            </li>
+                                                                        )
+                                                                    )}
+                                                                </ul>
+                                                            </TooltipContent>
+                                                        )}
+                                                    </Tooltip>
                                                 </>
                                             )}
                                         </div>
