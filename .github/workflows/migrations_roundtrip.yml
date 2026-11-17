@@ -1,0 +1,40 @@
+name: Migration Round Trip
+on:
+  pull_request:
+    branches: ["main", "release/**"]
+    paths:
+      - "backend/migrations/**"
+permissions:
+  contents: read
+jobs:
+  round-trip:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.26.11"
+
+      - name: Migrate up, then reset to zero
+        run: |
+          go install github.com/pressly/goose/v3/cmd/goose@v3.26.0
+          dsn="postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+          goose -dir backend/migrations -table public.goose_db_version postgres "$dsn" up
+          goose -dir backend/migrations -table public.goose_db_version postgres "$dsn" reset
+
+      - name: Roll each migration back and forward
+        run: backend/migrations/roundtrip.sh "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
