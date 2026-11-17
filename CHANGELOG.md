@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.12.0](https://github.com/UnlockedLabs/unlocked-core/compare/v1.11.2...v1.12.0) (2026-11-13)
+
+
+### Features
+
+* **frontend:** show a program's facilities on hover over 'x facilities' (EN-119) ([#1299](https://github.com/UnlockedLabs/unlocked-core/issues/1299)) ([34a31b9](https://github.com/UnlockedLabs/unlocked-core/commit/34a31b9bd350747d25c0f7ba891b776d954bec7f))
+
+
+### Bug Fixes
+
+* **frontend:** spell Transferred correctly (EN-244) ([#1295](https://github.com/UnlockedLabs/unlocked-core/issues/1295)) ([25e0091](https://github.com/UnlockedLabs/unlocked-core/commit/25e0091782d44f2d7920fe4958d0d06a13acd1ca))
+* gate Programs dashboard routes on program_management (EN-245) ([#1301](https://github.com/UnlockedLabs/unlocked-core/issues/1301)) ([b659567](https://github.com/UnlockedLabs/unlocked-core/commit/b6595676523142fc35ca8c134d66eed33fe5bdfa))
+
 ## [1.11.2](https://github.com/UnlockedLabs/unlocked-core/compare/v1.11.1...v1.11.2) (2026-11-11)
 
 
