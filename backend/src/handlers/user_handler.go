@@ -288,7 +288,7 @@ func (srv *Server) handleCreateUser(w http.ResponseWriter, r *http.Request, log 
 	}
 	if !srv.testingMode {
 		// register the user as an Identity with Kratos + Kolibri
-		if err := srv.HandleCreateUserKratos(reqForm.User.Username, tempPw); err != nil {
+		if err := srv.HandleCreateUserKratosRecovering(reqForm.User.Username, tempPw); err != nil {
 			log.infof("Error creating user in kratos: %v", err)
 			response.KratosRegistered = false
 		}
@@ -420,7 +420,7 @@ func (srv *Server) handleResetStudentPassword(w http.ResponseWriter, r *http.Req
 	response["temp_password"] = newPass
 	response["message"] = "Temporary password assigned"
 	if user.KratosID == nil {
-		err := srv.HandleCreateUserKratos(user.Username, newPass)
+		err := srv.HandleCreateUserKratosRecovering(user.Username, newPass)
 		if err != nil {
 			return newInternalServerServiceError(err, "Error creating user in kratos")
 		}
@@ -962,7 +962,7 @@ func (srv *Server) handleBulkResetPassword(w http.ResponseWriter, r *http.Reques
 			continue
 		}
 		if user.KratosID == nil {
-			if err := srv.HandleCreateUserKratos(user.Username, newPass); err != nil {
+			if err := srv.HandleCreateUserKratosRecovering(user.Username, newPass); err != nil {
 				log.add("user_id", user.ID)
 				log.error("bulk reset: error creating user in kratos")
 				failures = append(failures, failedEntry{UserID: user.ID, Username: user.Username, Name: user.NameFirst + " " + user.NameLast, Reason: "error creating identity"})

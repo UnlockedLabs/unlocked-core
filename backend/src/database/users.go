@@ -265,6 +265,16 @@ func (db *DB) GetUserByUsername(username string) (*models.User, error) {
 	return &user, nil
 }
 
+// KratosIDInUse reports whether a live user other than exceptUserID holds the
+// Kratos identity.
+func (db *DB) KratosIDInUse(kratosID string, exceptUserID uint) (bool, error) {
+	var count int64
+	if err := db.Model(&models.User{}).Where("kratos_id = ? AND id <> ?", kratosID, exceptUserID).Count(&count).Error; err != nil {
+		return false, newGetRecordsDBError(err, "users")
+	}
+	return count > 0, nil
+}
+
 func (db *DB) UserIdentityExists(username string, doc string) (bool, bool) {
 	var usernameExists bool
 	var docIDExists bool

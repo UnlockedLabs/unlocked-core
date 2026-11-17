@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -341,10 +342,17 @@ func TestCoreUsers(t *testing.T) {
 }
 
 // kratosFake is a Kratos admin API that answers identity creation with
-// createStatus and records the password it is given.
+// createStatus, records the password it is given, and holds the identities
+// added with addIdentity. A username held by any identity, active or not,
+// answers a create with 409, as Kratos does.
 type kratosFake struct {
-	mu   sync.Mutex
-	body map[string]any
+	mu    sync.Mutex
+	body  map[string]any
+	ids   map[string]map[string]any
+	calls []string
+	// hideFromList makes the list route find nothing, though the identity
+	// still holds its username.
+	hideFromList bool
 }
 
 func (k *kratosFake) password(t *testing.T) string {
@@ -359,25 +367,99 @@ func (k *kratosFake) password(t *testing.T) string {
 	return password
 }
 
+func (k *kratosFake) addIdentity(id, username string) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.ids[id] = map[string]any{
+		"id": id, "schema_id": "default", "schema_url": "http://kratos.test/schema", "state": "active",
+		"traits": map[string]any{"username": username, "role": "student"},
+	}
+}
+
+func (k *kratosFake) identity(id string) map[string]any {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return k.ids[id]
+}
+
+func (k *kratosFake) record(call string) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.calls = append(k.calls, call)
+}
+
+func (k *kratosFake) holds(username string) bool {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	for _, ident := range k.ids {
+		traits, _ := ident["traits"].(map[string]any)
+		if name, _ := traits["username"].(string); strings.EqualFold(name, username) {
+			return true
+		}
+	}
+	return false
+}
+
 // fakeKratos points srv at a fake Kratos for the rest of the test.
 func fakeKratos(t *testing.T, srv *Server, createStatus int) *kratosFake {
 	t.Helper()
-	k := &kratosFake{}
+	k := &kratosFake{ids: map[string]map[string]any{}}
 	identity := `{"id":"kratos-1","schema_id":"default","schema_url":"http://kratos.test/schema","traits":{}}`
+	writeJSON := func(w http.ResponseWriter, status int, v any) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(v)
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /admin/identities", func(w http.ResponseWriter, r *http.Request) {
+		k.record("POST /admin/identities")
+		var body struct {
+			Traits struct {
+				Username string `json:"username"`
+			} `json:"traits"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if k.holds(body.Traits.Username) {
+			writeJSON(w, http.StatusConflict, map[string]any{"error": map[string]any{"code": 409, "message": "Conflict"}})
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(createStatus)
 		_, _ = w.Write([]byte(identity))
 	})
+	mux.HandleFunc("GET /admin/identities", func(w http.ResponseWriter, r *http.Request) {
+		k.record("GET /admin/identities")
+		want := r.URL.Query().Get("credentials_identifier")
+		found := []map[string]any{}
+		k.mu.Lock()
+		for _, ident := range k.ids {
+			traits, _ := ident["traits"].(map[string]any)
+			if name, _ := traits["username"].(string); strings.EqualFold(name, want) && !k.hideFromList {
+				found = append(found, ident)
+			}
+		}
+		k.mu.Unlock()
+		writeJSON(w, http.StatusOK, found)
+	})
 	mux.HandleFunc("GET /admin/identities/{id}", func(w http.ResponseWriter, r *http.Request) {
+		if ident := k.identity(r.PathValue("id")); ident != nil {
+			writeJSON(w, http.StatusOK, ident)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(identity))
 	})
 	mux.HandleFunc("PUT /admin/identities/{id}", func(w http.ResponseWriter, r *http.Request) {
+		k.record("PUT /admin/identities/" + r.PathValue("id"))
 		k.mu.Lock()
 		defer k.mu.Unlock()
 		_ = json.NewDecoder(r.Body).Decode(&k.body)
+		if ident := k.ids[r.PathValue("id")]; ident != nil {
+			ident["traits"] = k.body["traits"]
+			ident["state"] = k.body["state"]
+			writeJSON(w, http.StatusOK, ident)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(identity))
 	})
