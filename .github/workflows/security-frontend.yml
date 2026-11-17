@@ -47,6 +47,11 @@ jobs:
       - name: Run security audit
         id: vuln-scan
         timeout-minutes: 5
+        env:
+          # Space-separated GHSA IDs to skip: advisories with no patched version
+          # that only reach build and lint tooling. Remove each once a fix ships.
+          # GHSA-fc5q-39xc-vjpf: picomatch ReDoS via vite and typescript-eslint
+          IGNORED_ADVISORIES: GHSA-fc5q-39xc-vjpf
         run: |
           echo "Running yarn audit on frontend dependencies..."
 
@@ -72,6 +77,41 @@ jobs:
 
           if [ "$result" = vulnerabilities_found ] && [ "$total_vuln" -eq 0 ]; then
             echo "::warning::yarn reported high or critical findings but the Severity line was not parsed; see the audit output"
+          fi
+
+          if [ "$result" = vulnerabilities_found ] && [ -n "$IGNORED_ADVISORIES" ]; then
+            cd frontend
+            yarn audit --level=high --json > ../frontend_audit_output.json 2>/dev/null || true
+            cd ..
+
+            if ! grep -q '"type":"auditSummary"' frontend_audit_output.json; then
+              result=scan_failed
+            else
+              # Each auditAdvisory line is one dependency path, matching yarn's Severity counts.
+              advisories() {
+                jq -rs --arg ignored " $IGNORED_ADVISORIES " "$1" frontend_audit_output.json
+              }
+              count() {
+                advisories "[.[] | select(.type == \"auditAdvisory\") | .data.advisory
+                  | select(.severity == \"$1\")
+                  | select(.github_advisory_id as \$id | \$ignored | contains(\" \" + \$id + \" \") | not)] | length"
+              }
+
+              advisories '[.[] | select(.type == "auditAdvisory") | .data.advisory
+                | select(.github_advisory_id as $id | $ignored | contains(" " + $id + " "))
+                | "\(.github_advisory_id) (\(.module_name))"] | unique[]' |
+                while read -r skipped; do
+                  echo "::warning::Skipping ${skipped}: listed in IGNORED_ADVISORIES"
+                done
+
+              critical_count=$(count critical)
+              high_count=$(count high)
+              total_vuln=$((critical_count + high_count))
+              echo "After skipping ignored advisories: Critical: $critical_count, High: $high_count, Total: $total_vuln"
+              if [ "$total_vuln" -eq 0 ]; then
+                result=clean
+              fi
+            fi
           fi
 
           echo "critical_count=$critical_count" >> "$GITHUB_OUTPUT"
@@ -176,5 +216,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: frontend-audit-report
-          path: frontend_audit_output.txt
+          path: |
+            frontend_audit_output.txt
+            frontend_audit_output.json
           retention-days: 30
