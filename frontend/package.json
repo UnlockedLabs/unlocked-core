@@ -93,5 +93,8 @@
     },
     "lint-staged": {
         "**/*.{js,tsx,ts,css,md}": "prettier --write"
+    },
+    "resolutions": {
+        "picomatch": "github:CK-7vn/picomatch#4.0.8-unlocked.1"
     }
 }

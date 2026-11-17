@@ -2583,10 +2583,9 @@ picocolors@^1.1.1:
   resolved "https://registry.yarnpkg.com/picocolors/-/picocolors-1.1.1.tgz#3d321af3eab939b083c8f929a1d12cda81c26b6b"
   integrity sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==
 
-picomatch@^4.0.2, picomatch@^4.0.4:
-  version "4.0.7"
-  resolved "https://registry.yarnpkg.com/picomatch/-/picomatch-4.0.7.tgz#6313360034ccb36b3dc61ecbdff78121f90fe21f"
-  integrity sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==
+picomatch@^4.0.2, picomatch@^4.0.4, "picomatch@github:CK-7vn/picomatch#4.0.8-unlocked.1":
+  version "4.0.8-unlocked.1"
+  resolved "https://codeload.github.com/CK-7vn/picomatch/tar.gz/f62d10702043569cc64aba706e4cf052f30f92d5"
 
 popper.js@^1.16.0:
   version "1.16.1"
