@@ -12,6 +12,7 @@ import (
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 
+	ory "github.com/ory/kratos-client-go"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -196,4 +197,47 @@ func TestCreateUserRecoversFromOrphanedIdentity(t *testing.T) {
 	assert.True(t, resp.Data.KratosRegistered)
 	assert.Equal(t, resp.Data.TempPassword, k.password(t))
 	assert.Equal(t, "inactive", k.identity(orphanID)["state"])
+}
+
+func resetRequest(t *testing.T, srv *Server, user *models.User) error {
+	t.Helper()
+	admin := createTestUser(t, srv, "root", models.SystemAdmin, user.FacilityID)
+	req := httptest.NewRequest(http.MethodPost, "/api/users/1/student-password", nil)
+	req.SetPathValue("id", strconv.Itoa(int(user.ID)))
+	req = req.WithContext(context.WithValue(req.Context(), ClaimsKey, &Claims{UserID: admin.ID}))
+	return srv.handleResetStudentPassword(httptest.NewRecorder(), req, sLog{f: logrus.Fields{}})
+}
+
+// Every way a reset can fail shows the admin the same plain message.
+func TestResetPasswordFailureMessage(t *testing.T) {
+	want := "Unable to reset password at this time. Please try again later."
+	assertPlain := func(t *testing.T, err error) {
+		t.Helper()
+		var svcErr serviceError
+		require.ErrorAs(t, err, &svcErr)
+		assert.Equal(t, want, svcErr.Message)
+	}
+
+	t.Run("kratos refuses to create the identity", func(t *testing.T) {
+		srv, _, user := newRecoveryFixture(t)
+		fakeKratos(t, srv, http.StatusInternalServerError)
+		assertPlain(t, resetRequest(t, srv, user))
+	})
+	t.Run("a live user holds the identity", func(t *testing.T) {
+		srv, k, user := newRecoveryFixture(t)
+		k.addIdentity(orphanID, "calisio")
+		owner := createTestUser(t, srv, "someone.else", models.Student, user.FacilityID)
+		owner.KratosID = models.StringPtr(orphanID)
+		require.NoError(t, srv.Db.UpdateUser(owner))
+		assertPlain(t, resetRequest(t, srv, user))
+	})
+	t.Run("kratos is unreachable for a registered user", func(t *testing.T) {
+		srv, _, user := newRecoveryFixture(t)
+		user.KratosID = models.StringPtr("kratos-1")
+		require.NoError(t, srv.Db.UpdateUser(user))
+		cfg := ory.NewConfiguration()
+		cfg.Servers = ory.ServerConfigurations{{URL: "http://127.0.0.1:1"}}
+		srv.OryClient = ory.NewAPIClient(cfg)
+		assertPlain(t, resetRequest(t, srv, user))
+	})
 }

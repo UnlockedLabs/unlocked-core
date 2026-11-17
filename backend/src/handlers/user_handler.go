@@ -400,6 +400,13 @@ func (srv *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request, log 
 	return writeJsonResponse(w, http.StatusOK, toUpdate)
 }
 
+const resetFailedMessage = "Unable to reset password at this time. Please try again later."
+
+// resetFailed keeps the cause for the log and shows the admin one plain message.
+func resetFailed(err error) serviceError {
+	return newInternalServerServiceError(err, resetFailedMessage)
+}
+
 func (srv *Server) handleResetStudentPassword(w http.ResponseWriter, r *http.Request, log sLog) error {
 	claims := r.Context().Value(ClaimsKey).(*Claims)
 	id, err := strconv.Atoi(r.PathValue("id"))
@@ -410,41 +417,41 @@ func (srv *Server) handleResetStudentPassword(w http.ResponseWriter, r *http.Req
 	user, err := srv.Db.GetUserByID(uint(id))
 	log.add("student.user_id", user.ID)
 	if err != nil {
-		return newDatabaseServiceError(err)
+		return resetFailed(err)
 	}
 	lockedStatus, err := srv.Db.IsAccountLocked(user.ID)
 	if err != nil {
-		return newDatabaseServiceError(err)
+		return resetFailed(err)
 	}
 	if lockedStatus.IsLocked {
 		log.infof("Resetting failed login attempts for user %d due to password reset", user.ID)
 		err = srv.Db.ResetFailedLoginAttempts(user.ID)
 		if err != nil {
-			return newDatabaseServiceError(err)
+			return resetFailed(err)
 		}
 	}
 	newPass, err := user.CreateTempPassword()
 	if err != nil {
-		return newInternalServerServiceError(err, "Error creating temporary password")
+		return resetFailed(err)
 	}
 	response["temp_password"] = newPass
 	response["message"] = "Temporary password assigned"
 	if user.KratosID == nil {
 		err := srv.HandleCreateUserKratosRecovering(user.Username, newPass)
 		if err != nil {
-			return newInternalServerServiceError(err, "Error creating user in kratos")
+			return resetFailed(err)
 		}
 	} else {
 		claims := claimsFromUser(user)
 		claims.PasswordReset = true
 		if err := srv.handleUpdatePasswordKratos(claims, newPass, true); err != nil {
 			log.add("claims.user_id", claims.UserID)
-			return newInternalServerServiceError(err, err.Error())
+			return resetFailed(err)
 		}
 	}
 	resetPassword := models.NewUserAccountHistory(user.ID, models.ResetPassword, &claims.UserID, nil, nil)
 	if err := srv.Db.InsertUserAccountHistoryAction(r.Context(), resetPassword); err != nil {
-		return newCreateRequestServiceError(err)
+		return resetFailed(err)
 	}
 	return writeJsonResponse(w, http.StatusOK, response)
 }
