@@ -18,6 +18,15 @@ ALTER TABLE public.libraries RENAME COLUMN image_url TO thumbnail_url;
 -- +goose Down
 -- +goose StatementBegin
 ALTER TABLE public.libraries RENAME COLUMN thumbnail_url TO image_url;
+-- 00028 recreates library_favorites with content_id, so on a full reset the column may already be named that.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_schema = 'public' AND table_name = 'library_favorites' AND column_name = 'library_id') THEN
+        ALTER TABLE public.library_favorites RENAME COLUMN library_id TO content_id;
+    END IF;
+END $$;
+ALTER TABLE public.library_favorites DROP COLUMN IF EXISTS facility_id;
 ALTER TABLE public.library_favorites DROP CONSTRAINT IF EXISTS uni_user_lib_id;
 ALTER TABLE public.video_favorites DROP CONSTRAINT IF EXISTS uni_user_vid_id;
 DROP INDEX IF EXISTS idx_facility_library_user;

@@ -16,4 +16,7 @@ from public.feature_flags WHERE name = 'open_content';
 
 -- +goose Down
 -- +goose StatementBegin
+DELETE FROM public.page_feature_flags
+WHERE page_feature IN ('request_content', 'helpful_links', 'upload_video')
+  AND feature_flag_id IN (SELECT id FROM public.feature_flags WHERE name = 'open_content');
 -- +goose StatementEnd
