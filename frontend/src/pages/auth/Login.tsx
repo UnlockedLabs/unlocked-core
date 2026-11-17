@@ -36,29 +36,10 @@ export default function Login() {
                         ...
                     </h1>
                     <p className="text-lg text-slate-300 leading-relaxed">
-                        Our mission is to make education accessible to all
-                        justice-impacted people, and to ensure that their
-                        educational progress is recorded and recognized by
-                        institutions allowing for a faster and more equitable
-                        re-entry process.
+                        We build tools that turn rehabilitation into reality:
+                        enabling a justice system that is built on healing,
+                        grounded in safety, and powered by accountability.
                     </p>
-                </div>
-
-                <div className="relative z-10">
-                    <div
-                        className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium border"
-                        style={{
-                            backgroundColor: `${BRAND_GOLD}20`,
-                            borderColor: `${BRAND_GOLD}4D`,
-                            color: BRAND_GOLD
-                        }}
-                    >
-                        <span
-                            className="w-2 h-2 rounded-full animate-pulse"
-                            style={{ backgroundColor: BRAND_GOLD }}
-                        />
-                        Now live in correctional facilities!
-                    </div>
                 </div>
             </div>
 
