@@ -152,6 +152,16 @@ func (srv *Server) resolveKratosConflict(ctx context.Context, user *models.User)
 	return srv.quarantineKratosIdentity(ctx, identity)
 }
 
+// kratosUsernameHeldByLiveUser reports whether a live user owns the Kratos
+// identity that holds username.
+func (srv *Server) kratosUsernameHeldByLiveUser(ctx context.Context, username string) (bool, error) {
+	identity, err := srv.findKratosIdentityByUsername(ctx, username)
+	if err != nil || identity == nil {
+		return false, err
+	}
+	return srv.Db.KratosIDInUse(identity.GetId(), 0)
+}
+
 func (srv *Server) HandleCreateUserKratos(username, password string) error {
 	return srv.createUserKratos(username, password, false)
 }

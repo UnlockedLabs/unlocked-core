@@ -15,17 +15,22 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 const orphanID = "d02a3551-1111-2222-3333-444444444444"
 
-func newRecoveryFixture(t *testing.T) (*Server, *kratosFake, *models.User) {
+func newKratosServer(t *testing.T) (*Server, *kratosFake, uint) {
 	t.Helper()
 	srv := newTestingServer()
 	k := fakeKratos(t, srv, http.StatusCreated)
-	north := createTestFacility(t, srv, "North")
-	user := createTestUser(t, srv, "calisio", models.FacilityAdmin, north)
-	return srv, k, user
+	return srv, k, createTestFacility(t, srv, "North")
+}
+
+func newRecoveryFixture(t *testing.T) (*Server, *kratosFake, *models.User) {
+	t.Helper()
+	srv, k, north := newKratosServer(t)
+	return srv, k, createTestUser(t, srv, "calisio", models.FacilityAdmin, north)
 }
 
 // An identity nobody owns is set aside, not deleted, so the new user can have
@@ -138,4 +143,57 @@ func TestBulkResetRecoversUserWithNoKratosID(t *testing.T) {
 	stored, err := srv.Db.GetUserByID(user.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "kratos-1", models.FormatNullableString(stored.KratosID))
+}
+
+func createUserRequest(t *testing.T, srv *Server, facilityID uint, username string) (*httptest.ResponseRecorder, error) {
+	t.Helper()
+	admin := createTestUser(t, srv, "root", models.SystemAdmin, facilityID)
+	body := fmt.Sprintf(`{"user":{"username":%q,"name_first":"Cal","name_last":"Isio","email":"c@example.com","role":"facility_admin","facility_id":%d}}`, username, facilityID)
+	req := httptest.NewRequest(http.MethodPost, "/api/users", strings.NewReader(body))
+	req = req.WithContext(context.WithValue(req.Context(), ClaimsKey, &Claims{UserID: admin.ID, Role: models.SystemAdmin}))
+	w := httptest.NewRecorder()
+	return w, srv.handleCreateUser(w, req, sLog{f: logrus.Fields{}})
+}
+
+// An identity a live user holds blocks the username before anything is
+// inserted, so no row and no unusable temp password come out of it.
+func TestCreateUserRefusesUsernameHeldByLiveIdentity(t *testing.T) {
+	srv, k, facilityID := newKratosServer(t)
+	k.addIdentity(orphanID, "calisio")
+	owner := createTestUser(t, srv, "someone.else", models.Student, facilityID)
+	owner.KratosID = models.StringPtr(orphanID)
+	require.NoError(t, srv.Db.UpdateUser(owner))
+
+	w, err := createUserRequest(t, srv, facilityID, "calisio")
+
+	var svcErr serviceError
+	require.ErrorAs(t, err, &svcErr)
+	assert.Equal(t, http.StatusBadRequest, svcErr.Status)
+	assert.Equal(t, "That username is unavailable. Please choose a different username.", svcErr.Message)
+	assert.NotContains(t, strings.ToLower(svcErr.Message), "kratos")
+	assert.Empty(t, w.Body.String(), "no temp password")
+	_, err = srv.Db.GetUserByUsername("calisio")
+	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	assert.Equal(t, []string{"GET /admin/identities"}, k.calls)
+}
+
+// An orphan does not block creation: the admin gets a working temp password.
+func TestCreateUserRecoversFromOrphanedIdentity(t *testing.T) {
+	srv, k, facilityID := newKratosServer(t)
+	k.addIdentity(orphanID, "calisio")
+
+	w, err := createUserRequest(t, srv, facilityID, "calisio")
+
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusCreated, w.Code)
+	var resp struct {
+		Data struct {
+			TempPassword     string `json:"temp_password"`
+			KratosRegistered bool   `json:"kratos_registered"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	assert.True(t, resp.Data.KratosRegistered)
+	assert.Equal(t, resp.Data.TempPassword, k.password(t))
+	assert.Equal(t, "inactive", k.identity(orphanID)["state"])
 }
