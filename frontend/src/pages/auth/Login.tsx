@@ -28,12 +28,11 @@ export default function Login() {
                     />
                 </div>
 
-                <div className="relative z-10 space-y-6 max-w-lg">
+                <div className="relative z-10 space-y-6 max-w-lg my-auto">
                     <h1 className="text-5xl font-bold leading-tight tracking-tight">
-                        Built from the
+                        Build from the
                         <br />
-                        <span style={{ color: BRAND_GOLD }}>inside out</span>
-                        ...
+                        <span style={{ color: BRAND_GOLD }}>inside, out.</span>
                     </h1>
                     <p className="text-lg text-slate-300 leading-relaxed">
                         We build tools that turn rehabilitation into reality:
