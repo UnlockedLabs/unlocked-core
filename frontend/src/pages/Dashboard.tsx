@@ -1,7 +1,13 @@
 import { useState, useMemo, ComponentProps } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
-import { useAuth, canSwitchFacility, hasFeature } from '@/auth/useAuth';
+import {
+    useAuth,
+    canSwitchFacility,
+    getDashboardLink,
+    hasFeature,
+    isKnowledgeCenterOnly
+} from '@/auth/useAuth';
 import {
     ClassMetrics,
     FeatureAccess,
@@ -90,6 +96,10 @@ export default function Dashboard() {
         () => todaysScheduleResp?.data ?? ([] as TodaysScheduleItem[]),
         [todaysScheduleResp?.data]
     );
+
+    if (user && isKnowledgeCenterOnly(user)) {
+        return <Navigate to={getDashboardLink(user)} replace />;
+    }
 
     return (
         <div className="bg-[#E7EAED] dark:bg-[#0a0a0a] min-h-screen overflow-x-hidden">
