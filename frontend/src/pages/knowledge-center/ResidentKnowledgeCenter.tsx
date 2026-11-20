@@ -8,14 +8,12 @@ import { useTourContext } from '@/contexts/useTourContext';
 import { targetToStepIndexMap } from '@/contexts/tourState';
 import useSWR from 'swr';
 import {
-    Search,
     Star,
     BookOpen,
     Video,
     Link as LinkIcon,
     MessageSquarePlus
 } from 'lucide-react';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
     Select,
@@ -43,7 +41,6 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { requestContentSchema, RequestContentInput } from '@/lib/validation';
 import { Pagination } from '@/components/Pagination';
-import { useDebounceValue } from 'usehooks-ts';
 import {
     Library,
     Video as VideoType,
@@ -59,6 +56,8 @@ import { isAdministrator, useAuth, hasFeature } from '@/auth/useAuth';
 import { toast } from 'sonner';
 import API from '@/api/api';
 import { decodeHtmlEntities } from '@/lib/decodeHtmlEntities';
+import { useToggleFavorite } from '@/hooks/useToggleFavorite';
+import KnowledgeSearchBox from '@/components/knowledge-center/search/KnowledgeSearchBox';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -89,9 +88,6 @@ export default function ResidentKnowledgeCenter() {
     const canRequestContent =
         !!user && hasFeature(user, FeatureAccess.RequestContentAccess);
     const { tourState, setTourState } = useTourContext();
-    const [pendingFavorites, setPendingFavorites] = useState<
-        Map<string, boolean>
-    >(new Map());
     const [showRequestContent, setShowRequestContent] = useState(false);
     const requestContentForm = useForm<RequestContentInput>({
         resolver: zodResolver(requestContentSchema),
@@ -116,8 +112,6 @@ export default function ResidentKnowledgeCenter() {
         }
     }, [showRequestContent, requestContentForm]);
 
-    const [searchTerm, setSearchTerm] = useState('');
-    const [searchQuery] = useDebounceValue(searchTerm, 500);
     const [contentTypeFilter, setContentTypeFilter] = useState<string>('all');
     const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
@@ -151,18 +145,18 @@ export default function ResidentKnowledgeCenter() {
         categoryFilter !== 'all' ? `&tags=${categoryFilter}` : '';
 
     const { data: libData } = useSWR<ServerResponseMany<Library>>(
-        `/api/libraries?visibility=visible&per_page=500&order_by=title&order=asc&search=${searchQuery}${categoryParam}`
+        `/api/libraries?visibility=visible&per_page=500&order_by=title&order=asc${categoryParam}`
     );
 
     const { data: vidData } = useSWR<ServerResponseMany<VideoType>>(
         canViewVideos
-            ? `/api/videos?visibility=visible&per_page=500&order_by=title&order=asc&search=${searchQuery}`
+            ? `/api/videos?visibility=visible&per_page=500&order_by=title&order=asc`
             : null
     );
 
     const { data: linkData } = useSWR<ServerResponseOne<HelpfulLinkAndSort>>(
         canViewHelpfulLinks
-            ? `/api/helpful-links?visibility=true&per_page=500&order_by=title&order=asc&search=${searchQuery}`
+            ? `/api/helpful-links?visibility=true&per_page=500&order_by=title&order=asc`
             : null
     );
 
@@ -173,7 +167,7 @@ export default function ResidentKnowledgeCenter() {
     >(
         // Always fetched (like the other tabs) so the Favorites count shows
         // even when the tab isn't active.
-        `/api/open-content/favorites?page=1&per_page=500&search=${searchQuery}`
+        `/api/open-content/favorites?page=1&per_page=500`
     );
 
     const favoritesContent: ContentItem[] = useMemo(
@@ -325,64 +319,37 @@ export default function ResidentKnowledgeCenter() {
         }
     };
 
-    const handleToggleFavorite = async (item: ContentItem) => {
-        const key = `${item.type}-${item.id}`;
-        const current = pendingFavorites.has(key)
-            ? pendingFavorites.get(key)!
-            : item.favorited;
-        const next = !current;
+    const { isFavorited, toggleFavorite } = useToggleFavorite(mutateFavorites);
 
-        setPendingFavorites((prev) => {
-            const m = new Map(prev);
-            m.set(key, next);
-            return m;
+    const handleToggleFavorite = (item: ContentItem) =>
+        toggleFavorite({
+            id: item.id,
+            type: item.type,
+            favorited: item.favorited,
+            url: item.url,
+            openContentProviderId: item.openContentProviderId
         });
 
-        let endpoint = '';
-        let payload: object = {};
-        if (item.type === 'video') {
-            endpoint = `videos/${item.id}/favorite`;
-        } else if (item.type === 'link') {
-            endpoint = `helpful-links/favorite/${item.id}`;
-        } else if (
-            item.url?.includes('/api/proxy/') &&
-            item.openContentProviderId
-        ) {
-            endpoint = `open-content/${item.id}/bookmark`;
-            payload = {
-                open_content_provider_id: item.openContentProviderId,
-                content_url: item.url
-            };
-        } else {
-            endpoint = `libraries/${item.id}/favorite`;
-        }
-
-        const resp = await API.put<object, object>(endpoint, payload);
-        if (!resp.success) {
-            setPendingFavorites((prev) => {
-                const m = new Map(prev);
-                m.set(key, current);
-                return m;
-            });
-            toast.error('Failed to update favorites');
-        } else {
-            // Refresh so the Favorites count (and the tab's list, when active)
-            // stays in sync after favoriting/unfavoriting from any tab.
-            await mutateFavorites();
-        }
-    };
-
     const ContentCard = ({ item }: { item: ContentItem }) => {
-        const favKey = `${item.type}-${item.id}`;
-        const favorited = pendingFavorites.has(favKey)
-            ? pendingFavorites.get(favKey)!
-            : item.favorited;
+        const favorited = isFavorited({
+            id: item.id,
+            type: item.type,
+            favorited: item.favorited
+        });
         const title = decodeHtmlEntities(item.title);
         const description = decodeHtmlEntities(item.description);
         const author = item.author ? decodeHtmlEntities(item.author) : '';
         const handleClick = () => {
             if (item.type === 'library') {
-                navigate(`/viewer/libraries/${item.id}`);
+                // A favorited page of a library (e.g. starred from search)
+                // opens at that page; LibraryViewer reads `state.url`.
+                const deepPage = item.url?.startsWith(
+                    `/api/proxy/libraries/${item.id}/`
+                );
+                navigate(
+                    `/viewer/libraries/${item.id}`,
+                    deepPage ? { state: { url: item.url } } : undefined
+                );
             } else if (item.type === 'video') {
                 navigate(`/viewer/videos/${item.id}`);
             } else {
@@ -575,15 +542,7 @@ export default function ResidentKnowledgeCenter() {
                     className="card-block p-4 mb-6"
                     id="knowledge-center-search"
                 >
-                    <div className="relative">
-                        <Search className="input-icon-left size-5" />
-                        <Input
-                            placeholder="Search for resources..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-10"
-                        />
-                    </div>
+                    <KnowledgeSearchBox />
                 </div>
 
                 <div className="flex items-center justify-between mb-6">
@@ -718,7 +677,8 @@ export default function ResidentKnowledgeCenter() {
                         <div className="grid grid-cols-3 gap-6 mb-6">
                             {paginatedContent.map((item, index) => (
                                 <div
-                                    key={`${item.type}-${item.id}`}
+                                    // Several pages of one library can be favorites.
+                                    key={`${item.type}-${item.id}-${item.url ?? ''}-${index}`}
                                     id={
                                         index === 0
                                             ? 'knowledge-center-enter-library'
