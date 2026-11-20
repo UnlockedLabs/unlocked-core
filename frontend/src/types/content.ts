@@ -106,20 +106,27 @@ export interface OpenContentResponse extends OpenContentItem {
     total_minutes: number;
 }
 
-export interface SearchResult {
-    book: string;
-    title: string;
-    thumbnail_url: string;
-    link: string;
-    description: string;
-    total_results: string;
-    start_index: string;
-    items_per_page: string;
-    items?: SearchResultItem[];
+export type SearchMatch = 'title' | 'content';
+
+export type SearchContentType = 'library' | 'video' | 'link';
+
+/** One hit from `GET /api/open-content/search`. */
+export interface SearchResultItem extends OpenContentItem {
+    /** "title": the item's own title/description matched; "content": text inside a library page matched. */
+    match: SearchMatch;
+    content_type: SearchContentType;
+    /** Always set by the search API; bookmarking an inside-library hit needs it. */
+    open_content_provider_id: number;
+    /** For content matches `title` is the library name and this is the page. */
+    page_title?: string;
 }
 
-export interface SearchResultItem extends OpenContentItem {
-    page_title?: string;
+export interface SearchChannel {
+    title: string;
+    total_results: number | string;
+    start_index: number | string;
+    items_per_page: number | string;
+    items?: SearchResultItem[] | null;
 }
 
 export enum OpenContentTabs {
@@ -131,15 +138,15 @@ export enum OpenContentTabs {
 
 export enum VideoAdminVisibility {
     'All Videos' = 'all',
-    'Visible' = 'visible',
-    'Hidden' = 'hidden'
+    Visible = 'visible',
+    Hidden = 'hidden'
 }
 
 export enum LibraryAdminVisibility {
     'All Libraries' = 'all',
-    'Visible' = 'visible',
-    'Hidden' = 'hidden',
-    'Featured' = 'featured'
+    Visible = 'visible',
+    Hidden = 'hidden',
+    Featured = 'featured'
 }
 
 export enum FilterOpenContent {
