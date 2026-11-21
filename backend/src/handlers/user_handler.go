@@ -248,15 +248,6 @@ func (srv *Server) handleCreateUser(w http.ResponseWriter, r *http.Request, log 
 		return newResidentIDInUseError()
 	}
 	reqForm.User.Username = stripNonAlphaChars(reqForm.User.Username, isUsernameChar)
-	if srv.OryClient != nil {
-		held, err := srv.kratosUsernameHeldByLiveUser(r.Context(), reqForm.User.Username)
-		if err != nil {
-			// Kratos being down must not stop creation: the registration below reports it
-			log.infof("unable to check username in kratos: %v", err)
-		} else if held {
-			return newBadRequestServiceError(errKratosIdentityOwned, "That username is unavailable. Please choose a different username.")
-		}
-	}
 	err = srv.WithUserContext(r).CreateUser(&reqForm.User)
 	if err != nil {
 		return newDatabaseServiceError(err)

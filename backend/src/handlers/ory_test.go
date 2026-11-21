@@ -16,7 +16,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 const orphanID = "d02a3551-1111-2222-3333-444444444444"
@@ -154,28 +153,6 @@ func createUserRequest(t *testing.T, srv *Server, facilityID uint, username stri
 	req = req.WithContext(context.WithValue(req.Context(), ClaimsKey, &Claims{UserID: admin.ID, Role: models.SystemAdmin}))
 	w := httptest.NewRecorder()
 	return w, srv.handleCreateUser(w, req, sLog{f: logrus.Fields{}})
-}
-
-// An identity a live user holds blocks the username before anything is
-// inserted, so no row and no unusable temp password come out of it.
-func TestCreateUserRefusesUsernameHeldByLiveIdentity(t *testing.T) {
-	srv, k, facilityID := newKratosServer(t)
-	k.addIdentity(orphanID, "calisio")
-	owner := createTestUser(t, srv, "someone.else", models.Student, facilityID)
-	owner.KratosID = models.StringPtr(orphanID)
-	require.NoError(t, srv.Db.UpdateUser(owner))
-
-	w, err := createUserRequest(t, srv, facilityID, "calisio")
-
-	var svcErr serviceError
-	require.ErrorAs(t, err, &svcErr)
-	assert.Equal(t, http.StatusBadRequest, svcErr.Status)
-	assert.Equal(t, "That username is unavailable. Please choose a different username.", svcErr.Message)
-	assert.NotContains(t, strings.ToLower(svcErr.Message), "kratos")
-	assert.Empty(t, w.Body.String(), "no temp password")
-	_, err = srv.Db.GetUserByUsername("calisio")
-	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
-	assert.Equal(t, []string{"GET /admin/identities"}, k.calls)
 }
 
 // An orphan does not block creation: the admin gets a working temp password.
