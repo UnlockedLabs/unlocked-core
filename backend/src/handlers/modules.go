@@ -144,7 +144,7 @@ func (u coreUsers) CreateLogin(ctx context.Context, userID uint) (string, error)
 	if err != nil {
 		return "", fmt.Errorf("create temporary password: %w", err)
 	}
-	if err := u.srv.HandleCreateUserKratos(user.Username, password); err != nil {
+	if err := u.srv.HandleCreateUserKratosRecovering(user.Username, password); err != nil {
 		return "", fmt.Errorf("create kratos login for user %d: %w", userID, err)
 	}
 	return password, nil

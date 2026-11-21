@@ -326,6 +326,15 @@ func TestCoreUsers(t *testing.T) {
 		assert.Equal(t, "kratos-1", models.FormatNullableString(stored.KratosID))
 	})
 
+	t.Run("create login recovers from an orphaned identity", func(t *testing.T) {
+		kratos := fakeKratos(t, srv, http.StatusCreated)
+		kratos.addIdentity("orphan-1", "jdoe")
+		password, err := users.CreateLogin(ctx, created.ID)
+		require.NoError(t, err)
+		assert.Equal(t, password, kratos.password(t))
+		assert.Equal(t, "inactive", kratos.identity("orphan-1")["state"])
+	})
+
 	t.Run("create login fails when kratos does", func(t *testing.T) {
 		fakeKratos(t, srv, http.StatusInternalServerError)
 		password, err := users.CreateLogin(ctx, created.ID)
