@@ -415,10 +415,10 @@ func (srv *Server) handleResetStudentPassword(w http.ResponseWriter, r *http.Req
 	}
 	response := make(map[string]string)
 	user, err := srv.Db.GetUserByID(uint(id))
-	log.add("student.user_id", user.ID)
 	if err != nil {
 		return resetFailed(err)
 	}
+	log.add("student.user_id", user.ID)
 	lockedStatus, err := srv.Db.IsAccountLocked(user.ID)
 	if err != nil {
 		return resetFailed(err)

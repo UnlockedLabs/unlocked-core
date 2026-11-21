@@ -218,6 +218,11 @@ func TestResetPasswordFailureMessage(t *testing.T) {
 		assert.Equal(t, want, svcErr.Message)
 	}
 
+	t.Run("the user cannot be loaded", func(t *testing.T) {
+		srv, _, user := newRecoveryFixture(t)
+		require.NoError(t, srv.Db.DeleteUser(int(user.ID)))
+		assertPlain(t, resetRequest(t, srv, user))
+	})
 	t.Run("kratos refuses to create the identity", func(t *testing.T) {
 		srv, _, user := newRecoveryFixture(t)
 		fakeKratos(t, srv, http.StatusInternalServerError)
