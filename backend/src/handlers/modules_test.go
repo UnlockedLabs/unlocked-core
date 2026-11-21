@@ -327,6 +327,7 @@ func TestCoreUsers(t *testing.T) {
 	})
 
 	t.Run("create login recovers from an orphaned identity", func(t *testing.T) {
+		require.NoError(t, srv.Db.Model(&models.User{}).Where("id = ?", created.ID).Update("kratos_id", nil).Error)
 		kratos := fakeKratos(t, srv, http.StatusCreated)
 		kratos.addIdentity("orphan-1", "jdoe")
 		password, err := users.CreateLogin(ctx, created.ID)
@@ -336,6 +337,7 @@ func TestCoreUsers(t *testing.T) {
 	})
 
 	t.Run("create login fails when kratos does", func(t *testing.T) {
+		require.NoError(t, srv.Db.Model(&models.User{}).Where("id = ?", created.ID).Update("kratos_id", nil).Error)
 		fakeKratos(t, srv, http.StatusInternalServerError)
 		password, err := users.CreateLogin(ctx, created.ID)
 		assert.Error(t, err)
@@ -362,6 +364,52 @@ type kratosFake struct {
 	// hideFromList makes the list route find nothing, though the identity
 	// still holds its username.
 	hideFromList bool
+	// pause, when set by holdFirstCreate, stops the first create after the
+	// identity exists and before the answer is sent.
+	pause *createPause
+	made  int
+}
+
+type createPause struct {
+	entered chan struct{}
+	release chan struct{}
+	used    bool
+}
+
+// holdFirstCreate makes the first successful create wait: entered closes once
+// the identity exists, and the answer is sent after release is called.
+func (k *kratosFake) holdFirstCreate() (entered <-chan struct{}, release func()) {
+	p := &createPause{entered: make(chan struct{}), release: make(chan struct{})}
+	k.mu.Lock()
+	k.pause = p
+	k.mu.Unlock()
+	return p.entered, func() { close(p.release) }
+}
+
+func (k *kratosFake) create(username string) map[string]any {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.made++
+	id := fmt.Sprintf("kratos-%d", k.made)
+	k.ids[id] = map[string]any{
+		"id": id, "schema_id": "default", "schema_url": "http://kratos.test/schema", "state": "active",
+		"traits": map[string]any{"username": username},
+	}
+	return k.ids[id]
+}
+
+func (k *kratosFake) waitIfPaused() {
+	k.mu.Lock()
+	p := k.pause
+	first := p != nil && !p.used
+	if first {
+		p.used = true
+	}
+	k.mu.Unlock()
+	if first {
+		close(p.entered)
+		<-p.release
+	}
 }
 
 func (k *kratosFake) password(t *testing.T) string {
@@ -432,9 +480,15 @@ func fakeKratos(t *testing.T, srv *Server, createStatus int) *kratosFake {
 			writeJSON(w, http.StatusConflict, map[string]any{"error": map[string]any{"code": 409, "message": "Conflict"}})
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(createStatus)
-		_, _ = w.Write([]byte(identity))
+		if createStatus != http.StatusCreated {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(createStatus)
+			_, _ = w.Write([]byte(identity))
+			return
+		}
+		created := k.create(body.Traits.Username)
+		k.waitIfPaused()
+		writeJSON(w, http.StatusCreated, created)
 	})
 	mux.HandleFunc("GET /admin/identities", func(w http.ResponseWriter, r *http.Request) {
 		k.record("GET /admin/identities")

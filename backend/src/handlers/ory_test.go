@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 
@@ -222,4 +223,38 @@ func TestResetPasswordFailureMessage(t *testing.T) {
 		srv.OryClient = ory.NewAPIClient(cfg)
 		assertPlain(t, resetRequest(t, srv, user))
 	})
+}
+
+// Two resets of the same user must not leave the stored identity pointing at
+// one that the other reset quarantined. The first reset is held after Kratos
+// created its identity; the second reset runs while it waits.
+func TestConcurrentResetsKeepTheActiveIdentity(t *testing.T) {
+	srv, k, user := newRecoveryFixture(t)
+	entered, release := k.holdFirstCreate()
+	reset := func() error { return srv.HandleCreateUserKratosRecovering(user.Username, "Temp-pass-3") }
+	first := make(chan error, 1)
+	var secondErr error
+	secondDone := make(chan struct{})
+
+	go func() { first <- reset() }()
+	<-entered
+	go func() {
+		secondErr = reset()
+		close(secondDone)
+	}()
+	select {
+	case <-secondDone:
+	case <-time.After(300 * time.Millisecond):
+	}
+	release()
+
+	require.NoError(t, <-first)
+	<-secondDone
+	require.NoError(t, secondErr)
+	stored, err := srv.Db.GetUserByID(user.ID)
+	require.NoError(t, err)
+	ident := k.identity(models.FormatNullableString(stored.KratosID))
+	require.NotNil(t, ident)
+	assert.Equal(t, "active", ident["state"])
+	assert.Equal(t, "calisio", ident["traits"].(map[string]any)["username"])
 }

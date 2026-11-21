@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 
@@ -164,12 +165,42 @@ func (srv *Server) HandleCreateUserKratosRecovering(username, password string) e
 	return srv.createUserKratos(username, password, true)
 }
 
+// kratosProvisioning serializes identity provisioning. Core runs one replica,
+// so a process-wide lock is enough to stop two requests for one user from each
+// creating an identity and quarantining the other's.
+var kratosProvisioning sync.Mutex
+
 func (srv *Server) createUserKratos(username, password string, recover bool) error {
+	kratosProvisioning.Lock()
+	defer kratosProvisioning.Unlock()
 	user, err := srv.Db.GetUserByUsername(username)
 	if err != nil {
 		log.Error("user not found immediately after creation, this should not happen")
 		return err
 	}
+	// a request that waited on the lock may find the user registered by now
+	if !recover || user.KratosID == nil {
+		if err := srv.registerKratosIdentity(user, recover); err != nil {
+			return err
+		}
+	}
+	claims := &Claims{
+		UserID:        user.ID,
+		KratosID:      models.FormatNullableString(user.KratosID),
+		PasswordReset: true,
+		FacilityID:    user.FacilityID,
+	}
+	err = srv.handleUpdatePasswordKratos(claims, password, true)
+	if err != nil {
+		log.Error("Error updating password for new kratos user")
+		return err
+	}
+	log.Infof("user created successfully + identity registered with kratos: %v", user)
+	return nil
+}
+
+// registerKratosIdentity creates user's identity and stores its ID on user.
+func (srv *Server) registerKratosIdentity(user *models.User, recover bool) error {
 	ctx := context.Background()
 	traits := user.GetTraits()
 	traits["password_reset"] = true
@@ -191,26 +222,13 @@ func (srv *Server) createUserKratos(username, password string, recover bool) err
 		return errors.New("error creating identity")
 	}
 	user.KratosID = models.StringPtr(created.GetId())
-	// persist the ID before setting the password: if anything below fails, the
+	// persist the ID before setting the password: if anything after this fails, the
 	// stored ID lets a password reset repair the identity instead of trying to
 	// create a second one with the same (unique) username identifier
-	err = srv.Db.UpdateUser(user)
-	if err != nil {
+	if err := srv.Db.UpdateUser(user); err != nil {
 		log.Error("Error updating user")
 		return err
 	}
-	claims := &Claims{
-		UserID:        user.ID,
-		KratosID:      models.FormatNullableString(user.KratosID),
-		PasswordReset: true,
-		FacilityID:    user.FacilityID,
-	}
-	err = srv.handleUpdatePasswordKratos(claims, password, true)
-	if err != nil {
-		log.Error("Error updating password for new kratos user")
-		return err
-	}
-	log.Infof("user created successfully + identity registered with kratos: %v", user)
 	return nil
 }
 
