@@ -5,8 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
+	"strings"
+	"sync"
 
 	"github.com/UnlockedLabs/unlocked-core/backend/src/models"
 
@@ -92,32 +95,94 @@ func (srv *Server) validateUserIDKratos(id string) error {
 	return nil
 }
 
+var errKratosIdentityOwned = errors.New("username is held by a kratos identity that belongs to a live user")
+
+// findKratosIdentityByUsername returns the identity that holds username as its
+// login identifier, or nil when there is none.
+func (srv *Server) findKratosIdentityByUsername(ctx context.Context, username string) (*client.Identity, error) {
+	found, _, err := srv.OryClient.IdentityAPI.ListIdentities(ctx).CredentialsIdentifier(strings.ToLower(username)).Execute()
+	if err != nil {
+		return nil, err
+	}
+	if len(found) == 0 {
+		return nil, nil
+	}
+	return &found[0], nil
+}
+
+// quarantineKratosIdentity frees the identity's username without deleting it:
+// the identity goes inactive and its username gains an ".orphaned.<id>" suffix,
+// so Kratos keeps the record that the account once existed.
+func (srv *Server) quarantineKratosIdentity(ctx context.Context, identity *client.Identity) error {
+	traits, _ := identity.GetTraits().(map[string]interface{})
+	if traits == nil {
+		traits = map[string]interface{}{}
+	}
+	id := identity.GetId()
+	username, _ := traits["username"].(string)
+	traits["username"] = fmt.Sprintf("%s.orphaned.%.8s", username, id)
+	body := client.NewUpdateIdentityBody(identity.GetSchemaId(), "inactive", traits)
+	_, resp, err := srv.OryClient.IdentityAPI.UpdateIdentity(ctx, id).UpdateIdentityBody(*body).Execute()
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("error quarantining identity")
+	}
+	log.Warnf("quarantined kratos identity %s that no live user holds", id)
+	return nil
+}
+
+// resolveKratosConflict runs after Kratos answered 409 for user's username: it
+// quarantines the identity holding the name unless a live user owns it.
+func (srv *Server) resolveKratosConflict(ctx context.Context, user *models.User) error {
+	identity, err := srv.findKratosIdentityByUsername(ctx, user.Username)
+	if err != nil {
+		return err
+	}
+	if identity == nil {
+		return errors.New("kratos reports the username is taken but no identity holds it")
+	}
+	owned, err := srv.Db.KratosIDInUse(identity.GetId(), user.ID)
+	if err != nil {
+		return err
+	}
+	if owned {
+		return errKratosIdentityOwned
+	}
+	return srv.quarantineKratosIdentity(ctx, identity)
+}
+
 func (srv *Server) HandleCreateUserKratos(username, password string) error {
+	return srv.createUserKratos(username, password, false)
+}
+
+// HandleCreateUserKratosRecovering is HandleCreateUserKratos for callers acting
+// for an admin, where a username conflict with an identity no live user holds
+// is resolved by quarantining that identity. Startup seeding and the other
+// callers keep the plain version, which fails on a conflict.
+func (srv *Server) HandleCreateUserKratosRecovering(username, password string) error {
+	return srv.createUserKratos(username, password, true)
+}
+
+// kratosProvisioning serializes identity provisioning. Core runs one replica,
+// so a process-wide lock is enough to stop two requests for one user from each
+// creating an identity and quarantining the other's.
+var kratosProvisioning sync.Mutex
+
+func (srv *Server) createUserKratos(username, password string, recover bool) error {
+	kratosProvisioning.Lock()
+	defer kratosProvisioning.Unlock()
 	user, err := srv.Db.GetUserByUsername(username)
 	if err != nil {
 		log.Error("user not found immediately after creation, this should not happen")
 		return err
 	}
-	traits := user.GetTraits()
-	traits["password_reset"] = true
-	identity := client.NewCreateIdentityBody("default", traits)
-	created, resp, err := srv.OryClient.IdentityAPI.CreateIdentity(context.Background()).CreateIdentityBody(*identity).Execute()
-	if err != nil {
-		log.Errorf("Error creating identity: %v", err)
-		return err
-	}
-	if resp.StatusCode != http.StatusCreated {
-		log.Errorf("Error creating identity: %v", resp.StatusCode)
-		return errors.New("error creating identity")
-	}
-	user.KratosID = models.StringPtr(created.GetId())
-	// persist the ID before setting the password: if anything below fails, the
-	// stored ID lets a password reset repair the identity instead of trying to
-	// create a second one with the same (unique) username identifier
-	err = srv.Db.UpdateUser(user)
-	if err != nil {
-		log.Error("Error updating user")
-		return err
+	// a request that waited on the lock may find the user registered by now
+	if !recover || user.KratosID == nil {
+		if err := srv.registerKratosIdentity(user, recover); err != nil {
+			return err
+		}
 	}
 	claims := &Claims{
 		UserID:        user.ID,
@@ -131,6 +196,39 @@ func (srv *Server) HandleCreateUserKratos(username, password string) error {
 		return err
 	}
 	log.Infof("user created successfully + identity registered with kratos: %v", user)
+	return nil
+}
+
+// registerKratosIdentity creates user's identity and stores its ID on user.
+func (srv *Server) registerKratosIdentity(user *models.User, recover bool) error {
+	ctx := context.Background()
+	traits := user.GetTraits()
+	traits["password_reset"] = true
+	identity := client.NewCreateIdentityBody("default", traits)
+	created, resp, err := srv.OryClient.IdentityAPI.CreateIdentity(ctx).CreateIdentityBody(*identity).Execute()
+	if recover && resp != nil && resp.StatusCode == http.StatusConflict {
+		if err := srv.resolveKratosConflict(ctx, user); err != nil {
+			log.Errorf("Error resolving identity conflict: %v", err)
+			return err
+		}
+		created, resp, err = srv.OryClient.IdentityAPI.CreateIdentity(ctx).CreateIdentityBody(*identity).Execute()
+	}
+	if err != nil {
+		log.Errorf("Error creating identity: %v", err)
+		return err
+	}
+	if resp.StatusCode != http.StatusCreated {
+		log.Errorf("Error creating identity: %v", resp.StatusCode)
+		return errors.New("error creating identity")
+	}
+	user.KratosID = models.StringPtr(created.GetId())
+	// persist the ID before setting the password: if anything after this fails, the
+	// stored ID lets a password reset repair the identity instead of trying to
+	// create a second one with the same (unique) username identifier
+	if err := srv.Db.UpdateUser(user); err != nil {
+		log.Error("Error updating user")
+		return err
+	}
 	return nil
 }
 

@@ -286,13 +286,14 @@ func (srv *Server) handleCreateUser(w http.ResponseWriter, r *http.Request, log 
 			return newCreateRequestServiceError(err)
 		}
 	}
-	if !srv.testingMode {
-		// register the user as an Identity with Kratos + Kolibri
-		if err := srv.HandleCreateUserKratos(reqForm.User.Username, tempPw); err != nil {
+	if srv.OryClient != nil {
+		if err := srv.HandleCreateUserKratosRecovering(reqForm.User.Username, tempPw); err != nil {
 			log.infof("Error creating user in kratos: %v", err)
 			response.KratosRegistered = false
 		}
-		// still return 201 because user has been created in kratos,
+	}
+	if !srv.testingMode {
+		// still return 201 because the user has been created,
 		// kolibri might not be set up/available
 		if err := srv.providerPlatforms.AddUserToKolibri(r.Context(), toCoreUser(&reqForm.User)); err != nil {
 			log.add("user_id", reqForm.User.ID)
@@ -390,6 +391,13 @@ func (srv *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request, log 
 	return writeJsonResponse(w, http.StatusOK, toUpdate)
 }
 
+const resetFailedMessage = "Unable to reset password at this time. Please try again later."
+
+// resetFailed keeps the cause for the log and shows the admin one plain message.
+func resetFailed(err error) serviceError {
+	return newInternalServerServiceError(err, resetFailedMessage)
+}
+
 func (srv *Server) handleResetStudentPassword(w http.ResponseWriter, r *http.Request, log sLog) error {
 	claims := r.Context().Value(ClaimsKey).(*Claims)
 	id, err := strconv.Atoi(r.PathValue("id"))
@@ -398,43 +406,43 @@ func (srv *Server) handleResetStudentPassword(w http.ResponseWriter, r *http.Req
 	}
 	response := make(map[string]string)
 	user, err := srv.Db.GetUserByID(uint(id))
-	log.add("student.user_id", user.ID)
 	if err != nil {
-		return newDatabaseServiceError(err)
+		return resetFailed(err)
 	}
+	log.add("student.user_id", user.ID)
 	lockedStatus, err := srv.Db.IsAccountLocked(user.ID)
 	if err != nil {
-		return newDatabaseServiceError(err)
+		return resetFailed(err)
 	}
 	if lockedStatus.IsLocked {
 		log.infof("Resetting failed login attempts for user %d due to password reset", user.ID)
 		err = srv.Db.ResetFailedLoginAttempts(user.ID)
 		if err != nil {
-			return newDatabaseServiceError(err)
+			return resetFailed(err)
 		}
 	}
 	newPass, err := user.CreateTempPassword()
 	if err != nil {
-		return newInternalServerServiceError(err, "Error creating temporary password")
+		return resetFailed(err)
 	}
 	response["temp_password"] = newPass
 	response["message"] = "Temporary password assigned"
 	if user.KratosID == nil {
-		err := srv.HandleCreateUserKratos(user.Username, newPass)
+		err := srv.HandleCreateUserKratosRecovering(user.Username, newPass)
 		if err != nil {
-			return newInternalServerServiceError(err, "Error creating user in kratos")
+			return resetFailed(err)
 		}
 	} else {
 		claims := claimsFromUser(user)
 		claims.PasswordReset = true
 		if err := srv.handleUpdatePasswordKratos(claims, newPass, true); err != nil {
 			log.add("claims.user_id", claims.UserID)
-			return newInternalServerServiceError(err, err.Error())
+			return resetFailed(err)
 		}
 	}
 	resetPassword := models.NewUserAccountHistory(user.ID, models.ResetPassword, &claims.UserID, nil, nil)
 	if err := srv.Db.InsertUserAccountHistoryAction(r.Context(), resetPassword); err != nil {
-		return newCreateRequestServiceError(err)
+		return resetFailed(err)
 	}
 	return writeJsonResponse(w, http.StatusOK, response)
 }
@@ -962,7 +970,7 @@ func (srv *Server) handleBulkResetPassword(w http.ResponseWriter, r *http.Reques
 			continue
 		}
 		if user.KratosID == nil {
-			if err := srv.HandleCreateUserKratos(user.Username, newPass); err != nil {
+			if err := srv.HandleCreateUserKratosRecovering(user.Username, newPass); err != nil {
 				log.add("user_id", user.ID)
 				log.error("bulk reset: error creating user in kratos")
 				failures = append(failures, failedEntry{UserID: user.ID, Username: user.Username, Name: user.NameFirst + " " + user.NameLast, Reason: "error creating identity"})
