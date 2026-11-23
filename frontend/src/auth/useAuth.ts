@@ -204,6 +204,22 @@ export const hasFeature = (user: User, ...axx: FeatureAccess[]): boolean => {
     return axx.every((ax) => user.feature_access?.includes(ax) ?? false);
 };
 
+// Top-level features other than Knowledge Center. Its page features
+// (request content, helpful links, upload video) don't count.
+const NON_KNOWLEDGE_CENTER_FEATURES = [
+    FeatureAccess.ProviderAccess,
+    FeatureAccess.ProgramAccess,
+    FeatureAccess.LearningRecordAccess,
+    FeatureAccess.AiTutorAccess
+];
+
+export const isKnowledgeCenterOnly = (user: User): boolean => {
+    return (
+        hasFeature(user, FeatureAccess.OpenContentAccess) &&
+        !NON_KNOWLEDGE_CENTER_FEATURES.some((ax) => hasFeature(user, ax))
+    );
+};
+
 export const checkDefaultFacility: LoaderFunction = async () => {
     const resp = await API.get<Facility>('facilities/1');
     if (resp.success && resp.type == 'one') {
@@ -318,11 +334,13 @@ export async function handleLogout(): Promise<void> {
 
 export const getDashboardLink = (user?: User) => {
     if (!user) return '/';
-    return isAdministrator(user) ? getAdminLink() : getResidentLink(user);
+    return isAdministrator(user) ? getAdminLink(user) : getResidentLink(user);
 };
 
-const getAdminLink = (): string => {
-    return '/dashboard';
+const getAdminLink = (user: User): string => {
+    return isKnowledgeCenterOnly(user)
+        ? '/knowledge-center-management'
+        : '/dashboard';
 };
 
 const getResidentLink = (user: User): string => {

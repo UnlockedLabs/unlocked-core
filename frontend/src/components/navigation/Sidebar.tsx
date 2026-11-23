@@ -4,7 +4,8 @@ import {
     isAdministrator,
     hasFeature,
     canSwitchFacility,
-    handleLogout
+    handleLogout,
+    isKnowledgeCenterOnly
 } from '@/auth/useAuth';
 import { FeatureAccess } from '@/types';
 import { cn } from '@/lib/utils';
@@ -179,14 +180,16 @@ function AdminNav({ collapsed, isActive, onNavigate }: NavSectionProps) {
 
     return (
         <>
-            <NavLink
-                to="/dashboard"
-                icon={HomeIcon}
-                label="Dashboard"
-                active={isActive(['/dashboard'])}
-                collapsed={collapsed}
-                onClick={onNavigate}
-            />
+            {!isKnowledgeCenterOnly(user) && (
+                <NavLink
+                    to="/dashboard"
+                    icon={HomeIcon}
+                    label="Dashboard"
+                    active={isActive(['/dashboard'])}
+                    collapsed={collapsed}
+                    onClick={onNavigate}
+                />
+            )}
 
             <SectionHeader label="Core" collapsed={collapsed} />
 
