@@ -407,5 +407,6 @@ DELETE FROM public.users WHERE id = 99999 OR username = 'system_batch';
 
 DROP INDEX IF EXISTS facilities_id_nonzero_idx;
 
-ALTER TABLE public.users ADD CONSTRAINT fk_facility FOREIGN KEY (facility_id) REFERENCES public.facilities(id) ON UPDATE CASCADE ON DELETE CASCADE;
+ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_facility_id_zero_or_positive;
+ALTER TABLE public.users ADD CONSTRAINT users_facility_id_fkey FOREIGN KEY (facility_id) REFERENCES public.facilities(id) ON UPDATE CASCADE ON DELETE CASCADE;
 -- +goose StatementEnd

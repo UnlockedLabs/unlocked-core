@@ -18,6 +18,8 @@ ALTER TABLE public.libraries RENAME COLUMN image_url TO thumbnail_url;
 -- +goose Down
 -- +goose StatementBegin
 ALTER TABLE public.libraries RENAME COLUMN thumbnail_url TO image_url;
+ALTER TABLE public.library_favorites RENAME COLUMN library_id TO content_id;
+ALTER TABLE public.library_favorites DROP COLUMN facility_id;
 ALTER TABLE public.library_favorites DROP CONSTRAINT IF EXISTS uni_user_lib_id;
 ALTER TABLE public.video_favorites DROP CONSTRAINT IF EXISTS uni_user_vid_id;
 DROP INDEX IF EXISTS idx_facility_library_user;

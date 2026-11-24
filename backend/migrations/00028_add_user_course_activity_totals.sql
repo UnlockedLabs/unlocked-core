@@ -237,14 +237,12 @@ CREATE TABLE public.library_favorites (
         updated_at timestamp with time zone,
         deleted_at timestamp with time zone,
         user_id INTEGER NOT NULL,
-        name CHARACTER VARYING(255),
-        content_id INTEGER NOT NULL,
-        visibility_status BOOLEAN,
-        open_content_url_id INTEGER NOT NULL,
-        open_content_provider_id INTEGER NOT NULL,
+        library_id INTEGER NOT NULL,
+        facility_id INTEGER DEFAULT NULL REFERENCES public.facilities(id),
         FOREIGN KEY (user_id) REFERENCES public.users(id) ON UPDATE CASCADE ON DELETE CASCADE,
-        FOREIGN KEY (open_content_provider_id) REFERENCES public.open_content_providers(id) ON UPDATE CASCADE ON DELETE CASCADE
+        CONSTRAINT uni_user_lib_id UNIQUE (user_id, library_id)
 );
+CREATE UNIQUE INDEX idx_facility_library_user ON public.library_favorites (library_id, facility_id) WHERE facility_id IS NOT NULL;
 
 CREATE TABLE public.video_favorites (
 	id SERIAL NOT NULL PRIMARY KEY,
@@ -254,7 +252,8 @@ CREATE TABLE public.video_favorites (
 	video_id integer NOT NULL,
 	user_id integer NOT NULL,
 	FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE,
-	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+	CONSTRAINT uni_user_vid_id UNIQUE (user_id, video_id)
 );
 
 -- +goose StatementEnd

@@ -99,6 +99,9 @@ ALTER TABLE public.program_classes RENAME TO program_sections;
 ALTER TABLE public.program_classes_history RENAME TO programs_sections_history;
 ALTER TABLE public.program_completions DROP COLUMN user_id;
 ALTER TABLE public.program_completions ALTER COLUMN program_class_start_dt SET DATA TYPE character varying(255);
+ALTER TABLE public.program_completions RENAME COLUMN program_class_start_dt TO program_section_start_dt;
+ALTER TABLE public.program_completions RENAME COLUMN program_class_name TO program_section_name;
+ALTER TABLE public.program_completions RENAME COLUMN program_class_id TO program_section_id;
 
 CREATE TRIGGER sql_trigger_program_sections_update
     AFTER UPDATE ON public.program_sections

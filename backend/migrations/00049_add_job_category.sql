@@ -30,7 +30,7 @@ ALTER TABLE public.program_class_event_overrides ADD CONSTRAINT unique_event_id_
 
 -- +goose Down                                   
 -- +goose StatementBegin
-ALTER TABLE cron_jobs DROP COLUMN IF EXISTS job_category;
+ALTER TABLE cron_jobs DROP COLUMN IF EXISTS category;
 DROP TABLE IF EXISTS public.change_log_entries CASCADE;
 DROP INDEX IF EXISTS idx_unique_facility_program_active CASCADE;
 ALTER TABLE public.program_class_enrollments DROP COLUMN IF EXISTS change_reason;
