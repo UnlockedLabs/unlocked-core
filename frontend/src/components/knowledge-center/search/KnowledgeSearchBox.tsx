@@ -311,9 +311,7 @@ export default function KnowledgeSearchBox({
                                             {opt.kind === 'all' && (
                                                 <>
                                                     <span className="flex-1">
-                                                        See all {total} results
-                                                        for &lsquo;
-                                                        {value.trim()}&rsquo;
+                                                        {`See all ${total} results for ‘${value.trim()}’`}
                                                     </span>
                                                     <kbd className="rounded border border-gray-200 px-1.5 text-xs text-gray-500">
                                                         Enter
