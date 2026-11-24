@@ -100,12 +100,14 @@ export default function KnowledgeSearchBox({
     }, []);
 
     const typed = value.trim() !== '';
-    const { items, total, loaded, error } = useKnowledgeSearch(
+    const { items, total, loaded, isLoading, error } = useKnowledgeSearch(
         typed && debounced
             ? { q: debounced, perPage: TYPEAHEAD_PER_PAGE }
             : null
     );
-    const settled = typed && loaded && debounced === value.trim();
+    // keepPreviousData keeps `loaded` true while a new search runs; isLoading
+    // is what tells the results apart from the previous query's.
+    const settled = typed && loaded && !isLoading && debounced === value.trim();
 
     const groups: Group[] = useMemo(() => {
         const result = (item: SearchResultItem, i: number): PanelOption => ({
@@ -113,7 +115,7 @@ export default function KnowledgeSearchBox({
             id: `r-${item.content_type}-${item.match}-${item.content_id}-${i}`,
             item
         });
-        if (!typed) return [];
+        if (!settled) return [];
         const by = (pred: (i: SearchResultItem) => boolean) =>
             items.map((it, i) => ({ it, i })).filter(({ it }) => pred(it));
         const build = (
@@ -139,7 +141,7 @@ export default function KnowledgeSearchBox({
             });
         }
         return list;
-    }, [typed, items]);
+    }, [settled, items]);
 
     const flat = groups.flatMap((g) => g.options);
 
@@ -232,6 +234,7 @@ export default function KnowledgeSearchBox({
                     value={value}
                     onChange={(e) => {
                         setValue(e.target.value);
+                        setActiveIndex(-1);
                         setOpen(true);
                     }}
                     onFocus={() => setOpen(true)}

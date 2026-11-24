@@ -321,20 +321,29 @@ export default function ResidentKnowledgeCenter() {
 
     const { isFavorited, toggleFavorite } = useToggleFavorite(mutateFavorites);
 
+    // A saved page of a library is its own favorite, keyed and toggled by URL.
+    const pageBookmark = (item: ContentItem) =>
+        item.type === 'library' &&
+        item.url?.startsWith(`/api/proxy/libraries/${item.id}/`)
+            ? { contentUrl: item.url, name: item.title }
+            : undefined;
+
     const handleToggleFavorite = (item: ContentItem) =>
         toggleFavorite({
             id: item.id,
             type: item.type,
             favorited: item.favorited,
             url: item.url,
-            openContentProviderId: item.openContentProviderId
+            openContentProviderId: item.openContentProviderId,
+            bookmark: pageBookmark(item)
         });
 
     const ContentCard = ({ item }: { item: ContentItem }) => {
         const favorited = isFavorited({
             id: item.id,
             type: item.type,
-            favorited: item.favorited
+            favorited: item.favorited,
+            bookmark: pageBookmark(item)
         });
         const title = decodeHtmlEntities(item.title);
         const description = decodeHtmlEntities(item.description);
