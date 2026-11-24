@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.13.0](https://github.com/UnlockedLabs/unlocked-core/compare/v1.12.2...v1.13.0) (2026-11-24)
+
+
+### Features
+
+* **knowledge-center:** add deeper search to the resident Knowledge Center (EN-337) ([#1312](https://github.com/UnlockedLabs/unlocked-core/issues/1312)) ([5cf07f9](https://github.com/UnlockedLabs/unlocked-core/commit/5cf07f957357f954b61fcb6f13e8ebb8f5c30df3))
+
 ## [1.12.2](https://github.com/UnlockedLabs/unlocked-core/compare/v1.12.1...v1.12.2) (2026-11-24)
 
 
