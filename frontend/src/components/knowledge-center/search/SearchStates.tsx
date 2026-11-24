@@ -50,6 +50,22 @@ export function NoResults({ query }: { query: string }) {
     );
 }
 
+/** A page past the last result, e.g. an old or edited link. */
+export function PastLastPage({ onFirstPage }: { onFirstPage: () => void }) {
+    return (
+        <SearchMessage
+            icon={<Search className="size-5 text-brand" aria-hidden="true" />}
+            title="No results on this page"
+            hint="This page is past the last result."
+            action={
+                <Button type="button" variant="outline" onClick={onFirstPage}>
+                    Back to the first page
+                </Button>
+            }
+        />
+    );
+}
+
 export function SearchError({ onRetry }: { onRetry: () => void }) {
     return (
         <SearchMessage

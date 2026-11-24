@@ -16,6 +16,7 @@ import SearchFilters from '@/components/knowledge-center/search/SearchFilters';
 import { typeOptions } from '@/components/knowledge-center/search/searchFilterOptions';
 import {
     NoResults,
+    PastLastPage,
     ResultsSkeleton,
     SearchError,
     SearchPrompt
@@ -168,8 +169,10 @@ export default function KnowledgeCenterSearch() {
                             <p className="sr-only">Searching...</p>
                             <ResultsSkeleton />
                         </>
-                    ) : items.length === 0 ? (
+                    ) : total === 0 ? (
                         <NoResults query={q} />
+                    ) : items.length === 0 ? (
+                        <PastLastPage onFirstPage={() => setPage(1)} />
                     ) : (
                         <>
                             <div className="flex items-center justify-between mb-4">
