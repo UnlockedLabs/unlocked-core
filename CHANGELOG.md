@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.12.1](https://github.com/UnlockedLabs/unlocked-core/compare/v1.12.0...v1.12.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* **frontend:** land admins on Knowledge Center when it is the facility's only feature (EN-335) ([#1308](https://github.com/UnlockedLabs/unlocked-core/issues/1308)) ([3f8c63b](https://github.com/UnlockedLabs/unlocked-core/commit/3f8c63bae9d815ee02b747be9395d788456041ad))
+* **frontend:** remove 'Now live' badge and update login mission statement (EN-336) ([#1306](https://github.com/UnlockedLabs/unlocked-core/issues/1306)) ([d9e1716](https://github.com/UnlockedLabs/unlocked-core/commit/d9e171654c3cf4dcdc33a0da8c4692f3d3585fe9))
+
 ## [1.12.0](https://github.com/UnlockedLabs/unlocked-core/compare/v1.11.2...v1.12.0) (2026-11-13)
 
 
