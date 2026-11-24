@@ -31,6 +31,14 @@ export const KnowledgeCenterRoutes: RouteObject = declareAuthenticatedRoutes(
             handle: { title: 'Knowledge Center' }
         },
         {
+            path: 'knowledge-center/search',
+            lazy: () =>
+                import('@/features/open-content/resident').then((m) => ({
+                    Component: m.KnowledgeCenterSearch
+                })),
+            handle: { title: 'Knowledge Center Search' }
+        },
+        {
             path: 'viewer/libraries/:id',
             lazy: () =>
                 import('@/features/open-content/resident').then((m) => ({
