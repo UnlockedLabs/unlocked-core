@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.12.2](https://github.com/UnlockedLabs/unlocked-core/compare/v1.12.1...v1.12.2) (2026-11-24)
+
+
+### Bug Fixes
+
+* make migration Down sections reversible (EN-280) ([#1310](https://github.com/UnlockedLabs/unlocked-core/issues/1310)) ([5c79068](https://github.com/UnlockedLabs/unlocked-core/commit/5c790680c3b2d98773acda6251bda4ba31233ce6))
+* **users:** recover from a Kratos username conflict on create and reset (EN-329) ([#1307](https://github.com/UnlockedLabs/unlocked-core/issues/1307)) ([7a71f99](https://github.com/UnlockedLabs/unlocked-core/commit/7a71f99302b5edcd99b54bc4fb1b1051197e2712))
+
 ## [1.12.1](https://github.com/UnlockedLabs/unlocked-core/compare/v1.12.0...v1.12.1) (2026-11-23)
 
 
