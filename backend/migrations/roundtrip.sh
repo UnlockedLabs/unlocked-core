@@ -13,7 +13,7 @@ g() {
   local out
   out=$(goose -dir "$dir" -table public.goose_db_version postgres "$dsn" "$@" 2>&1) || {
     echo "goose $* failed:" >&2
-    echo "$out" | tail -3 | cut -c1-300 >&2
+    echo "$out" | tail -3 >&2
     exit 1
   }
 }
